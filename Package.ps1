@@ -48,17 +48,17 @@ try {
     New-Item -ItemType Directory -Path (Split-Path -Parent $testRoot) | Out-Null
     Copy-Item -LiteralPath $applicationRoot -Destination $testRoot -Recurse
     $testStarted = [DateTime]::UtcNow
-    $testProcess = Start-Process -FilePath (Join-Path $testRoot 'PoteHunterLauncher.exe') -ArgumentList '--self-test' -WorkingDirectory $testRoot -WindowStyle Hidden -Wait -PassThru
+    $testProcess = Start-Process -FilePath (Join-Path $testRoot 'PoteHunter.exe') -ArgumentList '--self-test' -WorkingDirectory $testRoot -WindowStyle Hidden -Wait -PassThru
     if ($testProcess.ExitCode -ne 0) {
-        throw "Packaged launcher self-test failed with exit code $($testProcess.ExitCode)."
+        throw "Packaged application self-test failed with exit code $($testProcess.ExitCode)."
     }
     $testReportPath = Join-Path $testRoot 'self-test.txt'
     if (!(Test-Path -LiteralPath $testReportPath) -or (Get-Item -LiteralPath $testReportPath).LastWriteTimeUtc -lt $testStarted) {
-        throw 'The packaged launcher did not produce a fresh self-test report.'
+        throw 'The packaged application did not produce a fresh self-test report.'
     }
     $testReport = (Get-Content -LiteralPath $testReportPath -Raw).Trim()
     if (!$testReport.StartsWith('PASS:')) {
-        throw "Unexpected packaged launcher self-test result: $testReport"
+        throw "Unexpected packaged application self-test result: $testReport"
     }
 
     New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
@@ -78,7 +78,7 @@ try {
         "SHA256: $hash"
         'Repository verification:'
         ($verifyOutput | ForEach-Object { $_.ToString() })
-        'Packaged launcher verification:'
+        'Packaged application verification:'
         $testReport
     )
     Set-Content -LiteralPath $reportPath -Value $reportLines -Encoding utf8
