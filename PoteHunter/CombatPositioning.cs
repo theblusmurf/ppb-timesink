@@ -45,7 +45,6 @@ public static class CombatPositioning
             !double.IsFinite(radius) || radius<=0 || enemies.Count<2 || enemies.Any(e=>!e.Position.Finite) ||
             !enemies.Any(e=>e.Id==target.Id && e.Generation==target.Generation && e.Address==target.Address))return null;
         int before=FrontCount(position,target.Position,enemies,radius);
-        if(before>enemies.Count/2)return null;
         CombatPositionPlan? best=null;double bestTravel=double.MaxValue;
         void Consider(Vec goal)
         {

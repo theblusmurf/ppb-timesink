@@ -100,7 +100,7 @@ public sealed partial class HunterForm
                 if(refreshedPlan==null)break;
                 plan=refreshedPlan;
                 int front=CombatPositioning.FrontCount(position,target.Position,enemies,(double)options.NearbyEnemyRadius);
-                if(front>enemies.Length/2 || (plan.Destination-position).Length<=.25)break;
+                if(front==enemies.Length || (plan.Destination-position).Length<=.25)break;
                 if(CombatPositioning.FrontCount(plan.Destination,target.Position,enemies,(double)options.NearbyEnemyRadius)<=front)break;
                 message=$"Positioning: {front}/{enemies.Length} engaged enemies in front";
                 Keys correction=CombatPositioning.CorrectionKey(position,plan.Destination,world.PlayerHeading());

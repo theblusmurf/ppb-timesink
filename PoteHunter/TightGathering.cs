@@ -13,7 +13,7 @@ public static class TightGathering
     public static int FrontCount(Vec position,Entity target,IReadOnlyList<Entity> enemies)=>
         CombatPositioning.FrontCount(position,target.Position,enemies,Radius);
     public static bool Ready(Vec position,Entity target,IReadOnlyList<Entity> enemies)=>
-        enemies.Count>=2 && FrontCount(position,target,enemies)>enemies.Count/2;
+        enemies.Count>=2 && CloseCount(position,enemies)==enemies.Count && FrontCount(position,target,enemies)==enemies.Count;
 
     // Keep the initial roster throughout an attempt. A creature leaving the
     // observation radius is not a successful gather or a confirmed death.
@@ -134,7 +134,7 @@ public sealed partial class HunterForm
         var original=CombatPositioning.Eligible(entities,world.HealthSnapshot(),position,(double)options.NearbyEnemyRadius,
             e=>TargetIdentity(e)==TargetIdentity(target) || encounter.IsEngaged(e) || courtesy.StartedHere(e),Permitted);
         if(original.Length<2){gatherStatus="Needs at least two engaged targets";return false;}
-        if(TightGathering.Ready(position,target,original)){gatherStatus="Majority within 0.5 and forward; attacking";return false;}
+        if(TightGathering.Ready(position,target,original)){gatherStatus="All engaged targets within 0.5 and forward; attacking";return false;}
         var previousAdvance=drive.CanAdvance;Vec gatherOrigin=position;
         bool Safe(Vec from,Vec to)=>to.Finite && (to-gatherOrigin).Length<=CombatPositioning.MaximumStep &&
             (to-anchor).Length<=boundary && (to-target.Position).Length<=attackReach &&
@@ -189,7 +189,7 @@ public sealed partial class HunterForm
         {
             drive.StopApproach();drive.CanAdvance=previousAdvance;drive.ResetTurnResponse();
             gatherCadence.Finish(Environment.TickCount64,success);
-            gatherStatus=success?"Majority within 0.5 and forward; attacking":"Gather ended; resuming normal combat";
+            gatherStatus=success?"All engaged targets within 0.5 and forward; attacking":"Gather ended; resuming normal combat";
             TraceLog.Record("tight gathering finished",new {target.Id,Success=success,Elapsed=Environment.TickCount64-started,Status=gatherStatus});
         }
         return true; // Normal loop revalidates health/identity/range and re-aims.

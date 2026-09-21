@@ -9,15 +9,15 @@ public static class TightGatheringChecks
         static void Check(bool ok,string why){if(!ok)throw new Exception("Tight gathering: "+why);}
         Vec player=new(0,0);var target=Mob(1,.4,0);
         Entity[] gathered=[target,Mob(2,.3,.2),Mob(3,.3,-.2)];
-        Check(TightGathering.CloseCount(player,gathered)==3 && TightGathering.Ready(player,target,gathered),"close forward majority ready");
+        Check(TightGathering.CloseCount(player,gathered)==3 && TightGathering.Ready(player,target,gathered),"all engaged targets close and forward ready");
         Entity[] edge=[target,Mob(2,.5,0),Mob(3,.5001,0)];
         Check(TightGathering.CloseCount(player,edge)==2,"0.5 included and 0.5001 excluded");
         Entity[] pairwise=[target,Mob(2,.4,.3),Mob(3,.4,-.3)];
         Check((pairwise[1].Position-pairwise[2].Position).Length>.5 && TightGathering.Ready(player,target,pairwise),"radius is from player, not pairwise spacing");
         Entity[] opposite=[target,Mob(2,-.4,0),Mob(3,-.3,.1)];
-        Check(TightGathering.CloseCount(player,opposite)==3 && !TightGathering.Ready(player,target,opposite),"close bodies behind character not a forward majority");
+        Check(TightGathering.CloseCount(player,opposite)==3 && !TightGathering.Ready(player,target,opposite),"close bodies behind character not in cone");
         Entity[] tied=[target,Mob(2,-.4,0)];
-        Check(!TightGathering.Ready(player,target,tied),"half is not a majority");
+        Check(!TightGathering.Ready(player,target,tied),"incomplete group is not ready");
         Check(!TightGathering.Ready(player,target,[target]),"single monster uses normal combat");
         Entity[] cluster=[Mob(1,1,0),Mob(2,1.1,.1),Mob(3,1.1,-.1)];
         var plan=TightGathering.Choose(player,cluster[0],cluster,2,(_,_)=>true);
@@ -77,7 +77,7 @@ public static class TightGatheringChecks
             Vec origin=new(100,-50);double angle=i*Math.PI/16;
             var rotated=cluster.Select(e=>e with{Position=origin+Movement.Rotate(e.Position,angle)}).ToArray();
             var choice=TightGathering.Choose(origin,rotated[0],rotated,2,(_,_)=>true);
-            Check(choice!=null && choice.Front>rotated.Length/2 && (choice.Destination-origin).Length<=2.5,"rotated cluster gathering geometry");
+            Check(choice!=null && choice.Front==rotated.Length && choice.Close==rotated.Length && (choice.Destination-origin).Length<=2.5,"rotated cluster gathering geometry");
         }
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"tight-gathering-checks.json"),JsonSerializer.Serialize(new
         {
