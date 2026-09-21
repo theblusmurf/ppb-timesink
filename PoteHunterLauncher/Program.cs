@@ -15,9 +15,31 @@ internal static class Program
             foreach(var argument in args)startInfo.ArgumentList.Add(argument);
             if(!args.Contains("--native-read-compat",StringComparer.OrdinalIgnoreCase))startInfo.ArgumentList.Add("--native-read-compat");
             if(!args.Contains("--native-input-compat",StringComparer.OrdinalIgnoreCase))startInfo.ArgumentList.Add("--native-input-compat");
-            using var process=System.Diagnostics.Process.Start(startInfo) ?? throw new InvalidOperationException("PoteHunter.exe could not be started.");
-            process.WaitForExit();
-            return process.ExitCode;
+            System.Diagnostics.Process? process;
+            try { process=System.Diagnostics.Process.Start(startInfo); }
+            catch(System.ComponentModel.Win32Exception)
+            {
+                // Some Windows installations reject the native single-file apphost
+                // (0xc0000142). Fall back to the installed .NET host and the app DLL.
+                var managed=Path.Combine(AppContext.BaseDirectory,"PoteHunter.dll");
+                if(!File.Exists(managed))throw;
+                var fallback=new System.Diagnostics.ProcessStartInfo("dotnet")
+                {
+                    WorkingDirectory=AppContext.BaseDirectory,
+                    UseShellExecute=false
+                };
+                fallback.ArgumentList.Add(managed);
+                foreach(var argument in args)fallback.ArgumentList.Add(argument);
+                fallback.ArgumentList.Add("--native-read-compat");
+                fallback.ArgumentList.Add("--native-input-compat");
+                process=System.Diagnostics.Process.Start(fallback);
+            }
+            if(process is null)throw new InvalidOperationException("PoteHunter could not be started.");
+            using(process)
+            {
+                process.WaitForExit();
+                return process.ExitCode;
+            }
         }
         catch(Exception ex)
         {
