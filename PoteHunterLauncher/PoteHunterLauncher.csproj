@@ -8,8 +8,8 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RuntimeIdentifier Condition="'$(Portable)' == 'true'">win-x64</RuntimeIdentifier>
     <SelfContained Condition="'$(Portable)' == 'true'">true</SelfContained>
-    <PublishSingleFile Condition="'$(Portable)' == 'true'">true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract Condition="'$(Portable)' == 'true'">true</IncludeNativeLibrariesForSelfExtract>
+    <PublishSingleFile Condition="'$(Portable)' == 'true'">false</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(Portable)' == 'true'">false</IncludeNativeLibrariesForSelfExtract>
     <DebugType Condition="'$(Portable)' == 'true'">None</DebugType>
     <DebugSymbols Condition="'$(Portable)' == 'true'">false</DebugSymbols>
   </PropertyGroup>
