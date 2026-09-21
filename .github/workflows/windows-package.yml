@@ -37,7 +37,7 @@ jobs:
           if ($env:REF_TYPE -eq 'tag') {
             $version = $env:REF_NAME
           } else {
-            $version = "ci-$($env:RUN_NUMBER)-$($env:COMMIT_SHA.Substring(0, 7))"
+            $version = "PoteHunteBeta-$($env:RUN_NUMBER)-$($env:COMMIT_SHA.Substring(0, 7))"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
 
