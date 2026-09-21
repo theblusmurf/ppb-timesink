@@ -34,10 +34,15 @@ public sealed partial class HunterForm
         healthRow.Controls.AddRange([healthSkillCondition,healthSkillPercent,new Label{Text="%",AutoSize=true},new Label{Text="Extra keys",AutoSize=true},healthConditionKeys]);
         settings.Controls.Add(new Label{Text="Healing skills",AutoSize=true,Anchor=AnchorStyles.Left},0,14);
         settings.Controls.Add(healthRow,1,14);settings.SetColumnSpan(healthRow,3);
+        var targetRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};targetRow.Controls.AddRange([smartSkillTargeting,centerAreaSkills,retargetSkillTargets]);
+        settings.Controls.Add(new Label{Text="Skill targeting",AutoSize=true,Anchor=AnchorStyles.Left},0,15);settings.Controls.Add(targetRow,1,15);settings.SetColumnSpan(targetRow,3);
         priorityHint.SetToolTip(healthSkillCondition,"Power Drain and recognized healing skills use the character's HP during combat. In healer mode the selected recipient's HP is used. Self-heals may spend the mana reserve.");
         priorityHint.SetToolTip(tightGathering,"Briefly gather already engaged enemies within 0.5 map units, then resume attacks. Requires melee positioning.");
         priorityHint.SetToolTip(continuousCombatPositioning,"Uses short left/right movement pulses during melee swings to bring more engaged targets into the forward attack cone. Respects boundaries, routes, attack range, and group follow distance.");
         priorityHint.SetToolTip(autoMana,"Use a ready Food or Potion hotbar slot that restores MP when MP reaches this threshold. HP-only items are excluded.");
+        priorityHint.SetToolTip(smartSkillTargeting,"Choose a better engaged target for each skill before casting.");
+        priorityHint.SetToolTip(centerAreaSkills,"Aim area and enemy-line skills at the densest engaged pack.");
+        priorityHint.SetToolTip(retargetSkillTargets,"Allow single-target skills to switch to the lowest-health engaged enemy.");
         try
         {
             var options=Options.Read();autoMana.Checked=options.AutoRestoreMana;
@@ -48,6 +53,7 @@ public sealed partial class HunterForm
             healthSkillCondition.Checked=options.HealthSkillCondition;
             healthSkillPercent.Value=Math.Clamp(options.HealthSkillPercent,1,100);
             healthConditionKeys.Text=options.HealthConditionKeys??"";
+            smartSkillTargeting.Checked=options.SmartSkillTargeting;centerAreaSkills.Checked=options.CenterAreaSkills;retargetSkillTargets.Checked=options.RetargetSingleTargetSkills;
         }
         catch{autoMana.Checked=true;manaBelow.Value=30;manaDelay.Value=5;manaReserve.Value=0;healthSkillPercent.Value=50;}
         void UpdateReserveLabel()=>manaReserveValue.Text=manaReserve.Value==0?"0% (off)":$"{manaReserve.Value}%";
@@ -59,6 +65,7 @@ public sealed partial class HunterForm
         healthSkillPercent.ValueChanged+=(_,_)=>SaveCombatSettings();
         healthConditionKeys.Validated+=(_,_)=>SaveCombatSettings();
         continuousCombatPositioning.CheckedChanged+=(_,_)=>{if(!working&&!busy){try{CurrentOptions().Save();}catch(Exception ex){message=ex.Message;}}};
+        smartSkillTargeting.CheckedChanged+=(_,_)=>SaveCombatSettings();centerAreaSkills.CheckedChanged+=(_,_)=>SaveCombatSettings();retargetSkillTargets.CheckedChanged+=(_,_)=>SaveCombatSettings();
     }
 
     Options WithManaSettings(Options options)
@@ -66,6 +73,7 @@ public sealed partial class HunterForm
         options.AutoRestoreMana=autoMana.Checked;options.ManaBelowPercent=manaBelow.Value;options.ManaDelaySeconds=manaDelay.Value;options.ManaReservePercent=manaReserve.Value;options.ContinuousCombatPositioning=continuousCombatPositioning.Checked;
         options.TightGathering=tightGathering.Checked;
         options.HealthSkillCondition=healthSkillCondition.Checked;options.HealthSkillPercent=healthSkillPercent.Value;
+        options.SmartSkillTargeting=smartSkillTargeting.Checked;options.CenterAreaSkills=centerAreaSkills.Checked;options.RetargetSingleTargetSkills=retargetSkillTargets.Checked;
         options.HealthConditionKeys=SkillHealthRule.NormalizeKeys(healthConditionKeys.Text);
         options.UseAttackPotions=attackPotions.Checked;options.UseDefensePotions=defensePotions.Checked;
         return options;

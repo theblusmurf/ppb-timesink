@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace PoteHunter;
 
@@ -88,6 +88,9 @@ public sealed partial class HunterForm : Form
     string? recordingError;
     readonly System.Windows.Forms.Timer timer = new() { Interval = 200 };
     readonly CheckBox autoSkills=new(){Text="Auto",AutoSize=true,Checked=true};
+    readonly CheckBox smartSkillTargeting=new(){Text="Smart skill targeting",AutoSize=true,Checked=true};
+    readonly CheckBox centerAreaSkills=new(){Text="Center area / line skills",AutoSize=true,Checked=true};
+    readonly CheckBox retargetSkillTargets=new(){Text="Retarget single targets",AutoSize=true,Checked=true};
     readonly TextBox player = new() {ReadOnly=true,PlaceholderText="Waiting for character...",TabStop=false}, filter = new(), skillKeys = new();
     Entity? detectedCharacter,runCharacter;
     long nextCharacterReconnect;
@@ -1826,6 +1829,15 @@ public sealed partial class HunterForm : Form
                         ReleaseCombatPickup();
                         char key = o.SkillKeys[readyIndex];
                         var slot = bar.Slot(key);
+                        if (o.SmartSkillTargeting)
+                        {
+                            var skillTarget = SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,world.HealthSnapshot(),pos,(double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
+                            if (skillTarget != null && skillTarget.Id != current.Id)
+                            {
+                                TraceLog.Record("skill target retarget",new {Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot)});
+                                target=skillTarget; lockedTarget=skillTarget; Input.HoldMouse(false,false,token); await Input.Delay(45,token); continue;
+                            }
+                        }
                         TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown });
                         // Keep the basic combo held while the skill is selected and right-clicked.
                         await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue; await Input.Delay(150, token);

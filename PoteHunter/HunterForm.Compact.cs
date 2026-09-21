@@ -82,6 +82,7 @@ public sealed partial class HunterForm
         CompactAdd(advanced,CompactRow("Timing",Caption("Skill retry (s)"),skillSeconds,Caption("Loot hold (ms)"),lootHold));
         CompactAdd(advanced,CompactRow("Item delays",Caption("HP (s)"),healDelay,Caption("MP (s)"),manaDelay));
         CompactAdd(advanced,CompactRow("Healing",Caption("Charge (ms)"),healCharge,Caption("Extra keys"),healthConditionKeys));
+        CompactAdd(advanced,CompactRow("Skill targeting",smartSkillTargeting,centerAreaSkills,retargetSkillTargets));
         CompactAdd(advanced,CompactRow("Group limits",Caption("Attack radius"),groupAttack,Caption("Follow limit"),groupLimit));
         foreach(int oldRow in new[]{6,7,8,9,12,13})
         {

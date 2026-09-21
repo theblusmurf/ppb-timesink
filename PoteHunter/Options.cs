@@ -24,6 +24,9 @@ public sealed class Options
     public bool ExperimentalInternalTargeting { get; set; }
     public string SkillKeys { get; set; } = "";
     public bool AutoDetectSkills { get; set; } = true;
+    public bool SmartSkillTargeting { get; set; } = true;
+    public bool CenterAreaSkills { get; set; } = true;
+    public bool RetargetSingleTargetSkills { get; set; } = true;
     public decimal SkillSeconds { get; set; } = 8;
     public decimal LootHoldMs { get; set; } = 800;
     public string[] AllowedDifficulties { get; set; } = ["Green", "Yellow"];
