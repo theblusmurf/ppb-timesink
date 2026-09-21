@@ -7,7 +7,7 @@ public sealed partial class HunterForm
     readonly NumericUpDown manaDelay = Number(1,120);
     readonly TrackBar manaReserve = new(){Minimum=0,Maximum=100,TickFrequency=10,SmallChange=1,LargeChange=5,Width=180,Height=28,AutoSize=false};
     readonly Label manaReserveValue = new(){AutoSize=true,MinimumSize=new Size(62,0),Padding=new Padding(0,6,0,0)};
-    readonly CheckBox continuousCombatPositioning = new(){Text="Keep engaged enemies in front",AutoSize=true,Checked=true};
+    readonly CheckBox continuousCombatPositioning = new(){Text="Keep engaged targets grouped in front",AutoSize=true,Checked=true};
     readonly Label gatheringStatusLabel=new(){AutoSize=true,Padding=new Padding(0,4,0,0)};
     readonly ManaRecovery manaRecovery = new();
     string manaRecoveryStatus = "Not connected";
@@ -103,3 +103,4 @@ public sealed partial class HunterForm
         return true;
     }
 }
+
