@@ -57,7 +57,7 @@ public static class TightGatheringChecks
         Check(session.Next(3000,player,cluster[0],cluster)==GatherAction.GiveUp,"cannot gather forever");
         session=new(0,player);
         Check(session.Next(0,player,cluster[0],cluster)==GatherAction.Wait && session.Next(1200,player,cluster[0],cluster)==GatherAction.GiveUp,"stationary waits only 1.2 seconds");
-        session=new(0,player);
+        session=new(0,new(1,0));
         Check(session.Next(0,player,cluster[0],cluster)==GatherAction.Move,"replanning session starts with movement");
         session.SetDestination(new(2,0));
         Check(session.Next(1200,player,cluster[0],cluster)==GatherAction.Move,"replanning resets the settle timer");
