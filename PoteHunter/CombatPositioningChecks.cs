@@ -25,6 +25,7 @@ public static class CombatPositioningChecks
         Check(CombatPositioning.CorrectionKey(new(),new(0,1),0)==Keys.S &&
             CombatPositioning.CorrectionKey(new(),new(1,0),0)==Keys.A &&
             CombatPositioning.CorrectionKey(new(),new(-1,0),0)==Keys.D,"S/A/D correction mapping");
+        Check(CombatPositioning.ConeCount(new(),new(1,0),[target,new Entity(5,0x80000005,"Lv. 1",new(1,1),0)],6)==2,"direction cone count");
         Check(CombatPositioning.Choose(player,target,[],2,6,(_,_)=>true)==null,"empty scene unchanged");
         Check(CombatPositioning.Choose(player,target,surround,2,6,(_,_)=>false)==null,"blocked routes yield no move");
         var bounded=CombatPositioning.Choose(player,target,surround,2,6,(_,to)=>to.Y>=0 && to.Length<=1.5);

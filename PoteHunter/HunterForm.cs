@@ -732,6 +732,7 @@ public sealed partial class HunterForm : Form
         foreach(var zone in avoidZones) {var p=Project(zone.Center);float r=(float)(zone.Radius+1)*scale;g.DrawEllipse(avoidPen,p.X-r,p.Y-r,r*2,r*2);}
         var route=new[]{navigationPosition}.Concat(navigation.Route).Select(Project).ToArray();if(route.Length>1)g.DrawLines(routePen,route);
 
+        DrawDirectionCone(g,canvasSize);
         DrawRadarMonsters(g,canvasSize);
         var liveChests=entities.Where(ent=>ent.Position.Finite && Targeting.IsChest(ent) && !latestHealth.GetValueOrDefault(ent.Id).Dead).ToList();
         var liveChestIds=liveChests.Select(chest=>chest.Id).ToHashSet();

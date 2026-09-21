@@ -7,6 +7,7 @@ public sealed record CombatSideStepPlan(bool Left,Vec Destination,int Before,int
 // exact aim. This is a positioning heuristic, not a claim about skill hitboxes.
 public static class CombatPositioning
 {
+    public const double ConeHalfAngle=Math.PI/3;
     public const double MaximumStep=2.5;
     public const long CheckMilliseconds=750, BurstMilliseconds=1200, RestMilliseconds=4000;
 
@@ -23,12 +24,17 @@ public static class CombatPositioning
 
     public static int FrontCount(Vec position,Vec target,IReadOnlyList<Entity> enemies,double radius)
     {
-        Vec forward=target-position;
-        if(!forward.Finite || forward.Length<.05)return 0;
+        return ConeCount(position,target-position,enemies,radius,ConeHalfAngle);
+    }
+
+    public static int ConeCount(Vec position,Vec direction,IReadOnlyList<Entity> enemies,double radius,double halfAngle=ConeHalfAngle)
+    {
+        if(!position.Finite || !direction.Finite || direction.Length<.05 || !double.IsFinite(radius) || radius<=0 ||
+            !double.IsFinite(halfAngle) || halfAngle<=0)return 0;
         return enemies.Count(e=>
         {
             Vec offset=e.Position-position;double length=offset.Length;
-            return length>=.05 && length<=radius && Math.Abs(Movement.Angle(forward,offset))<=Math.PI/3;
+            return length>=.05 && length<=radius && Math.Abs(Movement.Angle(direction,offset))<=halfAngle;
         });
     }
 
