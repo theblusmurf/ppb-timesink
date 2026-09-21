@@ -20,4 +20,5 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PoteHunter/Start-Fixed-Detectio
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PoteHunter/Start-PoteHunter.ps1') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'packaging/settings.json') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'COMPACT-UI.md') -Destination $OutputDirectory
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'SLEEK-UI.md') -Destination $OutputDirectory
 Write-Host "Build complete. Run Start-Fixed-Detection.cmd in $OutputDirectory"

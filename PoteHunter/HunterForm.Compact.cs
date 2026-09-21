@@ -30,7 +30,7 @@ public sealed partial class HunterForm
     }
     static TableLayoutPanel CompactRow(string label,params Control[] controls)
     {
-        var row=new TableLayoutPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Dock=DockStyle.Top,ColumnCount=2,RowCount=1,Margin=new Padding(0,0,0,8)};
+        var row=new TableLayoutPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Dock=DockStyle.Top,ColumnCount=2,RowCount=1,Margin=new Padding(0,0,0,5)};
         row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         row.Controls.Add(new Label{Text=label,AutoSize=true,ForeColor=UiMuted,Margin=new Padding(0,6,8,0)},0,0);
         var content=CompactFlow(controls);row.Controls.Add(content,1,0);
@@ -57,7 +57,10 @@ public sealed partial class HunterForm
         priorityHint.SetToolTip(compactMode,"Group healer follows the selected party tank and heals nearby members. Other modes retain solo combat, group combat, or stationary healing.");
         compactMode.SelectedIndex=healerMode.Checked?(groupEnabled.Checked?3:2):(groupEnabled.Checked?1:0);
         compactHealBelow.Value=Math.Min(partyHealBelow.Value,healthSkillCondition.Checked?healthSkillPercent.Value:100);
-        CompactAdd(settings,CompactRow("Mode",compactMode,compactSaved));
+        var operating=CompactCard("OPERATING MODE");
+        var recovery=CompactCard("RECOVERY & RESERVES");
+        CompactAdd(settings,operating);CompactAdd(settings,recovery);
+        CompactAdd(operating,CompactRow("Mode",compactMode,compactSaved));
         tankPicker.Width=170;filter.Width=170;skillKeys.Width=135;healingSkillKeys.Width=135;
         var tankRow=CompactRow("Tank",tankPicker,Caption("Follow"),groupFollow);
         var targetRow=CompactRow("Targets",filter,Caption("Radius"),radius);
@@ -65,14 +68,14 @@ public sealed partial class HunterForm
         var skillRow=CompactRow("Attack skills",autoSkills,skillKeys);
         var healingRow=CompactRow("Healing skills",autoHealingSkills,healingSkillKeys);
         var thresholdRow=CompactRow("Heal below",compactHealBelow,Caption("%   Range"),partyHealRange);
-        foreach(var row in new[]{tankRow,targetRow,combatRow,skillRow,healingRow,thresholdRow})CompactAdd(settings,row);
+        foreach(var row in new[]{tankRow,targetRow,combatRow,skillRow,healingRow,thresholdRow})CompactAdd(operating,row);
         autoHeal.Text="HP items";autoMana.Text="MP items";
-        CompactAdd(settings,CompactRow("Recovery",autoHeal,healBelow,Caption("%"),autoMana,manaBelow,Caption("%")));
+        CompactAdd(recovery,CompactRow("Items",autoHeal,healBelow,Caption("%"),autoMana,manaBelow,Caption("%")));
         healthSkillCondition.Text="Use at HP ≤";
-        var selfRow=CompactRow("Self-heal skills",healthSkillCondition,healthSkillPercent,Caption("%"));CompactAdd(settings,selfRow);
+        var selfRow=CompactRow("Self-heal skills",healthSkillCondition,healthSkillPercent,Caption("%"));CompactAdd(recovery,selfRow);
         manaReserve.Width=170;manaReserve.TickStyle=TickStyle.None;
-        CompactAdd(settings,CompactRow("Mana reserve",manaReserve,manaReserveValue));
-        var advanced=CompactTable();advanced.Visible=false;
+        CompactAdd(recovery,CompactRow("Mana reserve",manaReserve,manaReserveValue));
+        var advanced=CompactCard("ADVANCED SETTINGS");advanced.Visible=false;
         CompactAdd(advanced,CompactRow("Character",player));
         CompactAdd(advanced,CompactRow("Allowed colors",difficultyBoxes.Values.Cast<Control>().ToArray()));
         CompactAdd(advanced,CompactRow("Timing",Caption("Skill retry (s)"),skillSeconds,Caption("Loot hold (ms)"),lootHold));
@@ -121,10 +124,12 @@ public sealed partial class HunterForm
         RefreshMode();
         supportSettings.Controls.Clear();supportSettings.ColumnStyles.Clear();supportSettings.RowStyles.Clear();supportSettings.RowCount=0;supportSettings.ColumnCount=1;
         supportSettings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        supportSettings.Padding=Padding.Empty;supportSettings.BackColor=UiWindow;
+        var supportCard=CompactCard("AUTOMATIC SUPPORT");CompactAdd(supportSettings,supportCard);
         maintainBuffs.Text="Skill buffs";
-        CompactAdd(supportSettings,CompactRow("Maintain",maintainBuffs,attackPotions,defensePotions));
-        CompactAdd(supportSettings,new Label{Text="Choose your mode and healing thresholds in Setup. Place skills and potions on the active hotbar.",AutoSize=true,MaximumSize=new Size(600,0),Margin=new Padding(0,8,0,16),ForeColor=UiMuted});
-        CompactAdd(supportSettings,buffStatus);CompactAdd(supportSettings,potionStatus);
+        CompactAdd(supportCard,CompactRow("Maintain",maintainBuffs,attackPotions,defensePotions));
+        CompactAdd(supportCard,new Label{Text="Choose your mode and healing thresholds in Setup. Place skills and potions on the active hotbar.",AutoSize=true,MaximumSize=new Size(580,0),Margin=new Padding(0,8,0,16),ForeColor=UiMuted});
+        CompactAdd(supportCard,buffStatus);CompactAdd(supportCard,potionStatus);
     }
 
     void CheckCompactControls()

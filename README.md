@@ -1,5 +1,7 @@
 # PoteHunter
 
+Latest appearance update: [sleek desktop UI](SLEEK-UI.md), with slate surfaces, teal accents, rounded settings cards, and clearer typography.
+
 Windows x64 hunter with a compact desktop UI, combined group healer mode, HP/MP recovery, attack/defense potions, ranged pack farming, and automated ZIP packaging. See [the compact UI guide](COMPACT-UI.md), [group healer notes](HEALBOT-UPDATE.md), and [potion notes](POTION-UPDATE.md).
 
 ## Download and run

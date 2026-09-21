@@ -1,0 +1,78 @@
+using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
+
+namespace PoteHunter;
+
+public sealed partial class HunterForm
+{
+    static TableLayoutPanel CompactCard(string title)
+    {
+        var card = CompactTable();
+        card.BackColor = UiSurface;
+        card.Padding = new Padding(16, 12, 16, 7);
+        card.Margin = new Padding(0, 0, 0, 12);
+        CompactAdd(card, new Label
+        {
+            Text = title, AutoSize = true, ForeColor = UiAccent, UseMnemonic = false,
+            Font = new Font("Segoe UI Semibold", 8f),
+            Margin = new Padding(0, 0, 0, 10)
+        });
+        card.Paint += (_, e) =>
+        {
+            e.Graphics.Clear(UiWindow);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var outline = RoundedPath(card.Width - 1, card.Height - 1, 10);
+            using var fill = new SolidBrush(UiSurface);
+            using var border = new Pen(UiBorder);
+            e.Graphics.FillPath(fill, outline);
+            e.Graphics.DrawPath(border, outline);
+        };
+        return card;
+    }
+
+    static GraphicsPath RoundedPath(int width, int height, int radius)
+    {
+        int diameter = Math.Max(1, Math.Min(radius * 2, Math.Min(width, height)));
+        var path = new GraphicsPath();
+        path.AddArc(0, 0, diameter, diameter, 180, 90);
+        path.AddArc(width - diameter, 0, diameter, diameter, 270, 90);
+        path.AddArc(width - diameter, height - diameter, diameter, diameter, 0, 90);
+        path.AddArc(0, height - diameter, diameter, diameter, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    static void RoundControl(Control control, int radius)
+    {
+        // Reuse the native controls, including keyboard focus and accessibility.
+        // Rebuild the clipping region after layout and dispose its previous GDI handle.
+        void UpdateRegion()
+        {
+            if (control.Width < 2 || control.Height < 2) return;
+            int diameter = Math.Min(radius * 2, Math.Min(control.Width, control.Height));
+            using var path = new GraphicsPath();
+            path.AddArc(0, 0, diameter, diameter, 180, 90);
+            path.AddArc(control.Width - diameter, 0, diameter, diameter, 270, 90);
+            path.AddArc(control.Width - diameter, control.Height - diameter, diameter, diameter, 0, 90);
+            path.AddArc(0, control.Height - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            var previous = control.Region;
+            control.Region = new Region(path);
+            previous?.Dispose();
+        }
+        control.SizeChanged += (_, _) => UpdateRegion();
+        UpdateRegion();
+    }
+
+    [DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    void ApplyDarkTitleBar()
+    {
+        // Older Windows versions can decline these optional appearance attributes.
+        int enabled = 1;
+        _ = DwmSetWindowAttribute(Handle, 20, ref enabled, sizeof(int));
+        int color = ColorTranslator.ToWin32(UiSidebar);
+        _ = DwmSetWindowAttribute(Handle, 35, ref color, sizeof(int));
+    }
+}

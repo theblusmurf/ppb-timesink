@@ -16,15 +16,15 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    static readonly Color UiWindow = Color.FromArgb(22, 23, 26);
-    static readonly Color UiSidebar = Color.FromArgb(26, 27, 31);
-    static readonly Color UiSurface = Color.FromArgb(29, 30, 34);
-    static readonly Color UiRaised = Color.FromArgb(39, 41, 46);
-    static readonly Color UiBorder = Color.FromArgb(57, 59, 65);
-    static readonly Color UiText = Color.FromArgb(236, 237, 240);
-    static readonly Color UiMuted = Color.FromArgb(163, 166, 175);
-    static readonly Color UiAccent = Color.FromArgb(149, 188, 255);
-    static readonly Color UiAccentDark = Color.FromArgb(58, 94, 159);
+    static readonly Color UiWindow = Color.FromArgb(15, 20, 27);
+    static readonly Color UiSidebar = Color.FromArgb(18, 25, 34);
+    static readonly Color UiSurface = Color.FromArgb(23, 31, 42);
+    static readonly Color UiRaised = Color.FromArgb(32, 43, 56);
+    static readonly Color UiBorder = Color.FromArgb(48, 63, 78);
+    static readonly Color UiText = Color.FromArgb(234, 242, 247);
+    static readonly Color UiMuted = Color.FromArgb(155, 174, 191);
+    static readonly Color UiAccent = Color.FromArgb(94, 225, 201);
+    static readonly Color UiAccentDark = Color.FromArgb(28, 108, 99);
     static readonly Color UiDanger = Color.FromArgb(242, 153, 159);
 
     /// <summary>
@@ -35,7 +35,10 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "POTE Hunter";
+        Text = "PoteHunter";
+        Font = new Font("Segoe UI", 10f);
+        SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
+        HandleCreated += (_, _) => ApplyDarkTitleBar();
         MinimumSize = new Size(900, 640);
         Size = new Size(980, 700);
         BackColor = UiWindow;
@@ -46,15 +49,15 @@ public sealed partial class HunterForm
         // option reads and working-state enable/disable behavior continue to apply.
         settings.Dock = DockStyle.Top;
         settings.AutoSize = true;
-        settings.Padding = new Padding(16, 12, 16, 16);
+        settings.Padding = new Padding(0, 2, 0, 0);
         ArrangeCompactSettings();
-        settings.BackColor = UiSurface;
+        settings.BackColor = UiWindow;
         var setupPage = new TabPage("Hunt setup")
         {
-            BackColor = UiSurface,
+            BackColor = UiWindow,
             ForeColor = UiText,
             AutoScroll = true,
-            Padding = new Padding(8)
+            Padding = new Padding(0)
         };
         setupPage.Controls.Add(settings);
         tabs.TabPages.Insert(0, setupPage);
@@ -81,7 +84,7 @@ public sealed partial class HunterForm
             Padding = Padding.Empty,
             BackColor = UiWindow
         };
-        shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 154));
+        shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164));
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var sidebar = new TableLayoutPanel
@@ -102,7 +105,7 @@ public sealed partial class HunterForm
             Text = "PoteHunter",
             AutoSize = false,
             Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 12),
+            Font = new Font("Segoe UI Semibold", 13),
             ForeColor = UiText,
             TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(8, 0, 0, 0)
@@ -123,7 +126,7 @@ public sealed partial class HunterForm
 
         var shortcut = new Label
         {
-            Text = "F8  Start hunt\nF9  Stop safely",
+            Text = "F8   START\nF9   STOP",
             Dock = DockStyle.Fill,
             ForeColor = UiMuted,
             Font = new Font("Segoe UI", 8.5f),
@@ -136,12 +139,12 @@ public sealed partial class HunterForm
             Dock = DockStyle.Fill,
             RowCount = 3,
             ColumnCount = 1,
-            Padding = new Padding(12, 10, 12, 10),
+            Padding = new Padding(18, 14, 18, 12),
             BackColor = UiWindow
         };
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
         main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
         main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
 
         var header = new TableLayoutPanel
@@ -161,7 +164,7 @@ public sealed partial class HunterForm
         heading.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        var pageTitle = new Label { Dock = DockStyle.Fill, Text = "Hunt setup", Font = new Font("Segoe UI Semibold", 16), ForeColor = UiText, TextAlign = ContentAlignment.BottomLeft };
+        var pageTitle = new Label { Dock = DockStyle.Fill, Text = "Hunt setup", Font = new Font("Segoe UI Semibold", 18), ForeColor = UiText, TextAlign = ContentAlignment.BottomLeft };
         var pageSubtitle = new Label { Dock = DockStyle.Fill, Text = "Choose targets, ranges and automatic actions.", Font = new Font("Segoe UI", 9), ForeColor = UiMuted, TextAlign = ContentAlignment.TopLeft };
         heading.Controls.Add(pageTitle, 0, 0);
         heading.Controls.Add(pageSubtitle, 0, 1);
@@ -170,7 +173,7 @@ public sealed partial class HunterForm
         var connectionBadge = new Label
         {
             AutoSize = false,
-            Size = new Size(76, 30),
+            Size = new Size(78, 28),
             Margin = new Padding(8, 13, 8, 0),
             TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI Semibold", 8),
@@ -245,12 +248,14 @@ public sealed partial class HunterForm
         foreach(var (name,pages) in sections)
         {
             var button=new Button{Text=name,Tag=pages[0],FlatStyle=FlatStyle.Flat,BackColor=UiSidebar,ForeColor=UiMuted,
-                TextAlign=ContentAlignment.MiddleLeft,Size=new Size(128,36),Margin=new Padding(0,2,0,2),Padding=new Padding(10,0,0,0)};
-            button.FlatAppearance.BorderSize=0;nav.Controls.Add(button);
+                TextAlign=ContentAlignment.MiddleLeft,Size=new Size(138,40),Margin=new Padding(0,2,0,2),Padding=new Padding(10,0,0,0)};
+            button.FlatAppearance.BorderSize=0;button.Cursor=Cursors.Hand;
+            button.FlatAppearance.MouseOverBackColor=UiRaised;
+            RoundControl(button,8);nav.Controls.Add(button);
             ComboBox? picker=null;
             if(pages.Length>1)
             {
-                picker=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="Text",Width=128,Visible=false,Margin=new Padding(0,4,0,12)};
+                picker=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="Text",Width=138,Visible=false,Margin=new Padding(0,4,0,12)};
                 picker.Items.AddRange(pages);picker.SelectedIndex=0;nav.Controls.Add(picker);
                 picker.SelectionChangeCommitted+=(_,_)=>{if(picker.SelectedItem is TabPage page)tabs.SelectedTab=page;};
             }
@@ -265,7 +270,7 @@ public sealed partial class HunterForm
             pageSubtitle.AutoEllipsis=true;
             foreach(var (button,pages,picker) in navButtons)
             {
-                bool active=pages.Contains(selected);button.BackColor=active?UiRaised:UiSidebar;button.ForeColor=active?UiAccent:UiMuted;
+                bool active=pages.Contains(selected);button.BackColor=active?UiAccentDark:UiSidebar;button.ForeColor=active?UiText:UiMuted;
                 if(picker!=null){picker.Visible=active;if(active)picker.SelectedItem=selected;}
             }
         }
@@ -273,7 +278,12 @@ public sealed partial class HunterForm
 
         ThemeTree(shell);
         StyleActionButton(connect, UiRaised, UiText);
-        StyleActionButton(start, UiAccentDark, Color.White);
+        StyleActionButton(start, UiAccent, UiWindow);
+        start.Font=new Font("Segoe UI Semibold",9f);
+        RoundControl(connectionBadge,10);
+        RoundControl(footer,8);
+        setupPage.BackColor=UiWindow;
+        supportPage.BackColor=UiWindow;
         StyleActionButton(stop, UiRaised, UiDanger);
         WireCompactSaving(shell);
 
@@ -352,7 +362,7 @@ public sealed partial class HunterForm
                 combo.FlatStyle = FlatStyle.Flat;
                 if(combo.DropDownStyle==ComboBoxStyle.DropDownList)
                 {
-                    combo.DrawMode=DrawMode.OwnerDrawFixed;combo.ItemHeight=22;
+                    combo.DrawMode=DrawMode.OwnerDrawFixed;combo.ItemHeight=24;
                     combo.DrawItem+=(_,e)=>
                     {
                         using var brush=new SolidBrush((e.State&DrawItemState.Selected)!=0?UiRaised:UiSurface);
@@ -367,7 +377,7 @@ public sealed partial class HunterForm
             {
                 number.BackColor = UiRaised;
                 number.ForeColor = UiText;
-                number.BorderStyle = BorderStyle.FixedSingle;
+                number.BorderStyle = BorderStyle.None;
             }
             else if (control is ListView rows)
             {
@@ -402,6 +412,8 @@ public sealed partial class HunterForm
             else if(control is CheckBox check)
             {
                 check.ForeColor=UiText;check.FlatStyle=FlatStyle.Flat;
+                check.FlatAppearance.CheckedBackColor=UiAccentDark;
+                check.FlatAppearance.BorderColor=UiBorder;
             }
             else if (control is DataGridView grid)
             {
@@ -437,13 +449,16 @@ public sealed partial class HunterForm
     static void StyleActionButton(Button button, Color background, Color foreground)
     {
         button.FlatStyle = FlatStyle.Flat;
-        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderSize = 0;
         button.FlatAppearance.BorderColor = background == UiRaised ? UiBorder : background;
         button.BackColor = background;
         button.ForeColor = foreground;
-        button.Padding = new Padding(10, 2, 10, 2);
+        button.Padding = new Padding(6, 2, 6, 2);
         button.MinimumSize = new Size(0, 34);
         button.Cursor = Cursors.Hand;
+        button.FlatAppearance.MouseOverBackColor=ControlPaint.Light(background,0.12f);
+        button.FlatAppearance.MouseDownBackColor=ControlPaint.Dark(background,0.10f);
+        RoundControl(button,7);
     }
 
     static string SanitizeDisplayText(string text) => text
