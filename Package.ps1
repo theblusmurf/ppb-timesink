@@ -48,7 +48,7 @@ try {
     New-Item -ItemType Directory -Path (Split-Path -Parent $testRoot) | Out-Null
     Copy-Item -LiteralPath $applicationRoot -Destination $testRoot -Recurse
     $testStarted = [DateTime]::UtcNow
-    $testProcess = Start-Process -FilePath (Join-Path $testRoot 'PoteHunter.exe') -ArgumentList '--self-test' -WorkingDirectory $testRoot -WindowStyle Hidden -Wait -PassThru
+    $testProcess = Start-Process -FilePath (Join-Path $testRoot 'PoteHunterLauncher.exe') -ArgumentList '--self-test' -WorkingDirectory $testRoot -WindowStyle Hidden -Wait -PassThru
     if ($testProcess.ExitCode -ne 0) {
         throw "Packaged launcher self-test failed with exit code $($testProcess.ExitCode)."
     }
@@ -127,3 +127,4 @@ finally {
         Remove-Item -LiteralPath $resolvedTemporaryRoot -Recurse -Force
     }
 }
+
