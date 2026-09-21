@@ -1,5 +1,3 @@
-using System.Reflection;
-
 internal static class Program
 {
     [STAThread]
@@ -7,19 +5,25 @@ internal static class Program
     {
         try
         {
-            var assembly=Path.Combine(AppContext.BaseDirectory,"PoteHunter.dll");
-            if(!File.Exists(assembly)) throw new FileNotFoundException("Keep PoteHunter.dll and the runtime files beside this launcher.",assembly);
-            var entry=Assembly.LoadFrom(assembly).GetType("PoteHunter.Entry",throwOnError:true)!;
-            var main=entry.GetMethod("Main",BindingFlags.Static|BindingFlags.Public|BindingFlags.NonPublic)
-                ?? throw new MissingMethodException("PoteHunter.Entry.Main was not found.");
-            var result=main.Invoke(null,[args]);
-            return result is int code?code:0;
+            var application=Path.Combine(AppContext.BaseDirectory,"PoteHunter.exe");
+            if(!File.Exists(application)) throw new FileNotFoundException("Keep PoteHunter.exe beside this launcher.",application);
+            var startInfo=new System.Diagnostics.ProcessStartInfo(application)
+            {
+                WorkingDirectory=AppContext.BaseDirectory,
+                UseShellExecute=true
+            };
+            foreach(var argument in args)startInfo.ArgumentList.Add(argument);
+            if(!args.Contains("--native-read-compat",StringComparer.OrdinalIgnoreCase))startInfo.ArgumentList.Add("--native-read-compat");
+            if(!args.Contains("--native-input-compat",StringComparer.OrdinalIgnoreCase))startInfo.ArgumentList.Add("--native-input-compat");
+            using var process=System.Diagnostics.Process.Start(startInfo) ?? throw new InvalidOperationException("PoteHunter.exe could not be started.");
+            process.WaitForExit();
+            return process.ExitCode;
         }
         catch(Exception ex)
         {
-            var error=ex is TargetInvocationException {InnerException:not null} invocation ? invocation.InnerException : ex;
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"launcher-error.txt"),error!.ToString());
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"launcher-error.txt"),ex.ToString());
             return 1;
         }
     }
 }
+
