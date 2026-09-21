@@ -83,6 +83,16 @@ public static class CombatPositioning
         }
         return best;
     }
+
+    public static Keys CorrectionKey(Vec position,Vec destination,double heading)
+    {
+        Vec delta=destination-position,forward=Movement.FromClientHeading(heading);
+        Vec right=new(forward.Y,-forward.X);
+        double forwardAmount=delta.X*forward.X+delta.Y*forward.Y;
+        double rightAmount=delta.X*right.X+delta.Y*right.Y;
+        if(forwardAmount<-.15)return Keys.S;
+        return rightAmount<0 ? Keys.A : Keys.D;
+    }
 }
 
 public sealed class SideStepCadence

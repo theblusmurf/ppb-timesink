@@ -60,7 +60,11 @@ public sealed partial class HunterForm
         var enemies=Candidates(position);
         var plan=CombatPositioning.Choose(position,target,enemies,attackReach,(double)options.NearbyEnemyRadius,Safe);
         if(plan==null)return false;
-        ReleaseCombatPickup();drive.StopApproach();Input.HoldMouse(false,false,token);
+        ReleaseCombatPickup();drive.StopApproach();
+        // Keep the basic swing held while the body makes a small formation
+        // correction. The correction uses S/A/D instead of turning and walking
+        // forward, so the attack cone remains aimed at the selected target.
+        Input.HoldMouse(false,true,token);
         TraceLog.Record("combat positioning started",new {target.Id,plan.Destination,plan.Before,plan.After,plan.Total});
         long started=Environment.TickCount64;
         var previousAdvance=drive.CanAdvance;
@@ -89,7 +93,11 @@ public sealed partial class HunterForm
                 if(front>enemies.Length/2 || (plan.Destination-position).Length<=.25)break;
                 if(CombatPositioning.FrontCount(plan.Destination,target.Position,enemies,(double)options.NearbyEnemyRadius)<=front)break;
                 message=$"Positioning: {front}/{enemies.Length} engaged enemies in front";
-                await drive.Approach(world,position,plan.Destination-position,token,watchTurns:true);
+                Keys correction=CombatPositioning.CorrectionKey(position,plan.Destination,world.PlayerHeading());
+                Input.Hold(correction,true,token);
+                Input.HoldMouse(false,true,token);
+                await Input.Delay(48,token);
+                Input.Hold(correction,false,default);
             }
         }
         catch(MovementBlockedException ex)
@@ -105,7 +113,9 @@ public sealed partial class HunterForm
         }
         finally
         {
-            drive.StopApproach();drive.CanAdvance=previousAdvance;drive.ResetTurnResponse();
+            drive.StopApproach();
+            Input.Hold(Keys.S,false,default);Input.Hold(Keys.A,false,default);Input.Hold(Keys.D,false,default);
+            drive.CanAdvance=previousAdvance;drive.ResetTurnResponse();
             positioningCadence.Finished(Environment.TickCount64);
             TraceLog.Record("combat positioning finished",new {target.Id});
         }
