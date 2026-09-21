@@ -62,6 +62,7 @@ public sealed class Options
     [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public bool? LegacyContinuousPositioning { get=>null; set { if(value.HasValue)ContinuousCombatPositioning=value.Value; } }
     public bool TightGathering { get; set; } = true;
+    public decimal GatherRadius { get; set; } = .5m;
     public bool ShowNavigationOverlay { get; set; }
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;

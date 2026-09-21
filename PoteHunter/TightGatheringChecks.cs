@@ -81,8 +81,8 @@ public static class TightGatheringChecks
         }
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"tight-gathering-checks.json"),JsonSerializer.Serialize(new
         {
-            Passed=true,HardwareInputEmitted=false,LiveGameTested=false,Radius=.5,
-            Checks=new[]{"player-centered inclusive radius", "forward strict majority", "pairwise spacing differs from radius", "safe compact cluster point", "reach and step limits", "fixed roster", "dead versus missing health", "identity reuse", "protected members", "no added newcomers", "move/wait/attack/timeout phases", "failure and success cooldowns", "settings persistence", "32 rotated scenes"}
+            Passed=true,HardwareInputEmitted=false,LiveGameTested=false,Radius=TightGathering.DefaultRadius,
+            Checks=new[]{"player-centered inclusive radius", "all engaged targets inside the forward cone", "pairwise spacing differs from radius", "safe compact cluster point", "reach and step limits", "fixed roster", "dead versus missing health", "identity reuse", "protected members", "no added newcomers", "move/wait/attack/timeout phases", "failure and success cooldowns", "settings persistence", "32 rotated scenes"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }

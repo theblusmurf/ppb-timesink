@@ -27,7 +27,8 @@ public sealed partial class HunterForm
         settings.Controls.Add(new Label{Text="Combat movement",AutoSize=true,Anchor=AnchorStyles.Left,Margin=new Padding(0,9,5,9)},0,12);
         settings.Controls.Add(continuousCombatPositioning,1,12);settings.SetColumnSpan(continuousCombatPositioning,3);
         settings.Controls.Add(new Label{Text="Tight gathering",AutoSize=true,Anchor=AnchorStyles.Left},0,13);
-        var gatherRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};gatherRow.Controls.AddRange([tightGathering,gatheringStatusLabel]);
+        gatherRadius.Width=58;
+        var gatherRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};gatherRow.Controls.AddRange([tightGathering,new Label{Text="radius",AutoSize=true,Padding=new Padding(6,4,0,0)},gatherRadius,new Label{Text="map units",AutoSize=true,Padding=new Padding(2,4,0,0)},gatheringStatusLabel]);
         settings.Controls.Add(gatherRow,1,13);settings.SetColumnSpan(gatherRow,3);
         healthSkillPercent.Width=52;
         var healthRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};
@@ -37,7 +38,7 @@ public sealed partial class HunterForm
         var targetRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};targetRow.Controls.AddRange([smartSkillTargeting,centerAreaSkills,retargetSkillTargets]);
         settings.Controls.Add(new Label{Text="Skill targeting",AutoSize=true,Anchor=AnchorStyles.Left},0,15);settings.Controls.Add(targetRow,1,15);settings.SetColumnSpan(targetRow,3);
         priorityHint.SetToolTip(healthSkillCondition,"Power Drain and recognized healing skills use the character's HP during combat. In healer mode the selected recipient's HP is used. Self-heals may spend the mana reserve.");
-        priorityHint.SetToolTip(tightGathering,"Briefly gather already engaged enemies within 0.5 map units, then resume attacks. Requires melee positioning.");
+        priorityHint.SetToolTip(tightGathering,"Group engaged targets inside the forward cone before attacking. The radius scrolls from 0.5 to 4 map units.");
         priorityHint.SetToolTip(continuousCombatPositioning,"Uses short left/right movement pulses during melee swings to bring more engaged targets into the forward attack cone. Respects boundaries, routes, attack range, and group follow distance.");
         priorityHint.SetToolTip(autoMana,"Use a ready Food or Potion hotbar slot that restores MP when MP reaches this threshold. HP-only items are excluded.");
         priorityHint.SetToolTip(smartSkillTargeting,"Choose a better engaged target for each skill before casting.");
@@ -50,6 +51,7 @@ public sealed partial class HunterForm
             manaReserve.Value=Math.Clamp(options.ManaReservePercent,0,100);
             continuousCombatPositioning.Checked=options.ContinuousCombatPositioning;
             tightGathering.Checked=options.TightGathering;
+            gatherRadius.Value=Math.Clamp(options.GatherRadius,.5m,4m);
             healthSkillCondition.Checked=options.HealthSkillCondition;
             healthSkillPercent.Value=Math.Clamp(options.HealthSkillPercent,1,100);
             healthConditionKeys.Text=options.HealthConditionKeys??"";
@@ -61,6 +63,7 @@ public sealed partial class HunterForm
         manaReserve.ValueChanged+=(_,_)=>{UpdateReserveLabel();if(!working&&!busy){try{CurrentOptions().Save();}catch(Exception ex){message=ex.Message;}}};
         void SaveCombatSettings(){if(!working&&!busy){try{CurrentOptions().Save();}catch(Exception ex){message=ex.Message;}}}
         tightGathering.CheckedChanged+=(_,_)=>SaveCombatSettings();
+        gatherRadius.ValueChanged+=(_,_)=>SaveCombatSettings();
         healthSkillCondition.CheckedChanged+=(_,_)=>SaveCombatSettings();
         healthSkillPercent.ValueChanged+=(_,_)=>SaveCombatSettings();
         healthConditionKeys.Validated+=(_,_)=>SaveCombatSettings();
@@ -72,6 +75,7 @@ public sealed partial class HunterForm
     {
         options.AutoRestoreMana=autoMana.Checked;options.ManaBelowPercent=manaBelow.Value;options.ManaDelaySeconds=manaDelay.Value;options.ManaReservePercent=manaReserve.Value;options.ContinuousCombatPositioning=continuousCombatPositioning.Checked;
         options.TightGathering=tightGathering.Checked;
+        options.GatherRadius=gatherRadius.Value;
         options.HealthSkillCondition=healthSkillCondition.Checked;options.HealthSkillPercent=healthSkillPercent.Value;
         options.SmartSkillTargeting=smartSkillTargeting.Checked;options.CenterAreaSkills=centerAreaSkills.Checked;options.RetargetSingleTargetSkills=retargetSkillTargets.Checked;
         options.HealthConditionKeys=SkillHealthRule.NormalizeKeys(healthConditionKeys.Text);
