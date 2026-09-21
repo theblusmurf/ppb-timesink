@@ -1396,7 +1396,41 @@ public sealed partial class HunterForm : Form
             nextHealAt = 0;
             recoveryCursor = 0;
             var startingBar = world.Hotbar(); runHotbarPage = startingBar.PageBase;
-            string configuredKeys=o.SkillKeys; o.SkillKeys=AttackKeys(o.AutoDetectSkills ? SkillRol)
+            string configuredKeys=o.SkillKeys; o.SkillKeys=AttackKeys(o.AutoDetectSkills ? SkillRotation.DetectKeys(startingBar) : SkillRotation.AvailableKeys(configuredKeys,startingBar),startingBar,o.MaintainAreaBuffs);
+            if(o.SkillKeys!=configuredKeys)TraceLog.Record("unavailable attack slots skipped",new {Configured=configuredKeys,Using=o.SkillKeys,BasicAttackOnly=o.SkillKeys.Length==0});
+            TraceLog.Record("hunt started", new { Anchor = anchor, o.HuntRadius,o.LeaveAreaWhenEmpty,o.Player, o.Target, o.SkillKeys, o.LootHoldMs, PriorityLootObjects = true, o.AntiKillSteal, o.OtherPlayerRadius, o.AvoidNames });
+            var skillDue = o.SkillKeys.ToDictionary(c => c, _ => 0L);
+            int skillCursor = 0; bool gamekeeperExcursion=false;
+            double responseRadius=Targeting.ResponseRadius((double)o.HuntRadius,(double)o.GamekeeperResponseRadius);
+            completionReturnPending=false;
+            activeCompletionBoundary=Targeting.CompletionRadius((double)o.HuntRadius,(double)o.NearbyEnemyRadius,(double)o.MeleeRange);
+            while (true)
+            {
+                try
+                {
+                await Input.Delay(rangedPull.Active?15:encounter.Active?25:100, token);
+                var gamekeeper=PriorityGamekeeper(o);
+                if (await TryHeal(drive, o, token)) continue;
+                if (await TryRestoreMana(o,token)) continue;
+                if(gamekeeper==null)
+                {
+                    if(defensePending && !HasActiveFight())
+                    {
+                        await RepositionUnderPressure(drive,anchor,o,token);
+                        continue;
+                    }
+                    if(!(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
+                }
+                var pos = world.PlayerPosition();
+                entities = world.Poll();
+                if (TryGreetNearbyPlayer(o, pos, entities, guardSelfId)) { await Input.Delay(250, token); continue; }
+                long now = Environment.TickCount64;
+                int level = world.PlayerLevel();
+                RefreshGuardScene();
+                var health = world.HealthSnapshot();
+                ObserveEncounter(o,health,pos,level);
+                gamekeeper=PriorityGamekeeper(o);
+                if(gamekeeper!=null)
                 {
                     pendingPriorityGamekeeper=gamekeeper;healingRestPending=false;healingWarning=null;
                     activeCompletionBoundary=Math.Max(activeCompletionBoundary,Targeting.CompletionRadius(responseRadius,(double)o.NearbyEnemyRadius,(double)o.MeleeRange));
@@ -1433,7 +1467,30 @@ public sealed partial class HunterForm : Form
                     }
                     if(!encounter.HasEngaged && healingWarning!=null && await TryHeal(drive,o,token))continue;
                 }
-                if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,le new InvalidOperationException("An engaged enemy is unavailable or blocked; stopped before selecting a new target.");
+                if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,level,skillDue,token))continue;
+                Entity? target=o.GroupMode?gamekeeper:GamekeeperPriority.ChooseFirst(encounter,gamekeeper,()=>null);
+                if(gamekeeper==null && RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing)
+                {
+                    // Confirmed Firing tags define the pack lifetime. Within
+                    // that lifetime, use the ordinary melee candidate set so
+                    // nearby engaged or eligible monsters are cleared like
+                    // melee-only combat instead of waiting on one exact tag.
+                    var meleeFocus=RangedPull.ChooseMeleeCluster(RangedNearbyTargets(o,health,pos,level),pos);
+                    target=meleeFocus?.Target;
+                    if(meleeFocus is { } focus)TraceLog.Record("pack melee focus",new {focus.Target.Id,focus.Target.DisplayName,focus.Density,Direction=focus.Target.Position-pos});
+                }
+                if(!o.GroupMode && RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing && target==null)
+                {
+                    ReleaseCombatPickup();drive.StopApproach();Input.HoldMouse(false,false,token);
+                    message=$"Melee mode: waiting for a nearby combat target to enter {o.RangedMeleeAttackRange:0.#}-unit attack range.";
+                    await Input.Delay(100,token);continue;
+                }
+                if(encounter.HasEngaged && target==null)
+                {
+                    ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);
+                    if(encounterUnknownSince==0)encounterUnknownSince=Environment.TickCount64;
+                    if(Environment.TickCount64-encounterUnknownSince>1500)
+                        throw new InvalidOperationException("An engaged enemy is unavailable or blocked; stopped before selecting a new target.");
                     encounterQuietSince=0;message="Waiting for an engaged enemy to become availableâ€¦";
                     await Input.Delay(100,token);continue;
                 }
@@ -2353,7 +2410,6 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
-
 
 
 
