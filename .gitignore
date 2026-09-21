@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+dist/
+artifacts/
+
+# Local runtime state and diagnostics
+/settings.json
+!/packaging/settings.json
+*.log
+*.jsonl
+self-test.txt
+launcher-error.txt
+startup-trace.txt
+data/

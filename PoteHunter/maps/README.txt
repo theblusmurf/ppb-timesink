@@ -1,0 +1,1 @@
+Optional calibrated zone backgrounds. For zone N, place an image and N.json here. Bounds are game-world coordinates; image top is MaxY and bottom is MinY. Invalid files are ignored and the radar remains active.

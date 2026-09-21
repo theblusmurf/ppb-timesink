@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <StartupObject>PoteHunter.Entry</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup><Compile Include="../PoteMemoryProbe/Program.cs" Link="Diagnostic.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../PoteMemoryProbe/WindowsClientRead.cs" Link="WindowsClientRead.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../PoteMemoryProbe/ClientCompatibility.cs" Link="ClientCompatibility.cs" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="BuildSignatures.json" LogicalName="PoteHunter.BuildSignatures.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="DefaultSettings.json" LogicalName="PoteHunter.DefaultSettings.json" /></ItemGroup>
+  <ItemGroup><None Include="maps\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <PropertyGroup Condition="'$(Portable)' == 'true'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+</Project>

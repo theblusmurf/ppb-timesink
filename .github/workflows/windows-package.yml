@@ -1,0 +1,110 @@
+name: Windows package
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    outputs:
+      package_version: ${{ steps.version.outputs.version }}
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.x'
+
+      - name: Choose package version
+        id: version
+        shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if ($env:REF_TYPE -eq 'tag') {
+            $version = $env:REF_NAME
+          } else {
+            $version = "ci-$($env:RUN_NUMBER)-$($env:COMMIT_SHA.Substring(0, 7))"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Verify and package
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: ./Package.ps1 -Version $env:PACKAGE_VERSION
+
+      - name: Upload failure diagnostics
+        if: ${{ failure() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: PoteHunter-package-diagnostics-${{ github.run_id }}
+          path: |
+            PoteHunter/bin/Release/net10.0-windows/self-test.txt
+            PoteHunter/bin/Release/net10.0-windows/*checks.json
+            PoteHunter/bin/Release/net10.0-windows/ranged-ui-check.json
+            PoteHunter/bin/Release/net10.0-windows/ui-page-0.png
+            PoteHunter/bin/Release/net10.0-windows/radar-preview.png
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v6
+        with:
+          name: PoteHunter-${{ steps.version.outputs.version }}-win-x64
+          path: artifacts/${{ steps.version.outputs.version }}/*
+          if-no-files-found: error
+
+  release:
+    needs: package
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged files
+        uses: actions/download-artifact@v7
+        with:
+          name: PoteHunter-${{ needs.package.outputs.package_version }}-win-x64
+          path: release-assets
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.package.outputs.package_version }}
+        run: |
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          @(
+            "PoteHunter $($env:RELEASE_TAG) for Windows x64."
+            ''
+            'Download the ZIP and its SHA256 sidecar, verify the checksum, then extract the complete PoteHunter folder.'
+            ''
+            'Includes the compact UI with autosave, combined group healer mode, HP/MP potion detection, and optional attack/defense potions. Offline checks pass; live gameplay still needs verification.'
+          ) | Set-Content -LiteralPath $notesPath -Encoding utf8
+
+          $arguments = @(
+            'release', 'create', $env:RELEASE_TAG,
+            '--title', $env:RELEASE_TAG,
+            '--notes-file', $notesPath
+          )
+          if ($env:RELEASE_TAG.Contains('-')) {
+            $arguments += '--prerelease'
+          }
+          $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } | ForEach-Object { $_.FullName })
+          & gh @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Release publishing failed with exit code $LASTEXITCODE." }

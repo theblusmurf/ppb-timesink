@@ -1,0 +1,281 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace PoteHunter;
+
+public sealed record SignatureEvidence(string Name, uint CodeRva, string Pattern, int CaptureOffset, uint? CapturedRva);
+public sealed record ProfileDetection(BuildProfile Profile, bool Automatic, uint TimeDateStamp, IReadOnlyList<SignatureEvidence> Evidence);
+
+public static class ProfileDiscovery
+{
+    sealed record Rule(string Name, string Pattern, int CaptureOffset = -1);
+    sealed record Manifest(int Version, Rule[] Roots, Rule[] Checks);
+    static readonly Lazy<Manifest> signatures = new(() =>
+    {
+        using var stream=typeof(ProfileDiscovery).Assembly.GetManifestResourceStream("PoteHunter.BuildSignatures.json")
+            ?? throw Failure("the bundled signature catalog is missing");
+        var manifest=JsonSerializer.Deserialize<Manifest>(stream) ?? throw Failure("the signature catalog is invalid");
+        Require(manifest.Version==1 && manifest.Roots.Length>=8 && manifest.Checks.Length>=9,"incomplete signature catalog");
+        return manifest;
+    });
+    static InvalidOperationException Failure(string reason) => new("Automatic client detection stopped: " + reason + ". Controls remain disabled.");
+    static void Require(bool condition,string reason) { if(!condition) throw Failure(reason); }
+
+    public static ProfileDetection ResolveFile(string path)
+    {
+        return Resolve(File.ReadAllBytes(path));
+    }
+
+    internal static ProfileDetection ResolveForConnection(byte[] bytes)
+    {
+        var result=Resolve(bytes);
+        // This grants reads only after discovery validates all required roots
+        // and members. Loaded signatures/layout must still pass in World.Connect.
+        PoteMemoryProbe.ClientCompatibility.AuthorizeDiscoveredRead(result.Profile.Sha256);
+        return result;
+    }
+
+    static ProfileDetection Resolve(byte[] bytes)
+    {
+        string hash=Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var image=new PeImage(bytes);
+        if(BuildProfile.TryResolve(hash,out var known))
+        {
+            Require(known.ImageSize==image.ImageSize,"known build image size mismatch");
+            return new(known,false,image.TimeDateStamp,[]);
+        }
+        return Discover(bytes);
+    }
+
+    public static ProfileDetection Discover(byte[] bytes)
+    {
+        var image=new PeImage(bytes);
+        var evidence=new List<SignatureEvidence>();
+        var roots=new Dictionary<string,uint>(StringComparer.Ordinal);
+        foreach(var rule in signatures.Value.Roots)
+        {
+            var pattern=new Pattern(rule.Pattern);
+            Require(rule.CaptureOffset>=0 && rule.CaptureOffset+4<=pattern.Length,"invalid capture for " + rule.Name);
+            var matches=image.Find(pattern);
+            Require(matches.Count>0 && matches.Count<=16,"missing or overly broad signature: " + rule.Name);
+            var values=new HashSet<uint>();
+            foreach(uint match in matches)
+            {
+                uint value=image.U32Rva(checked(match+(uint)rule.CaptureOffset));
+                Require(value>=image.ImageBase && (ulong)value<(ulong)image.ImageBase+image.ImageSize,"invalid address for " + rule.Name);
+                uint rva=value-image.ImageBase; values.Add(rva);
+                evidence.Add(new(rule.Name,match,rule.Pattern,rule.CaptureOffset,rva));
+            }
+            Require(values.Count==1,"ambiguous address for " + rule.Name);
+            uint resolved=values.Single();
+            Require(!roots.TryGetValue(rule.Name,out uint previous) || previous==resolved,"independent signatures disagree for " + rule.Name);
+            roots[rule.Name]=resolved;
+        }
+        foreach(var rule in signatures.Value.Checks)
+        {
+            var matches=image.Find(new Pattern(rule.Pattern));
+            Require(matches.Count==1,"member layout could not be verified: " + rule.Name);
+            evidence.Add(new(rule.Name,matches[0],rule.Pattern,-1,null));
+        }
+        string[] names=["CreatureVtable","Scene","LocalActor","CreatureManager","UidDataManager","MonsterDefinitions","ItemDefinitions","SkillDefinitions"];
+        Require(names.All(roots.ContainsKey) && names.Select(n=>roots[n]).Distinct().Count()==8,"incomplete or aliased memory roots");
+        foreach(string name in names)
+        {
+            var section=image.SectionAt(roots[name],name=="CreatureVtable"?8u:16u);
+            Require(section!=null,"root is outside mapped sections: "+name);
+            Require(name=="CreatureVtable" ? !section!.Writable && !section.Executable : section!.Writable,"unexpected section for "+name);
+        }
+        uint destructor=image.U32Rva(roots["CreatureVtable"]);
+        Require(destructor>=image.ImageBase && image.SectionAt(destructor-image.ImageBase,1)?.Executable==true,"creature vtable does not reference executable code");
+        var profile=new BuildProfile(Convert.ToHexStringLower(SHA256.HashData(bytes)),image.ImageSize,
+            roots["CreatureVtable"],roots["Scene"],roots["LocalActor"],roots["CreatureManager"],roots["UidDataManager"],roots["MonsterDefinitions"],roots["ItemDefinitions"],roots["SkillDefinitions"]);
+        return new(profile,true,image.TimeDateStamp,evidence);
+    }
+
+    public static bool Matches(byte[] bytes,string pattern) => new Pattern(pattern).Matches(bytes,0);
+
+    // Optional features must not disable normal hunting when their additional layout is unrecognized.
+    public static SignatureEvidence? RestEvidence(string path)
+    {
+        const string pattern="8B 85 ?? ?? ?? ?? 8A 88 4C 02 00 00 B8 ?? ?? ?? ?? 84 C9 0F 44 C6";
+        return OptionalEvidence(path,"Standing/sitting regeneration flag",pattern);
+    }
+    public static IReadOnlyList<SignatureEvidence> ActiveEffectEvidence(string path,uint sceneRva)
+    {
+        var image=new PeImage(File.ReadAllBytes(path));
+        var rules=new[]{
+            new Rule("Effect scene root","A1 ?? ?? ?? ?? 33 C9 8B 3D ?? ?? ?? ?? 89 85 C0 FC FF FF 89 8D BC FC FF FF 8B 80 4C 36 00 00",1),
+            new Rule("Effect timer array","8B 85 C0 FC FF FF 8D 93 00 04 00 00 05 84 06 00 00 89 95 AC FC FF FF BE 01 00 00 00 89 85 B8 FC FF FF"),
+            new Rule("Effect magnitude","0F B7 98 64 FF FF FF 66 85 DB 0F 84 ?? ?? ?? ?? 83 3A 00"),
+            new Rule("Effect seconds","8B 85 B8 FC FF FF 8B D3 33 DB 0F B7 00 83 F8 01 8D 48 FF 8D 46 FF 0F 43 D9"),
+            new Rule("Effect stride","46 83 C2 04 83 C0 02 89 95 AC FC FF FF 89 85 B8 FC FF FF 83 FE 4E"),
+            new Rule("Effect labels","C1 E6 0A 8D 85 C4 FD FF FF 81 C6 ?? ?? ?? ?? 56 50 FF D7 83 C4 0C",11)};
+        var evidence=new List<SignatureEvidence>();
+        foreach(var rule in rules)
+        {
+            var found=image.Find(new Pattern(rule.Pattern));if(found.Count!=1)return [];
+            uint? captured=null;
+            if(rule.CaptureOffset>=0){uint va=image.U32Rva(found[0]+(uint)rule.CaptureOffset);if(va<image.ImageBase || va-image.ImageBase>=image.ImageSize)return [];captured=va-image.ImageBase;}
+            evidence.Add(new(rule.Name,found[0],rule.Pattern,rule.CaptureOffset,captured));
+        }
+        if(evidence[0].CapturedRva!=sceneRva || evidence.Max(e=>e.CodeRva)-evidence.Min(e=>e.CodeRva)>0x1000)return [];
+        return evidence;
+    }
+    public static SignatureEvidence? OptionalEvidence(string path,string name,string pattern)
+    {
+        var image=new PeImage(File.ReadAllBytes(path));
+        var matches=image.Find(new Pattern(pattern));
+        return matches.Count==1 ? new(name,matches[0],pattern,-1,null) : null;
+    }
+
+    sealed class Pattern
+    {
+        readonly byte[] values;
+        readonly bool[] fixedBytes;
+        readonly byte[] anchor;
+        readonly int anchorOffset;
+        public int Length=>values.Length;
+        public Pattern(string text)
+        {
+            var tokens=text.Split(' ',StringSplitOptions.RemoveEmptyEntries);
+            Require(tokens.Length is >=12 and <=512,"invalid signature length");
+            values=new byte[tokens.Length]; fixedBytes=new bool[tokens.Length];
+            int longest=0,run=0,start=0;
+            for(int i=0;i<tokens.Length;i++)
+            {
+                if(tokens[i]=="??") { run=0; continue; }
+                Require(byte.TryParse(tokens[i],System.Globalization.NumberStyles.HexNumber,null,out values[i]),"invalid signature byte");
+                fixedBytes[i]=true;
+                if(run++==0) start=i;
+                if(run>longest) { longest=run; anchorOffset=start; }
+            }
+            Require(longest>=4 && fixedBytes.Count(b=>b)>=12,"signature is too broad");
+            anchor=values.AsSpan(anchorOffset,longest).ToArray();
+        }
+        public bool Matches(byte[] bytes,int start)
+        {
+            if(start<0 || start>bytes.Length-values.Length) return false;
+            for(int i=0;i<values.Length;i++) if(fixedBytes[i] && bytes[start+i]!=values[i]) return false;
+            return true;
+        }
+        public List<int> Find(byte[] bytes,int offset,int length)
+        {
+            var results=new List<int>(); int cursor=offset;
+            while(cursor<=offset+length-anchor.Length)
+            {
+                int found=bytes.AsSpan(cursor,offset+length-cursor).IndexOf(anchor);
+                if(found<0) break;
+                int anchorAt=cursor+found, candidate=anchorAt-anchorOffset;
+                if(candidate>=offset && candidate+Length<=offset+length && Matches(bytes,candidate))
+                {
+                    results.Add(candidate);
+                    Require(results.Count<=64,"too many signature matches");
+                }
+                cursor=anchorAt+1;
+            }
+            return results;
+        }
+    }
+
+    sealed record Section(uint Rva,uint Size,int FileOffset,int FileSize,uint Flags)
+    {
+        public bool Executable=>(Flags&0x20000000)!=0;
+        public bool Writable=>(Flags&0x80000000)!=0;
+    }
+    sealed class PeImage
+    {
+        readonly byte[] bytes;
+        readonly List<Section> sections=new();
+        public uint ImageBase {get;}
+        public uint ImageSize {get;}
+        public uint TimeDateStamp {get;}
+        uint U32(int offset) { Require(offset>=0 && offset<=bytes.Length-4,"truncated PE header"); return BitConverter.ToUInt32(bytes,offset); }
+        ushort U16(int offset) { Require(offset>=0 && offset<=bytes.Length-2,"truncated PE header"); return BitConverter.ToUInt16(bytes,offset); }
+        public PeImage(byte[] bytes)
+        {
+            this.bytes=bytes;
+            Require(bytes.Length>=512 && U16(0)==0x5a4d,"not a PE executable");
+            uint peValue=U32(0x3c); Require(peValue<=int.MaxValue,"invalid PE offset"); int pe=(int)peValue;
+            Require(pe>=0x40 && pe<=bytes.Length-248 && U32(pe)==0x4550 && U16(pe+4)==0x14c && U16(pe+24)==0x10b,"expected a PE32 x86 client");
+            int count=U16(pe+6),optionalLength=U16(pe+20);
+            Require(count is >0 and <=96 && optionalLength>=96,"invalid PE section table");
+            ImageBase=U32(pe+24+28); ImageSize=U32(pe+24+56); TimeDateStamp=U32(pe+8);
+            Require(ImageBase>0 && ImageSize>4096 && (ulong)ImageBase+ImageSize<=uint.MaxValue,"invalid mapped image bounds");
+            int sectionTable=checked(pe+24+optionalLength);
+            Require(sectionTable>=0 && (long)sectionTable+count*40<=bytes.Length,"truncated PE sections");
+            for(int i=0;i<count;i++)
+            {
+                int p=sectionTable+i*40; uint rva=U32(p+12),size=Math.Max(U32(p+8),U32(p+16)),rawSize=U32(p+16),rawOffset=U32(p+20);
+                Require((ulong)rva+size<=ImageSize && (ulong)rawOffset+rawSize<=(ulong)bytes.Length,"invalid PE section bounds");
+                sections.Add(new(rva,size,checked((int)rawOffset),checked((int)rawSize),U32(p+36)));
+            }
+            Require(sections.Any(s=>s.Executable && s.FileSize>0),"no executable code section");
+        }
+        public Section? SectionAt(uint rva,uint length) => sections.FirstOrDefault(s=>rva>=s.Rva && (ulong)rva+length<=(ulong)s.Rva+s.Size);
+        public uint U32Rva(uint rva)
+        {
+            var section=SectionAt(rva,4); Require(section!=null && (ulong)(rva-section.Rva)+4<=(ulong)section.FileSize,"capture is not file-backed");
+            return U32(checked(section!.FileOffset+(int)(rva-section.Rva)));
+        }
+        public int FileOffset(uint rva)
+        {
+            var section=SectionAt(rva,1); Require(section!=null && rva-section.Rva<section.FileSize,"RVA is not file-backed");
+            return checked(section!.FileOffset+(int)(rva-section.Rva));
+        }
+        public List<uint> Find(Pattern pattern) => sections.Where(s=>s.Executable).SelectMany(s=>pattern.Find(bytes,s.FileOffset,s.FileSize).Select(p=>checked(s.Rva+(uint)(p-s.FileOffset)))).ToList();
+    }
+
+    public static void SelfTest()
+    {
+        var pattern=new Pattern("01 02 03 04 ?? ?? 07 08 09 0A 0B 0C 0D 0E");
+        byte[] sample=[0,1,2,3,4,88,99,7,8,9,10,11,12,13,14,0];
+        if(!pattern.Find(sample,0,sample.Length).SequenceEqual(new[]{1}) || pattern.Matches(sample,0)) throw new Exception("Signature wildcard/search bounds");
+        bool rejected=false; try { Discover(new byte[512]); } catch(InvalidOperationException) { rejected=true; }
+        if(!rejected) throw new Exception("Malformed client image was accepted");
+        _=signatures.Value;
+    }
+
+    public static object CheckSnapshots(string knownPath,string updatedPath)
+    {
+        byte[] knownBytes=File.ReadAllBytes(knownPath),updatedBytes=File.ReadAllBytes(updatedPath);
+        var baseline=Discover(knownBytes); var updated=Discover(updatedBytes);
+        if(!BuildProfile.TryResolve(baseline.Profile.Sha256,out var expected) || baseline.Profile!=expected)
+            throw new Exception("Automatic discovery did not reproduce the independently mapped baseline");
+        if(updated.Profile.Sha256==baseline.Profile.Sha256) throw new Exception("A different updated client is required for the holdout check");
+        var image=new PeImage(updatedBytes); const uint shift=0x4000;
+        byte[] relocated=(byte[])updatedBytes.Clone();
+        foreach(var evidence in updated.Evidence.Where(e=>e.CapturedRva.HasValue && e.Name!="CreatureVtable"))
+        {
+            int offset=image.FileOffset(evidence.CodeRva)+(int)evidence.CaptureOffset;
+            BitConverter.TryWriteBytes(relocated.AsSpan(offset,4),image.ImageBase+evidence.CapturedRva!.Value+shift);
+        }
+        var shifted=Discover(relocated).Profile;
+        foreach(string name in new[]{"Scene","LocalActor","CreatureManager","UidDataManager","MonsterDefinitions","ItemDefinitions","SkillDefinitions"})
+        {
+            var property=typeof(BuildProfile).GetProperty(name)!;
+            if((uint)property.GetValue(shifted)! != (uint)property.GetValue(updated.Profile)!+shift) throw new Exception("Discovery reused a fixed address for "+name);
+        }
+        void Reject(byte[] bytes,string expectedReason)
+        {
+            try { Discover(bytes); }
+            catch(InvalidOperationException ex) when(ex.Message.Contains(expectedReason,StringComparison.OrdinalIgnoreCase)) { return; }
+            throw new Exception("Invalid signature scenario was not rejected: "+expectedReason);
+        }
+        byte[] ambiguous=(byte[])updatedBytes.Clone();
+        var constructor=updated.Evidence.First(e=>e.Name=="CreatureVtable");
+        int capture=image.FileOffset(constructor.CodeRva)+constructor.CaptureOffset;
+        BitConverter.TryWriteBytes(ambiguous.AsSpan(capture,4),image.ImageBase+constructor.CapturedRva!.Value+4);
+        Reject(ambiguous,"ambiguous address for CreatureVtable");
+        byte[] changedLayout=(byte[])updatedBytes.Clone();
+        var layout=updated.Evidence.First(e=>e.Name=="Hotbar slots and page");
+        changedLayout[image.FileOffset(layout.CodeRva)]=0xcc;
+        Reject(changedLayout,"member layout could not be verified");
+        byte[] invalidRoot=(byte[])updatedBytes.Clone();
+        var scene=updated.Evidence.First(e=>e.Name=="Scene");
+        BitConverter.TryWriteBytes(invalidRoot.AsSpan(image.FileOffset(scene.CodeRva)+scene.CaptureOffset,4),1u);
+        Reject(invalidRoot,"invalid address for Scene");
+        return new {TimeUtc=DateTime.UtcNow,Passed=true,Baseline=baseline.Profile,Updated=updated.Profile,
+            Checks=new[]{"Known baseline reproduced","Previously unsupported patch discovered","Synthetic moved globals rediscovered","Ambiguous vtable rejected","Changed member layout rejected","Invalid root pointer rejected"},
+            CodeEvidenceCount=updated.Evidence.Count,ClientFilesModified=false};
+    }
+}

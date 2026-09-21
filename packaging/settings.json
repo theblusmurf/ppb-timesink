@@ -1,0 +1,29 @@
+{
+  "Player": "",
+  "Target": "",
+  "HuntRadius": 20,
+  "MeleeRange": 1,
+  "Ranged": false,
+  "ArcherClass": false,
+  "SkillKeys": "123",
+  "AutoDetectSkills": true,
+  "HealerMode": false,
+  "AutoDetectHealingSkills": true,
+  "HealingSkillKeys": "",
+  "HealChargeMilliseconds": 1000,
+  "PartyHealBelowPercent": 80,
+  "PartyHealRange": 40,
+  "SkillSeconds": 12,
+  "LootHoldMs": 800,
+  "AllowedDifficulties": [
+    "Green",
+    "Yellow",
+    "Orange"
+  ],
+  "AutoHeal": true,
+  "HealBelowPercent": 75,
+  "HealDelaySeconds": 5,
+  "AntiKillSteal": true,
+  "OtherPlayerRadius": 1,
+  "AvoidNames": []
+}
