@@ -14,14 +14,12 @@ function Invoke-Dotnet {
     if ($LASTEXITCODE -ne 0) { throw "dotnet failed with exit code $LASTEXITCODE" }
 }
 $mainProject = Join-Path $PSScriptRoot 'PoteHunter/PoteHunter.csproj'
-$launcherProject = Join-Path $PSScriptRoot 'PoteHunterLauncher/PoteHunterLauncher.csproj'
 Invoke-Dotnet -Arguments @('restore',$mainProject,'-r','win-x64','-p:Portable=true','--source',$PackageSource)
-Invoke-Dotnet -Arguments @('restore',$launcherProject,'-r','win-x64','-p:Portable=true','--source',$PackageSource)
 Invoke-Dotnet -Arguments @('publish',$mainProject,'-c','Release','-p:Portable=true','--no-restore','-o',$OutputDirectory)
-Invoke-Dotnet -Arguments @('publish',$launcherProject,'-c','Release','-p:Portable=true','--no-restore','-o',$OutputDirectory)
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PoteHunter/Start-Fixed-Detection.cmd') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PoteHunter/Start-PoteHunter.ps1') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'packaging/settings.json') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'COMPACT-UI.md') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'SLEEK-UI.md') -Destination $OutputDirectory
-Write-Host "Build complete. Run PoteHunterLauncher.exe in $OutputDirectory"
+Write-Host "Build complete. Run Start-Fixed-Detection.cmd in $OutputDirectory"
 
