@@ -101,8 +101,11 @@ jobs:
             $changeLines = @(git log --pretty=format:'- `%h` %s' -n 30 HEAD)
           }
           if ($changeLines.Count -eq 0) { $changeLines = @('- Packaging and validation updates.') }
+          $subject = (git log -1 --pretty=format:'%s' HEAD).Trim()
+          if ([string]::IsNullOrWhiteSpace($subject)) { $subject = 'Maintenance update' }
+          $releaseTitle = "PoteHunter $($env:RELEASE_TAG) - $subject"
           @(
-            "PoteHunter $($env:RELEASE_TAG) for Windows x64."
+            "$releaseTitle for Windows x64."
             ''
             '## Patch notes'
             "Changes since $($previousTag ?? 'the initial release'):"
@@ -116,7 +119,7 @@ jobs:
 
           $arguments = @(
             'release', 'create', $env:RELEASE_TAG,
-            '--title', $env:RELEASE_TAG,
+            '--title', $releaseTitle,
             '--notes-file', $notesPath
           )
           if ($env:RELEASE_TAG.Contains('-')) {

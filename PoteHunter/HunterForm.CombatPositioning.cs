@@ -76,11 +76,21 @@ public sealed partial class HunterForm
                 (to-target.Position).Length<=attackReach &&
                 (!options.GroupMode || groupDecision.Tank is Entity tank && (to-tank.Position).Length<=(double)options.GroupFollowDistance) &&
                 navigation.CanAdvance(from,to,avoidZones) && previousAdvance?.Invoke(from,to)==true;
+            int missingTargetReads=0;
             while(Environment.TickCount64-started<CombatPositioning.BurstMilliseconds)
             {
                 token.ThrowIfCancellationRequested();RefreshGuardScene();
                 var current=world.Find(target.Id);
-                if(current==null || TargetIdentity(current)!=TargetIdentity(target) || current.Name!=target.Name || current.Model!=target.Model || !current.Targetable)break;
+                // Memory snapshots can briefly omit a creature while movement
+                // keys are being processed. Do not turn one missed read into a
+                // lost target lock.
+                if(current==null)
+                {
+                    if(++missingTargetReads>5)break;
+                    await Input.Delay(35,token);continue;
+                }
+                missingTargetReads=0;
+                if(TargetIdentity(current)!=TargetIdentity(target) || current.Name!=target.Name || current.Model!=target.Model || !current.Targetable)break;
                 target=current;position=world.PlayerPosition();
                 var hp=world.TargetHealth(target.Id);
                 if(!hp.Known || hp.Dead || !Healthy() || TargetGuardReason(target,hp,position,options)!=null)break;

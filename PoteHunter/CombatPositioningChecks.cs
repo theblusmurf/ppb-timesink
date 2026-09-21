@@ -22,9 +22,9 @@ public static class CombatPositioningChecks
         var side=CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,SideStepCadence.Distance,_=>true);
         Check(side!=null && side.After>side.Before && side.After>=2,"side-step improves the attack cone");
         Check(CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,.5,_=>false)==null,"blocked side-step rejected");
-        Check(CombatPositioning.CorrectionKey(new(),new(-1,0),0)==Keys.S &&
-            CombatPositioning.CorrectionKey(new(),new(0,1),0)==Keys.A &&
-            CombatPositioning.CorrectionKey(new(),new(0,-1),0)==Keys.D,"S/A/D correction mapping");
+        Check(CombatPositioning.CorrectionKey(new(),new(0,1),0)==Keys.S &&
+            CombatPositioning.CorrectionKey(new(),new(1,0),0)==Keys.A &&
+            CombatPositioning.CorrectionKey(new(),new(-1,0),0)==Keys.D,"S/A/D correction mapping");
         Check(CombatPositioning.Choose(player,target,[],2,6,(_,_)=>true)==null,"empty scene unchanged");
         Check(CombatPositioning.Choose(player,target,surround,2,6,(_,_)=>false)==null,"blocked routes yield no move");
         var bounded=CombatPositioning.Choose(player,target,surround,2,6,(_,to)=>to.Y>=0 && to.Length<=1.5);

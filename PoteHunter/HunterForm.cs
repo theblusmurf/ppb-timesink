@@ -1617,6 +1617,14 @@ public sealed partial class HunterForm : Form
                     if (await TryHeal(drive, o, token)) continue;
                     if (await TryRestoreMana(o,token)) continue;
                     var current = world.Find(target.Id);
+                    if (current == null)
+                    {
+                        // Entity snapshots can miss a live creature for a
+                        // short interval during S/A/D combat corrections.
+                        // Re-read before abandoning the active encounter.
+                        await Input.Delay(70,token);
+                        current=world.Find(target.Id);
+                    }
                     if (current == null || current.Address != target.Address || current.Generation != target.Generation || current.Name != target.Name || current.Model != target.Model || !current.Targetable) { collectAfterTarget = courtesy.StartedHere(target); TraceLog.Record("target inactive or replaced", new { target.Id, target.DisplayName }); break; }
                     lockedTarget=current;
                     lastTargetPosition = current.Position;
