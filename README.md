@@ -6,7 +6,7 @@ Windows x64 hunter with a compact desktop UI, combined group healer mode, HP/MP 
 
 ## Download and run
 
-Download the `PoteHunter-<version>-win-x64.zip` asset from a release, extract the whole ZIP, and run `PoteHunter/Start-Fixed-Detection.cmd`. Keep the launcher, application DLL, and runtime files together. The ZIP includes .NET; users do not need the SDK.
+Download the `PoteHunter-<version>-win-x64.zip` asset from a release, extract the whole ZIP, and run `PoteHunter/Start-Fixed-Detection.cmd`. Keep the application executable and runtime files, and runtime files together. The ZIP includes .NET; users do not need the SDK.
 
 The game client is installed separately. The current reader expects `C:\Program Files (x86)\AAT-Games\Client.exe`. Start the client and log in before starting the hunter. F8 calibrates and starts; F9 stops. Configuration changes are saved to the extracted application's `settings.json`.
 
@@ -49,7 +49,7 @@ Development requires Windows x64, PowerShell, and the .NET 10 SDK. Internet acce
 .\Build.ps1 -OutputDirectory .\dist-new
 ```
 
-`Verify.ps1` builds all three projects, runs the offline regression suite, and checks ranged settings persistence and UI layout without connecting to a game. Reports and the preview image are written under `PoteHunter/bin/Release/net10.0-windows`. `Build.ps1` publishes the app and launcher together with the runtime, startup commands, and clean settings from `packaging/settings.json`. It refuses to overwrite a nonempty output folder. Both accept `-Dotnet` to select a particular dotnet executable.
+`Verify.ps1` builds the application and supporting projects, runs the offline regression suite, and checks ranged settings persistence and UI layout without connecting to a game. Reports and the preview image are written under `PoteHunter/bin/Release/net10.0-windows`. `Build.ps1` publishes the application with the runtime, startup commands, and clean settings from `packaging/settings.json`. It refuses to overwrite a nonempty output folder. Both accept `-Dotnet` to select a particular dotnet executable.
 
 Create a distributable locally:
 
@@ -59,7 +59,7 @@ Create a distributable locally:
 
 ## GitHub packaging
 
-The **Windows package** Actions workflow runs on pushes to any branch, version tags beginning with `v`, and manual **Run workflow** requests. It builds and tests the source, publishes the self-contained app, tests the packaged launcher in isolation, and uploads a Windows ZIP and SHA-256 checksum as workflow artifacts.
+The **Windows package** Actions workflow runs on pushes to any branch, version tags beginning with `v`, and manual **Run workflow** requests. It builds and tests the source, publishes the self-contained app, tests the packaged application in isolation, and uploads a Windows ZIP and SHA-256 checksum as workflow artifacts.
 
 Pushing a version tag also creates a GitHub release with the ZIP and checksum attached. Tags containing a hyphen, such as `v0.1.0-beta.1`, are marked as prereleases. Regular branch and manual builds also create CI prereleases, identified by the run number and commit hash. The workflow uses GitHub's repository token; no personal access token is embedded in the source.
 
@@ -81,7 +81,8 @@ The desktop UI uses sidebar navigation, persistent Start/Stop controls, a connec
 - `PoteHunter/SelfTests.cs` and `*Checks.cs`: offline regression checks.
 - `PoteHunter/Options.cs`: settings and persistence.
 - `PoteHunter/TraceLog.cs`: diagnostic trace output.
-- `PoteHunterLauncher`: packaged startup entry point.
+- `PoteHunter`: packaged startup entry point.
 - `PoteMemoryProbe`: shared reader and standalone diagnostics.
 
 Keep the three project folders together: PoteHunter links `Program.cs` and `WindowsClientRead.cs` from PoteMemoryProbe. Build signatures and default settings are embedded resources. The game client, personal settings, recordings, logs, generated builds, and source backups are excluded from Git.
+
