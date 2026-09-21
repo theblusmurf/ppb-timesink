@@ -7,7 +7,7 @@ public sealed partial class HunterForm
     readonly NumericUpDown manaDelay = Number(1,120);
     readonly TrackBar manaReserve = new(){Minimum=0,Maximum=100,TickFrequency=10,SmallChange=1,LargeChange=5,Width=180,Height=28,AutoSize=false};
     readonly Label manaReserveValue = new(){AutoSize=true,MinimumSize=new Size(62,0),Padding=new Padding(0,6,0,0)};
-    readonly CheckBox continuousCombatPositioning = new(){Text="Keep engaged targets grouped in front",AutoSize=true,Checked=true};
+    readonly CheckBox continuousCombatPositioning = new(){Text="Smooth side-step: keep targets in front",AutoSize=true,Checked=true};
     readonly Label gatheringStatusLabel=new(){AutoSize=true,Padding=new Padding(0,4,0,0)};
     readonly ManaRecovery manaRecovery = new();
     string manaRecoveryStatus = "Not connected";
@@ -24,7 +24,7 @@ public sealed partial class HunterForm
         var reserveRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=Padding.Empty};reserveRow.Controls.AddRange([manaReserve,manaReserveValue]);
         settings.Controls.Add(new Label{Text="Mana reserve",AutoSize=true,Anchor=AnchorStyles.Left,Margin=new Padding(0,9,5,9)},0,11);
         settings.Controls.Add(reserveRow,1,11);settings.SetColumnSpan(reserveRow,3);
-        settings.Controls.Add(new Label{Text="Melee positioning",AutoSize=true,Anchor=AnchorStyles.Left,Margin=new Padding(0,9,5,9)},0,12);
+        settings.Controls.Add(new Label{Text="Combat movement",AutoSize=true,Anchor=AnchorStyles.Left,Margin=new Padding(0,9,5,9)},0,12);
         settings.Controls.Add(continuousCombatPositioning,1,12);settings.SetColumnSpan(continuousCombatPositioning,3);
         settings.Controls.Add(new Label{Text="Tight gathering",AutoSize=true,Anchor=AnchorStyles.Left},0,13);
         var gatherRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};gatherRow.Controls.AddRange([tightGathering,gatheringStatusLabel]);
@@ -36,6 +36,7 @@ public sealed partial class HunterForm
         settings.Controls.Add(healthRow,1,14);settings.SetColumnSpan(healthRow,3);
         priorityHint.SetToolTip(healthSkillCondition,"Power Drain and recognized healing skills use the character's HP during combat. In healer mode the selected recipient's HP is used. Self-heals may spend the mana reserve.");
         priorityHint.SetToolTip(tightGathering,"Briefly gather already engaged enemies within 0.5 map units, then resume attacks. Requires melee positioning.");
+        priorityHint.SetToolTip(continuousCombatPositioning,"Uses short left/right movement pulses during melee swings to bring more engaged targets into the forward attack cone. Respects boundaries, routes, attack range, and group follow distance.");
         priorityHint.SetToolTip(autoMana,"Use a ready Food or Potion hotbar slot that restores MP when MP reaches this threshold. HP-only items are excluded.");
         try
         {

@@ -18,14 +18,18 @@ public sealed partial class HunterForm
             (destination-anchor).Length<=boundary && (destination-target.Position).Length<=attackReach &&
             (!options.GroupMode || groupDecision.Tank is Entity tank && (destination-tank.Position).Length<=(double)options.GroupFollowDistance) &&
             navigation.CanAdvance(position,destination,avoidZones) && drive.CanAdvance?.Invoke(position,destination)==true;
-        var plan=CombatPositioning.ChooseSideStep(position,target,enemies,(double)options.NearbyEnemyRadius,.5,Safe);
+        var plan=CombatPositioning.ChooseSideStep(position,target,enemies,(double)options.NearbyEnemyRadius,SideStepCadence.Distance,Safe);
         if(plan==null){sideStepCadence.Finish(Environment.TickCount64,false);return false;}
         var key=plan.Left ? Keys.A : Keys.D;
         try
         {
             message=$"Side-stepping { (plan.Left ? "left" : "right") } to keep {plan.After}/{enemies.Length} targets in the attack cone.";
             TraceLog.Record("combat side-step",new {target.Id,plan.Left,plan.Before,plan.After,plan.Destination});
-            Input.Hold(key,true,token);await Input.Delay(90,token);
+            // Two short pulses keep the lateral correction smooth while the
+            // attack remains held, avoiding a single abrupt strafe burst.
+            Input.Hold(key,true,token);await Input.Delay(32,token);
+            Input.Hold(key,false,default);await Input.Delay(14,token);
+            Input.Hold(key,true,token);await Input.Delay(24,token);
             return true;
         }
         finally

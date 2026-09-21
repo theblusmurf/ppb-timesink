@@ -19,7 +19,7 @@ public static class CombatPositioningChecks
         Check(CombatPositioning.Choose(player,target,front,2,6,(_,_)=>true)==null,"front cluster holds position");
         Check(CombatPositioning.Choose(player,target,[target],2,6,(_,_)=>true)==null,"single target unchanged");
         Entity[] sideStepTargets=[target,Mob(2,.5,.95),Mob(3,.5,.9)];
-        var side=CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,.5,_=>true);
+        var side=CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,SideStepCadence.Distance,_=>true);
         Check(side!=null && side.After>side.Before && side.After>=2,"side-step improves the attack cone");
         Check(CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,.5,_=>false)==null,"blocked side-step rejected");
         Check(CombatPositioning.Choose(player,target,[],2,6,(_,_)=>true)==null,"empty scene unchanged");

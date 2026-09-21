@@ -84,6 +84,7 @@ public static class CombatPositioning
 
 public sealed class SideStepCadence
 {
+    public const double Distance=.35;
     long due;
     public bool TryCheck(long now){if(now<due)return false;due=now+700;return true;}
     public void Finish(long now,bool moved)=>due=now+(moved?1800:700);

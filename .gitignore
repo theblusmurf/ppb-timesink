@@ -12,3 +12,11 @@ self-test.txt
 launcher-error.txt
 startup-trace.txt
 data/
+
+# Offline validation and UI preview output
+*-checks.json
+ranged-ui-check.json
+ui-layout.txt
+radar-preview.png
+ui-page-*.png
+
