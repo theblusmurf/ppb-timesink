@@ -46,16 +46,19 @@ public static class CombatPositioning
             double travel=(goal-position).Length,reach=(goal-target.Position).Length;
             if(!goal.Finite || travel<.35 || travel>MaximumStep || reach<Math.Min(.6,meleeRange*.6) || reach>meleeRange || !safe(position,goal))return;
             int count=FrontCount(goal,target.Position,enemies,radius);
-            if(count<=before || count<=enemies.Count/2)return;
+            // Keep improving until the largest safe cone is reached. Requiring
+            // a majority left scattered members outside the attack arc when a
+            // pack was wider than the configured nearby radius.
+            if(count<=before)return;
             if(best==null || count>best.After || count==best.After && travel<bestTravel)
             {best=new(goal,before,count,enemies.Count);bestTravel=travel;}
         }
         // Short local moves plus a ring around the selected target work even
         // when the configured melee reach is smaller than the local sampling.
-        for(int i=0;i<32;i++)
+        for(int i=0;i<48;i++)
         {
-            Vec direction=new(Math.Cos(i*Math.PI/16),Math.Sin(i*Math.PI/16));
-            foreach(double step in new[]{.6,1.2,2.0,MaximumStep})Consider(position+direction*step);
+            Vec direction=new(Math.Cos(i*Math.PI/24),Math.Sin(i*Math.PI/24));
+            foreach(double step in new[]{.45,.75,1.2,1.8,MaximumStep})Consider(position+direction*step);
             Consider(target.Position+direction*(meleeRange*.85));
         }
         return best;
@@ -84,7 +87,7 @@ public static class CombatPositioning
 
 public sealed class SideStepCadence
 {
-    public const double Distance=.35;
+    public const double Distance=.55;
     long due;
     public bool TryCheck(long now){if(now<due)return false;due=now+700;return true;}
     public void Finish(long now,bool moved)=>due=now+(moved?1800:700);

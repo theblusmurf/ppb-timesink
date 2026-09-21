@@ -14,7 +14,7 @@ public sealed partial class HunterForm
             e=>TargetIdentity(e)==TargetIdentity(target) || encounter.IsEngaged(e) || courtesy.StartedHere(e),
             (e,hp)=>options.GroupMode ? GroupCandidateReason(e,hp,point,options)==null : TargetGuardReason(e,hp,point,options)==null);
         var enemies=Candidates(position);
-        bool Safe(Vec destination)=>destination.Finite && (destination-position).Length<=.75 &&
+        bool Safe(Vec destination)=>destination.Finite && (destination-position).Length<=1.1 &&
             (destination-anchor).Length<=boundary && (destination-target.Position).Length<=attackReach &&
             (!options.GroupMode || groupDecision.Tank is Entity tank && (destination-tank.Position).Length<=(double)options.GroupFollowDistance) &&
             navigation.CanAdvance(position,destination,avoidZones) && drive.CanAdvance?.Invoke(position,destination)==true;

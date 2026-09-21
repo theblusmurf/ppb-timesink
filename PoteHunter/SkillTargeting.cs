@@ -19,7 +19,8 @@ public static class SkillTargeting
         if (IsAreaOrLine(skill))
         {
             if (!centerArea) return current;
-            return candidates.OrderByDescending(e => candidates.Count(other => (other.Position - e.Position).Length <= Math.Max(1.5, packRadius)))
+            var clusterRadius=Math.Min(2.5,Math.Max(1.5,packRadius));
+            return candidates.OrderByDescending(e => candidates.Count(other => (other.Position - e.Position).Length <= clusterRadius))
                 .ThenByDescending(e => e.Id == current.Id).ThenBy(e => (e.Position - player).Length).ThenBy(e => e.Id).First();
         }
         if (!retargetSingle) return current;
