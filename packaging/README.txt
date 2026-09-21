@@ -7,3 +7,4 @@ For Group healer, choose a tank and set follow distance, healing skills and rang
 Support contains skill buffs and attack/defense potion switches.
 Settings save automatically. F8 starts; F9 stops.
 See COMPACT-UI.md for details and validation limits.
+
