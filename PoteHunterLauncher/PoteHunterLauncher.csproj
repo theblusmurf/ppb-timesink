@@ -6,5 +6,12 @@
     <Nullable>enable</Nullable>
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier Condition="'$(Portable)' == 'true'">win-x64</RuntimeIdentifier>
+    <SelfContained Condition="'$(Portable)' == 'true'">true</SelfContained>
+    <PublishSingleFile Condition="'$(Portable)' == 'true'">true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(Portable)' == 'true'">true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType Condition="'$(Portable)' == 'true'">None</DebugType>
+    <DebugSymbols Condition="'$(Portable)' == 'true'">false</DebugSymbols>
   </PropertyGroup>
 </Project>
+
