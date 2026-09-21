@@ -58,6 +58,11 @@ public static class TightGatheringChecks
         session=new(0,player);
         Check(session.Next(0,player,cluster[0],cluster)==GatherAction.Wait && session.Next(1200,player,cluster[0],cluster)==GatherAction.GiveUp,"stationary waits only 1.2 seconds");
         session=new(0,player);
+        Check(session.Next(0,player,cluster[0],cluster)==GatherAction.Move,"replanning session starts with movement");
+        session.SetDestination(new(2,0));
+        Check(session.Next(1200,player,cluster[0],cluster)==GatherAction.Move,"replanning resets the settle timer");
+        Check(session.Next(1800,player,cluster[0],cluster)==GatherAction.Wait,"replanned destination settles after movement window");
+        session=new(0,player);
         Check(session.Next(0,player,target,gathered)==GatherAction.Attack,"ready group releases attack delay immediately");
         Check(new TightGatherSession(100,player).Next(99,player,cluster[0],cluster)==GatherAction.GiveUp,"backward clock aborts");
         var clock=new TightGatherCadence();Check(clock.TryCheck(0) && !clock.TryCheck(749) && clock.TryCheck(750),"check throttle");
@@ -81,3 +86,4 @@ public static class TightGatheringChecks
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }
+

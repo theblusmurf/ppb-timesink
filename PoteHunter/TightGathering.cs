@@ -86,6 +86,12 @@ public static class TightGathering
 public sealed class TightGatherSession(long started,Vec destination)
 {
     long? waitingSince;
+    public void SetDestination(Vec value)
+    {
+        if(!value.Finite)return;
+        destination=value;
+        waitingSince=null;
+    }
     public GatherAction Next(long now,Vec position,Entity target,IReadOnlyList<Entity> enemies)
     {
         if(now<started || !position.Finite || enemies.Count<2)return GatherAction.GiveUp;
@@ -151,6 +157,12 @@ public sealed partial class HunterForm
                 if(!hp.Known || hp.Dead || !Healthy() || TargetGuardReason(target,hp,position,options)!=null)break;
                 var enemies=TightGathering.ObserveRoster(original,entities,world.HealthSnapshot(),Permitted);
                 if(enemies==null)break;
+                // Re-plan from the refreshed scene. Engaged creatures keep
+                // moving while they pursue the character, so a destination
+                // chosen from the initial snapshot can become stale.
+                var refreshedPlan=TightGathering.Choose(position,target,enemies,attackReach,Safe);
+                if(refreshedPlan==null)break;
+                plan=refreshedPlan;session.SetDestination(plan.Destination);
                 var action=session.Next(Environment.TickCount64,position,target,enemies);
                 if(action==GatherAction.Attack){success=true;break;}
                 if(action==GatherAction.GiveUp)break;
@@ -183,3 +195,4 @@ public sealed partial class HunterForm
         return true; // Normal loop revalidates health/identity/range and re-aims.
     }
 }
+

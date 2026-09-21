@@ -48,6 +48,9 @@ public sealed partial class HunterForm
                 if(!hp.Known || hp.Dead || !Healthy() || TargetGuardReason(target,hp,position,options)!=null)break;
                 enemies=Candidates(position);
                 if(enemies.Length<2 || !Safe(position,plan.Destination))break;
+                var refreshedPlan=CombatPositioning.Choose(position,target,enemies,attackReach,(double)options.NearbyEnemyRadius,Safe);
+                if(refreshedPlan==null)break;
+                plan=refreshedPlan;
                 int front=CombatPositioning.FrontCount(position,target.Position,enemies,(double)options.NearbyEnemyRadius);
                 if(front>enemies.Length/2 || (plan.Destination-position).Length<=.25)break;
                 if(CombatPositioning.FrontCount(plan.Destination,target.Position,enemies,(double)options.NearbyEnemyRadius)<=front)break;
@@ -75,3 +78,4 @@ public sealed partial class HunterForm
         return true; // Re-read the target and aim normally before any attack.
     }
 }
+
