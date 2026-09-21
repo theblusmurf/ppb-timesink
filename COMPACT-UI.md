@@ -47,3 +47,4 @@ were inspected, plus Group healer at minimum size and expanded settings.
 The elevated packaged EXE and live gameplay were not tested in this environment.
 The original extracted app was left in place; the updated build is delivered
 separately so you can switch back using the backup.
+
