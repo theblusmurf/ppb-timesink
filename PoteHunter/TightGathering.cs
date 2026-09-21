@@ -131,8 +131,9 @@ public sealed partial class HunterForm
                 retreatRecovery==null && !healingRestPending && !defenseRepositioning;
         }
         if(!Healthy()){gatherStatus="Skipped for healing/recovery";return false;}
-        var original=CombatPositioning.Eligible(entities,world.HealthSnapshot(),position,(double)options.NearbyEnemyRadius,
+        var eligible=CombatPositioning.Eligible(entities,world.HealthSnapshot(),position,(double)options.NearbyEnemyRadius,
             e=>TargetIdentity(e)==TargetIdentity(target) || encounter.IsEngaged(e) || courtesy.StartedHere(e),Permitted);
+        var original=CombatPositioning.ConeRoster(eligible,position,target);
         if(original.Length<2){gatherStatus="Needs at least two engaged targets";return false;}
         if(TightGathering.Ready(position,target,original)){gatherStatus="All engaged targets within 0.5 and forward; attacking";return false;}
         var previousAdvance=drive.CanAdvance;Vec gatherOrigin=position;

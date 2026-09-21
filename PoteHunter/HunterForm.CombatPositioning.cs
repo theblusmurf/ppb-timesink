@@ -13,7 +13,7 @@ public sealed partial class HunterForm
         Entity[] Candidates(Vec point)=>CombatPositioning.Eligible(entities,world.HealthSnapshot(),point,(double)options.NearbyEnemyRadius,
             e=>TargetIdentity(e)==TargetIdentity(target) || encounter.IsEngaged(e) || courtesy.StartedHere(e),
             (e,hp)=>options.GroupMode ? GroupCandidateReason(e,hp,point,options)==null : TargetGuardReason(e,hp,point,options)==null);
-        var enemies=Candidates(position);
+        var enemies=CombatPositioning.ConeRoster(Candidates(position),position,target);
         bool Safe(Vec destination)=>destination.Finite && (destination-position).Length<=1.1 &&
             (destination-anchor).Length<=boundary && (destination-target.Position).Length<=attackReach &&
             (!options.GroupMode || groupDecision.Tank is Entity tank && (destination-tank.Position).Length<=(double)options.GroupFollowDistance) &&
@@ -57,7 +57,7 @@ public sealed partial class HunterForm
                 retreatRecovery==null && !healingRestPending && !defenseRepositioning;
         }
         if(!Healthy())return false;
-        var enemies=Candidates(position);
+        var enemies=CombatPositioning.ConeRoster(Candidates(position),position,target);
         var plan=CombatPositioning.Choose(position,target,enemies,attackReach,(double)options.NearbyEnemyRadius,Safe);
         if(plan==null)return false;
         ReleaseCombatPickup();drive.StopApproach();
@@ -94,7 +94,7 @@ public sealed partial class HunterForm
                 target=current;position=world.PlayerPosition();
                 var hp=world.TargetHealth(target.Id);
                 if(!hp.Known || hp.Dead || !Healthy() || TargetGuardReason(target,hp,position,options)!=null)break;
-                enemies=Candidates(position);
+                enemies=CombatPositioning.ConeRoster(Candidates(position),position,target);
                 if(enemies.Length<2 || !Safe(position,plan.Destination))break;
                 var refreshedPlan=CombatPositioning.Choose(position,target,enemies,attackReach,(double)options.NearbyEnemyRadius,Safe);
                 if(refreshedPlan==null)break;
