@@ -76,6 +76,7 @@ public sealed partial class HunterForm
         manaReserve.Width=170;manaReserve.TickStyle=TickStyle.None;
         CompactAdd(recovery,CompactRow("Mana reserve",manaReserve,manaReserveValue));
         var advanced=CompactCard("ADVANCED SETTINGS");advanced.Visible=false;
+        CompactAdd(advanced,CompactRow("Social",greetPlayers));
         CompactAdd(advanced,CompactRow("Character",player));
         CompactAdd(advanced,CompactRow("Allowed colors",difficultyBoxes.Values.Cast<Control>().ToArray()));
         CompactAdd(advanced,CompactRow("Timing",Caption("Skill retry (s)"),skillSeconds,Caption("Loot hold (ms)"),lootHold));
@@ -178,3 +179,4 @@ public sealed partial class HunterForm
         FormClosing+=(_,_)=>{if(compactSaveTimer.Enabled)SaveCompactSettings();};FormClosed+=(_,_)=>compactSaveTimer.Dispose();
     }
 }
+

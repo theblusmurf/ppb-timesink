@@ -64,6 +64,8 @@ public sealed class Options
     public int NavigationViewRadius { get; set; } = 150;
     public bool AntiKillSteal { get; set; } = true;
     public decimal OtherPlayerRadius { get; set; } = 15;
+    public bool GreetPlayers { get; set; } = true;
+    public decimal GreetingRadius { get; set; } = 25;
     public List<AvoidRule> AvoidNames { get; set; } = [new("Mad Katz", 15)];
     public bool ClearNearbyEnemies { get; set; } = true;
     public decimal NearbyEnemyRadius { get; set; } = 6;
@@ -82,6 +84,7 @@ public sealed class Options
     }
     public void Save() { File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
 }
+
 
 
 

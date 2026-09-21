@@ -23,6 +23,7 @@ static class SelfTests
             DataRecorder.SelfTest();
             Avoidance.SelfTest();
             CombatCourtesy.SelfTest();
+            PlayerGreeting.SelfTest();
             Encounter.SelfTest();
             CombatPressure.SelfTest();
             PauseRecoveryChecks.Run();
@@ -362,3 +363,4 @@ static class SelfTests
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "steering-checks.json"), System.Text.Json.JsonSerializer.Serialize(new { Method = "Controller simulation using the observed calibration; excludes game/render latency.", RadiansPerPixel = calibration, Results = results }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 }
+

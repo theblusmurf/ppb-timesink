@@ -8,6 +8,8 @@ public sealed partial class HunterForm : Form
     protected override bool ShowWithoutActivation=>offlinePreviewMode || base.ShowWithoutActivation;
     readonly World world = new();
     readonly CombatCourtesy courtesy = new();
+    readonly PlayerGreeting playerGreeting = new();
+    readonly CheckBox greetPlayers = new() { Text = "Say hello to recognized players within 25 map units", AutoSize = true, Checked = true };
     readonly Encounter encounter = new();
     readonly CombatPressure combatPressure = new();
     bool defensePending, defenseRepositioning;
@@ -312,7 +314,7 @@ public sealed partial class HunterForm : Form
         hint.Dock = DockStyle.Fill; hint.ForeColor = Color.Silver; hint.TextAlign = ContentAlignment.MiddleLeft; root.Controls.Add(hint, 0, 5);
         status.Dock = DockStyle.Fill; status.TextAlign = ContentAlignment.MiddleLeft; root.Controls.Add(status, 0, 6);
         foreach (var b in new[] { connect, start, stop }) { b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(42, 54, 72); b.ForeColor = ForeColor; b.Padding = new Padding(8, 2, 8, 2); }
-        try { var o = Options.Read(); player.Text = ""; filter.Text = o.Target; radius.Value = Math.Clamp(o.HuntRadius, radius.Minimum, radius.Maximum); leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty; archerClass.Checked=o.ArcherClass; ranged.Checked = o.Ranged || archerClass.Checked; melee.Maximum = ranged.Checked ? 30m : 10m; double minimumRange = archerClass.Checked ? Targeting.ArcherAttackRange : Targeting.BowAttackRange; melee.Value = Math.Clamp(ranged.Checked ? Math.Max(o.MeleeRange, (decimal)minimumRange) : Math.Min(o.MeleeRange, 10m), melee.Minimum, melee.Maximum); attackRangeLabel.Text = ranged.Checked ? "Attack range" : "Melee distance"; autoSkills.Checked=o.AutoDetectSkills;skillKeys.ReadOnly=o.AutoDetectSkills;skillKeys.Text = o.SkillKeys; autoHealingSkills.Checked=o.AutoDetectHealingSkills;healingSkillKeys.ReadOnly=o.AutoDetectHealingSkills;healingSkillKeys.Text=o.HealingSkillKeys; healCharge.Value=Math.Clamp(o.HealChargeMilliseconds,healCharge.Minimum,healCharge.Maximum); partyHealBelow.Value=Math.Clamp(o.PartyHealBelowPercent,partyHealBelow.Minimum,partyHealBelow.Maximum); partyHealRange.Value=Math.Clamp(o.PartyHealRange,partyHealRange.Minimum,partyHealRange.Maximum); healerMode.Checked=o.HealerMode; skillSeconds.Value = Math.Clamp(o.SkillSeconds, skillSeconds.Minimum, skillSeconds.Maximum); lootHold.Value = Math.Clamp(o.LootHoldMs, lootHold.Minimum, lootHold.Maximum); foreach (var (kind, box) in difficultyBoxes) box.Checked = (o.AllowedDifficulties ?? []).Contains(kind.ToString()); gamekeeperRadius.Value=Math.Clamp(o.GamekeeperResponseRadius,gamekeeperRadius.Minimum,gamekeeperRadius.Maximum); combatPickup.Checked = o.LootDuringSkillCooldowns; nearbyLootPickup.Checked=o.AutoPickupNearbyLoot; combatPickup.Enabled=!nearbyLootPickup.Checked; prioritizeGamekeeper.Checked = o.PrioritizeGamekeeper; autoHeal.Checked = o.AutoHeal; healBelow.Value = Math.Clamp(o.HealBelowPercent, healBelow.Minimum, healBelow.Maximum); healDelay.Value = Math.Clamp(o.HealDelaySeconds, healDelay.Minimum, healDelay.Maximum); antiKillSteal.Checked=o.AntiKillSteal; playerBuffer.Value=Math.Clamp(o.OtherPlayerRadius,playerBuffer.Minimum,playerBuffer.Maximum); avoidRules=o.AvoidNames ?? new(); Avoidance.Validate(avoidRules); foreach(var rule in avoidRules) avoidGrid.Rows.Add(rule.Name,rule.Radius); clearNearby.Checked=o.ClearNearbyEnemies; nearbyRadius.Value=Math.Clamp(o.NearbyEnemyRadius,nearbyRadius.Minimum,nearbyRadius.Maximum); automaticRouting.Checked=o.AutomaticRouting; }
+        try { var o = Options.Read(); player.Text = ""; filter.Text = o.Target; radius.Value = Math.Clamp(o.HuntRadius, radius.Minimum, radius.Maximum); leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty; archerClass.Checked=o.ArcherClass; ranged.Checked = o.Ranged || archerClass.Checked; melee.Maximum = ranged.Checked ? 30m : 10m; double minimumRange = archerClass.Checked ? Targeting.ArcherAttackRange : Targeting.BowAttackRange; melee.Value = Math.Clamp(ranged.Checked ? Math.Max(o.MeleeRange, (decimal)minimumRange) : Math.Min(o.MeleeRange, 10m), melee.Minimum, melee.Maximum); attackRangeLabel.Text = ranged.Checked ? "Attack range" : "Melee distance"; autoSkills.Checked=o.AutoDetectSkills;skillKeys.ReadOnly=o.AutoDetectSkills;skillKeys.Text = o.SkillKeys; autoHealingSkills.Checked=o.AutoDetectHealingSkills;healingSkillKeys.ReadOnly=o.AutoDetectHealingSkills;healingSkillKeys.Text=o.HealingSkillKeys; healCharge.Value=Math.Clamp(o.HealChargeMilliseconds,healCharge.Minimum,healCharge.Maximum); partyHealBelow.Value=Math.Clamp(o.PartyHealBelowPercent,partyHealBelow.Minimum,partyHealBelow.Maximum); partyHealRange.Value=Math.Clamp(o.PartyHealRange,partyHealRange.Minimum,partyHealRange.Maximum); healerMode.Checked=o.HealerMode; skillSeconds.Value = Math.Clamp(o.SkillSeconds, skillSeconds.Minimum, skillSeconds.Maximum); lootHold.Value = Math.Clamp(o.LootHoldMs, lootHold.Minimum, lootHold.Maximum); foreach (var (kind, box) in difficultyBoxes) box.Checked = (o.AllowedDifficulties ?? []).Contains(kind.ToString()); gamekeeperRadius.Value=Math.Clamp(o.GamekeeperResponseRadius,gamekeeperRadius.Minimum,gamekeeperRadius.Maximum); combatPickup.Checked = o.LootDuringSkillCooldowns; nearbyLootPickup.Checked=o.AutoPickupNearbyLoot; combatPickup.Enabled=!nearbyLootPickup.Checked; prioritizeGamekeeper.Checked = o.PrioritizeGamekeeper; autoHeal.Checked = o.AutoHeal; healBelow.Value = Math.Clamp(o.HealBelowPercent, healBelow.Minimum, healBelow.Maximum); healDelay.Value = Math.Clamp(o.HealDelaySeconds, healDelay.Minimum, healDelay.Maximum); antiKillSteal.Checked=o.AntiKillSteal; playerBuffer.Value=Math.Clamp(o.OtherPlayerRadius,playerBuffer.Minimum,playerBuffer.Maximum); greetPlayers.Checked=o.GreetPlayers; avoidRules=o.AvoidNames ?? new(); Avoidance.Validate(avoidRules); foreach(var rule in avoidRules) avoidGrid.Rows.Add(rule.Name,rule.Radius); clearNearby.Checked=o.ClearNearbyEnemies; nearbyRadius.Value=Math.Clamp(o.NearbyEnemyRadius,nearbyRadius.Minimum,nearbyRadius.Maximum); automaticRouting.Checked=o.AutomaticRouting; }
         catch { player.Text = ""; filter.Text = "Ichman Villager"; message = "Settings could not be loaded. Check the fields before use."; }
         try { prioritizeBreakables.Checked=Options.Read().PrioritizeBreakables; } catch { }
         prioritizeGamekeeper.CheckedChanged += (_,_) => { if(!working && !busy) { try { CurrentOptions().Save(); } catch(Exception ex) { message=ex.Message; } } };
@@ -395,6 +397,8 @@ public sealed partial class HunterForm : Form
         options.MaintainAreaBuffs=maintainBuffs.Checked;
         options.EncourageDurationSeconds=encourageDuration.Value;
         options.HardenSkinDurationSeconds=hardenSkinDuration.Value;
+        options.GreetPlayers=greetPlayers.Checked;
+        options.GreetingRadius=25;
         return options;
     }
     Options CurrentOptionsCore()
@@ -1220,6 +1224,27 @@ public sealed partial class HunterForm : Form
                 throw new TargetProtectionException("Pre-existing drops are inside pickup range");
         }
     }
+
+    bool TryGreetNearbyPlayer(Options options, Vec position, IReadOnlyList<Entity> observed, uint selfId)
+    {
+        if (!options.GreetPlayers || Input.BasicAttackHeld || Input.RightButtonHeld || !Input.Allowed()) return false;
+        var player = playerGreeting.Next(position, observed, selfId, (double)options.GreetingRadius);
+        if (player == null) return false;
+        try
+        {
+            Input.Release(preserveNearbyPickup: true);
+            Input.Chat("Hello!");
+            playerGreeting.Mark(player);
+            message = $"Said hello to { (string.IsNullOrWhiteSpace(player.Name) ? $"player {player.Id:X8}" : player.Name) }.";
+            TraceLog.Record("nearby player greeted", new { player.Id, player.Name, player.Model, Distance = (player.Position - position).Length, Radius = options.GreetingRadius });
+            return true;
+        }
+        catch (Exception ex)
+        {
+            TraceLog.Record("nearby player greeting failed", new { player.Id, Error = ex.Message });
+            return false;
+        }
+    }
     async Task Calibrate()
     {
         if (!RequireHotkeys() || busy || working || !connected) return;
@@ -1248,7 +1273,7 @@ public sealed partial class HunterForm : Form
     async Task RunHealer()
     {
         Options o=CurrentOptions();o.Save();working=true;settings.Enabled=false;protectionPanel.Enabled=false;automaticRouting.Enabled=false;clearNavigation.Enabled=false;connect.Enabled=false;start.Enabled=false;cancel=new();var token=cancel.Token;
-        buffPolicy.Restart();
+        buffPolicy.Restart(); playerGreeting.Reset();
         var previousAdvance=movement?.CanAdvance;
         try
         {
@@ -1272,6 +1297,7 @@ public sealed partial class HunterForm : Form
             {
                 await Input.Delay(100,token);
                 var self=world.LocalPlayer();UpdateDetectedCharacter(self);entities=world.Poll();guardSelfId=self.Id;currentParty=world.Party();ApplyPartyNames();
+                if (TryGreetNearbyPlayer(o, self.Position, entities, self.Id)) { await Input.Delay(250, token); continue; }
                 var health=world.HealthSnapshot();currentHotbar=CheckedHotbar();
                 if(o.GroupMode && await TryHealbotRecovery(o,token))continue;
                 if(await TryRestoreMana(o,token))continue;
@@ -1358,7 +1384,7 @@ public sealed partial class HunterForm : Form
             pendingPriorityGamekeeper=null;gamekeeperTransition=false;priorityInterruptibleActivity=false;
             rangedPull.Reset(); rangedTagging=false; positioningCadence.Reset(); gatherCadence.Reset(); gatherStatus="Ready";
             combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;nextEngagementObservation=0;
-            courtesy.Reset(); encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; encounterQuietSince=0; encounterUnknownSince=0;
+            courtesy.Reset(); playerGreeting.Reset(); encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; encounterQuietSince=0; encounterUnknownSince=0;
             targetSearch=null;lastTargetWait="";
             activeGuardOptions=o; RefreshGuardScene();
             combatPressure.Observe(world.TargetHealth(guardSelfId),Environment.TickCount64);
@@ -1396,6 +1422,8 @@ public sealed partial class HunterForm : Form
                     if(!(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
                 }
                 var pos = world.PlayerPosition();
+                entities = world.Poll();
+                if (TryGreetNearbyPlayer(o, pos, entities, guardSelfId)) { await Input.Delay(250, token); continue; }
                 long now = Environment.TickCount64;
                 int level = world.PlayerLevel();
                 RefreshGuardScene();
@@ -1907,7 +1935,7 @@ public sealed partial class HunterForm : Form
         }
         catch (OperationCanceledException) { TraceLog.Record("hunt stopped", new { Reason = "Stop/focus/cancellation" }); Stop("Stopped. Press F8 to calibrate and start again."); }
         catch (Exception ex) { TraceLog.Record("hunt failed", new { Error = ex.Message }); Stop(ex.Message); }
-        finally { combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
+        finally { combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
     }
 
     async Task RecoverUnresponsiveTurn(Movement drive,Entity target,Vec anchor,Options options,double boundary,int attempt,
@@ -2379,6 +2407,7 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
+
 
 
 

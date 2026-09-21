@@ -115,12 +115,24 @@ public static class Input
         throw new InvalidOperationException($"Windows SendInput rejected an input event ({detail}; accepted {sent}/1).");
     }
     static Packet KeyPacket(Keys key, bool up) => new() { Type = 1, Value = new Union { Keyboard = new Keyboard { Scan = (ushort)MapVirtualKey((uint)key, 0), Flags = 8u | (up ? 2u : 0u) } } };
+    static Packet UnicodePacket(char character, bool up) => new() { Type = 1, Value = new Union { Keyboard = new Keyboard { Scan = character, Flags = 4u | (up ? 2u : 0u) } } };
     static Packet MousePacket(bool right, bool up) => new() { Value = new Union { Mouse = new Mouse { Flags = right ? (up ? 16u : 8u) : (up ? 4u : 2u) } } };
     public static async Task Delay(int ms, CancellationToken token)
     {
         long deadline = Environment.TickCount64 + ms;
         while (Environment.TickCount64 < deadline) { Check(token); int step = (int)Math.Min(20, deadline - Environment.TickCount64); if (step > 0) await Task.Delay(step, token); }
         Check(token);
+    }
+    public static void Chat(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !Allowed()) throw new InvalidOperationException("Chat input requires the game in the foreground.");
+        Send(KeyPacket(Keys.Enter, false)); Send(KeyPacket(Keys.Enter, true));
+        foreach (char character in text)
+        {
+            if (character is '\r' or '\n') continue;
+            Send(UnicodePacket(character, false)); Send(UnicodePacket(character, true));
+        }
+        Send(KeyPacket(Keys.Enter, false)); Send(KeyPacket(Keys.Enter, true));
     }
     public static async Task Key(Keys key, int ms, CancellationToken token)
     {
@@ -551,3 +563,4 @@ public sealed partial class Movement
         await Input.Delay(25, token);
     }
 }
+
