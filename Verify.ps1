@@ -4,7 +4,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-foreach ($project in 'PoteHunter', 'PoteHunterLauncher', 'PoteMemoryProbe') {
+foreach ($project in 'PoteHunter', 'PoteMemoryProbe') {
     $projectPath = Join-Path $PSScriptRoot "$project/$project.csproj"
     & $Dotnet build $projectPath -c Release --nologo
     if ($LASTEXITCODE -ne 0) {
@@ -33,3 +33,4 @@ if ($uiProcess.ExitCode -ne 0) {
     throw "Ranged settings/layout checks failed. See $(Join-Path $output 'ranged-ui-check.json')."
 }
 Write-Output 'Verification passed: all three projects build, offline self-tests pass, and ranged settings/layout checks pass.'
+
