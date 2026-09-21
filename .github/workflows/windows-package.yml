@@ -75,6 +75,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out history for patch notes
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download packaged files
         uses: actions/download-artifact@v7
         with:
@@ -89,9 +94,21 @@ jobs:
           RELEASE_TAG: ${{ needs.package.outputs.package_version }}
         run: |
           $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          $previousTag = git tag --sort=-creatordate | Where-Object { $_ -and $_ -ne $env:RELEASE_TAG } | Select-Object -First 1
+          if ($previousTag) {
+            $changeLines = @(git log --pretty=format:'- `%h` %s' "$previousTag..HEAD" -n 30)
+          } else {
+            $changeLines = @(git log --pretty=format:'- `%h` %s' -n 30 HEAD)
+          }
+          if ($changeLines.Count -eq 0) { $changeLines = @('- Packaging and validation updates.') }
           @(
             "PoteHunter $($env:RELEASE_TAG) for Windows x64."
             ''
+            '## Patch notes'
+            "Changes since $($previousTag ?? 'the initial release'):"
+            $changeLines
+            ''
+            '## Included features'
             'Download the ZIP and its SHA256 sidecar, verify the checksum, then extract the complete PoteHunter folder.'
             ''
             'Includes the compact UI with autosave, combined group healer mode, HP/MP potion detection, and optional attack/defense potions. Offline checks pass; live gameplay still needs verification.'
@@ -108,3 +125,4 @@ jobs:
           $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } | ForEach-Object { $_.FullName })
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { throw "Release publishing failed with exit code $LASTEXITCODE." }
+
