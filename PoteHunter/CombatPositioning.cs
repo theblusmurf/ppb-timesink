@@ -1,6 +1,7 @@
 namespace PoteHunter;
 
 public sealed record CombatPositionPlan(Vec Destination,int Before,int After,int Total);
+public sealed record CombatSideStepPlan(bool Left,Vec Destination,int Before,int After);
 
 // Positions for a 120-degree forward arc while retaining the existing target's
 // exact aim. This is a positioning heuristic, not a claim about skill hitboxes.
@@ -59,6 +60,34 @@ public static class CombatPositioning
         }
         return best;
     }
+
+    public static CombatSideStepPlan? ChooseSideStep(Vec position,Entity target,IReadOnlyList<Entity> enemies,
+        double radius,double step,Func<Vec,bool> safe)
+    {
+        if(!position.Finite || !target.Position.Finite || !double.IsFinite(radius) || radius<=0 ||
+            !double.IsFinite(step) || step<=0 || step>1 || enemies.Count<2 || enemies.Any(e=>!e.Position.Finite))return null;
+        Vec forward=target.Position-position;double length=forward.Length;
+        if(!forward.Finite || length<.1)return null;
+        int before=FrontCount(position,target.Position,enemies,radius);
+        CombatSideStepPlan? best=null;
+        for(int sign=-1;sign<=1;sign+=2)
+        {
+            Vec lateral=Movement.Rotate(forward/length,sign*Math.PI/2);Vec destination=position+lateral*step;
+            if(!destination.Finite || !safe(destination))continue;
+            int after=FrontCount(destination,target.Position,enemies,radius);
+            if(after<=before || best!=null && after<=best.After)continue;
+            best=new(sign<0,destination,before,after);
+        }
+        return best;
+    }
+}
+
+public sealed class SideStepCadence
+{
+    long due;
+    public bool TryCheck(long now){if(now<due)return false;due=now+700;return true;}
+    public void Finish(long now,bool moved)=>due=now+(moved?1800:700);
+    public void Reset()=>due=0;
 }
 
 public sealed class PositioningCadence

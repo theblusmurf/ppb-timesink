@@ -1757,6 +1757,7 @@ public sealed partial class HunterForm : Form
                     // attack reach, tank-follow distance, boundary, and route safety.
                     if((!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,targetRadius,attackStop,token))continue;
                     if((!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,targetRadius,attackStop,token))continue;
+                    if(await TryCombatSideStep(drive,current,anchor,o,targetRadius,attackStop,token))continue;
                     // Face a new/side target before starting an attack animation.
                     // A running combo can tolerate small movements inside a 7Â°
                     // cone; skills must not wait indefinitely for 2Â° precision.

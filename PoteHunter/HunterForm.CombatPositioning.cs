@@ -3,6 +3,36 @@ namespace PoteHunter;
 public sealed partial class HunterForm
 {
     readonly PositioningCadence positioningCadence=new();
+    readonly SideStepCadence sideStepCadence=new();
+
+    async Task<bool> TryCombatSideStep(Movement drive,Entity target,Vec anchor,Options options,double boundary,double attackReach,CancellationToken token)
+    {
+        if(options.Ranged || !options.ContinuousCombatPositioning || !Input.BasicAttackHeld ||
+            !sideStepCadence.TryCheck(Environment.TickCount64))return false;
+        RefreshGuardScene();Vec position=world.PlayerPosition();
+        Entity[] Candidates(Vec point)=>CombatPositioning.Eligible(entities,world.HealthSnapshot(),point,(double)options.NearbyEnemyRadius,
+            e=>TargetIdentity(e)==TargetIdentity(target) || encounter.IsEngaged(e) || courtesy.StartedHere(e),
+            (e,hp)=>options.GroupMode ? GroupCandidateReason(e,hp,point,options)==null : TargetGuardReason(e,hp,point,options)==null);
+        var enemies=Candidates(position);
+        bool Safe(Vec destination)=>destination.Finite && (destination-position).Length<=.75 &&
+            (destination-anchor).Length<=boundary && (destination-target.Position).Length<=attackReach &&
+            (!options.GroupMode || groupDecision.Tank is Entity tank && (destination-tank.Position).Length<=(double)options.GroupFollowDistance) &&
+            navigation.CanAdvance(position,destination,avoidZones) && drive.CanAdvance?.Invoke(position,destination)==true;
+        var plan=CombatPositioning.ChooseSideStep(position,target,enemies,(double)options.NearbyEnemyRadius,.5,Safe);
+        if(plan==null){sideStepCadence.Finish(Environment.TickCount64,false);return false;}
+        var key=plan.Left ? Keys.A : Keys.D;
+        try
+        {
+            message=$"Side-stepping { (plan.Left ? "left" : "right") } to keep {plan.After}/{enemies.Length} targets in the attack cone.";
+            TraceLog.Record("combat side-step",new {target.Id,plan.Left,plan.Before,plan.After,plan.Destination});
+            Input.Hold(key,true,token);await Input.Delay(90,token);
+            return true;
+        }
+        finally
+        {
+            Input.Hold(key,false,default);sideStepCadence.Finish(Environment.TickCount64,true);
+        }
+    }
 
     async Task<bool> TryCombatPositioning(Movement drive,Entity target,Vec anchor,Options options,double boundary,double attackReach,CancellationToken token)
     {

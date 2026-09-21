@@ -18,6 +18,10 @@ public static class CombatPositioningChecks
         Entity[] front=[target,Mob(2,2,.3),Mob(3,2,-.3)];
         Check(CombatPositioning.Choose(player,target,front,2,6,(_,_)=>true)==null,"front cluster holds position");
         Check(CombatPositioning.Choose(player,target,[target],2,6,(_,_)=>true)==null,"single target unchanged");
+        Entity[] sideStepTargets=[target,Mob(2,.5,.95),Mob(3,.5,.9)];
+        var side=CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,.5,_=>true);
+        Check(side!=null && side.After>side.Before && side.After>=2,"side-step improves the attack cone");
+        Check(CombatPositioning.ChooseSideStep(player,target,sideStepTargets,6,.5,_=>false)==null,"blocked side-step rejected");
         Check(CombatPositioning.Choose(player,target,[],2,6,(_,_)=>true)==null,"empty scene unchanged");
         Check(CombatPositioning.Choose(player,target,surround,2,6,(_,_)=>false)==null,"blocked routes yield no move");
         var bounded=CombatPositioning.Choose(player,target,surround,2,6,(_,to)=>to.Y>=0 && to.Length<=1.5);
@@ -48,6 +52,9 @@ public static class CombatPositioningChecks
         clock.Finished(800);
         Check(!clock.TryCheck(4799) && clock.TryCheck(4800),"attacks get four seconds between moves");
         clock.Reset();Check(clock.TryCheck(0),"new hunt resets cadence");
+        var sideClock=new SideStepCadence();
+        Check(sideClock.TryCheck(0) && !sideClock.TryCheck(699) && sideClock.TryCheck(700),"side-step cadence bounded");
+        sideClock.Finish(700,true);Check(!sideClock.TryCheck(2499) && sideClock.TryCheck(2500),"side-step recovery pause bounded");
         var original=new Options{ContinuousCombatPositioning=false};
         Check(JsonSerializer.Deserialize<Options>(JsonSerializer.Serialize(original))?.ContinuousCombatPositioning==false,"disabled setting survives save");
         Check(JsonSerializer.Deserialize<Options>("{}")!.ContinuousCombatPositioning,"older settings enable new feature");
@@ -67,3 +74,4 @@ public static class CombatPositioningChecks
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }
+
