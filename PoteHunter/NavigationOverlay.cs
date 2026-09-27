@@ -107,7 +107,7 @@ internal sealed class NavigationOverlay : Form
         }
         using var footerFont = new Font("Segoe UI", 7f);
         using var footerBrush = new SolidBrush(Color.FromArgb(220, 210, 220, 230));
-        e.Graphics.DrawString("Monsters: red/orange  •  engaged: teal ring  •  loaded entities only",
+        e.Graphics.DrawString("Monsters: red/orange  •  engaged: teal ring  •  treasure boxes: gold live / amber remembered",
             footerFont, footerBrush, new PointF(7, ClientSize.Height - FooterHeight + 2));
     }
 
@@ -164,3 +164,4 @@ internal sealed class NavigationOverlay : Form
     [DllImport("user32.dll")]
     static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 }
+
