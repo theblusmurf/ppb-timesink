@@ -188,6 +188,15 @@ public sealed partial class HunterForm
 
     static bool RangedPullEnabled(Options options) => options.Ranged && options.RangedPullEnabled && !options.GroupMode && !options.HealerMode;
 
+    void ApplyRangedPackRequirements()
+    {
+        if(!rangedPullEnabled.Checked)return;
+        ranged.Checked=true;
+        healerMode.Checked=false;
+        groupEnabled.Checked=false;
+        if(compactMode.SelectedIndex!=0)compactMode.SelectedIndex=0;
+    }
+
     void AddRangedPullSettings(TabControl tabs)
     {
         var page = new TabPage("Ranged packs") { AutoScroll = true, BackColor = BackColor, ForeColor = ForeColor };
@@ -211,11 +220,16 @@ public sealed partial class HunterForm
         var description = new Label
         {
             AutoSize = true, MaximumSize = new Size(750, 0), Margin = new Padding(3, 12, 3, 8),
-            Text = "Use Firing until the configured maximum number of pull IDs is confirmed. The bot then stops pulling, waits for those tagged monsters to enter the melee swing radius, and attacks their densest direction with left-click. Pulling resumes only after every tagged ID is gone. The healing threshold pauses new pulls. Enable Ranged in Hunt setup; Group mode and Healer mode must be off."
+            Text = "Use Firing until the configured maximum number of pull IDs is confirmed. The bot then stops pulling, waits for those tagged monsters to enter the melee swing radius, and attacks their densest direction with left-click. Pulling resumes only after every tagged ID is gone. The healing threshold pauses new pulls. Enabling ranged packs automatically selects ranged combat and turns off Group and Healer mode."
         };
         int textRow = panel.RowCount++;
         panel.Controls.Add(description, 0, textRow); panel.SetColumnSpan(description, 2);
         page.Controls.Add(panel); tabs.TabPages.Add(page);
+        rangedPullEnabled.CheckedChanged+=(_,_)=>
+        {
+            ApplyRangedPackRequirements();
+            if(!busy&&!working)try{CurrentOptions().Save();}catch(Exception ex){message=ex.Message;}
+        };
         try
         {
             var options = Options.Read();
@@ -277,6 +291,15 @@ public sealed partial class HunterForm
         options.RangedVerticalAimOffset=rangedVerticalAimOffset.Value;
         options.RangedTagMilliseconds = (int)rangedTagDuration.Value;
         options.RangedPullTimeoutSeconds = (int)rangedPullTimeout.Value;
+        if(options.RangedPullEnabled)
+        {
+            options.Ranged=true;
+            options.GroupMode=false;
+            options.HealerMode=false;
+            options.ContinuousCombatPositioning=false;
+            options.TightGathering=false;
+            options.RangedMinimumNearby=options.RangedPullCount;
+        }
         return options;
     }
 
@@ -606,3 +629,4 @@ public sealed partial class HunterForm
         }
     }
 }
+
