@@ -31,6 +31,7 @@ public sealed class Options
     public decimal LootHoldMs { get; set; } = 800;
     public string[] AllowedDifficulties { get; set; } = ["Green", "Yellow"];
     public bool PrioritizeGamekeeper { get; set; } = true;
+    public bool ReturnToHuntLocationAfterGamekeeper { get; set; } = true;
     public bool PrioritizeBreakables { get; set; } = true;
     public decimal GamekeeperResponseRadius { get; set; } = 60;
     public bool LootDuringSkillCooldowns { get; set; } = true;
