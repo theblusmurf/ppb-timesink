@@ -7,6 +7,7 @@ public sealed partial class HunterForm
     const int NavigationOverlayMargin = 24;
     readonly CheckBox showNavigationOverlay = new() { Text = "Show radar overlay", AutoSize = true };
     readonly CheckBox guideTreasureChests = new() { Text = "Guide to treasure chests", AutoSize = true, Checked = true };
+    readonly CheckBox showTreasureChestMarkers = new() { Text = "Show treasure boxes on map", AutoSize = true, Checked = true };
     readonly NumericUpDown navigationOverlaySize = new()
     {
         Minimum = 200,
@@ -38,6 +39,7 @@ public sealed partial class HunterForm
             navigationViewRadius.Value = Math.Clamp(options.NavigationViewRadius,
                 (int)navigationViewRadius.Minimum, (int)navigationViewRadius.Maximum);
             guideTreasureChests.Checked = options.GuideTreasureChests;
+            showTreasureChestMarkers.Checked = options.ShowTreasureChestMarkers;
         }
         catch
         {
@@ -49,6 +51,7 @@ public sealed partial class HunterForm
         var sizeLabel = new Label { Text = "Size:", AutoSize = true, Padding = new Padding(5, 5, 0, 0) };
         navControls.Controls.Add(showNavigationOverlay);
         navControls.Controls.Add(guideTreasureChests);
+        navControls.Controls.Add(showTreasureChestMarkers);
         navControls.Controls.Add(sizeLabel);
         navControls.Controls.Add(navigationOverlaySize);
         navControls.Controls.Add(new Label { Text = "View:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
@@ -58,6 +61,7 @@ public sealed partial class HunterForm
 
         showNavigationOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
         guideTreasureChests.CheckedChanged += (_, _) => OverlaySettingsChanged();
+        showTreasureChestMarkers.CheckedChanged += (_, _) => OverlaySettingsChanged();
         navigationOverlaySize.ValueChanged += (_, _) => OverlaySettingsChanged();
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
@@ -80,6 +84,7 @@ public sealed partial class HunterForm
         options.NavigationOverlaySize = (int)navigationOverlaySize.Value;
         options.NavigationViewRadius = (int)navigationViewRadius.Value;
         options.GuideTreasureChests = guideTreasureChests.Checked;
+        options.ShowTreasureChestMarkers = showTreasureChestMarkers.Checked;
         return options;
     }
 
