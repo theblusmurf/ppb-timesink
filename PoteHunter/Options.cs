@@ -74,6 +74,7 @@ public sealed class Options
     public bool ClearNearbyEnemies { get; set; } = true;
     public decimal NearbyEnemyRadius { get; set; } = 6;
     public bool AutomaticRouting { get; set; } = true;
+    public bool GuideTreasureChests { get; set; } = true;
     public string GroupTankName { get; set; } = "";
     public bool GroupMode { get; set; }
     public decimal GroupFollowDistance { get; set; } = 4;
