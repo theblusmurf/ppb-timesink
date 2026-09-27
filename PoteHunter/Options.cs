@@ -66,6 +66,7 @@ public sealed class Options
     public bool ShowNavigationOverlay { get; set; }
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
+    public bool ShowTreasureChestMarkers { get; set; } = true;
     public bool AntiKillSteal { get; set; } = true;
     public decimal OtherPlayerRadius { get; set; } = 15;
     public bool GreetPlayers { get; set; } = true;
