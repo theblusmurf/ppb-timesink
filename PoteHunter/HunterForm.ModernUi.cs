@@ -16,16 +16,18 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    static readonly Color UiWindow = Color.FromArgb(15, 20, 27);
-    static readonly Color UiSidebar = Color.FromArgb(18, 25, 34);
-    static readonly Color UiSurface = Color.FromArgb(23, 31, 42);
-    static readonly Color UiRaised = Color.FromArgb(32, 43, 56);
-    static readonly Color UiBorder = Color.FromArgb(48, 63, 78);
-    static readonly Color UiText = Color.FromArgb(234, 242, 247);
-    static readonly Color UiMuted = Color.FromArgb(155, 174, 191);
-    static readonly Color UiAccent = Color.FromArgb(94, 225, 201);
-    static readonly Color UiAccentDark = Color.FromArgb(28, 108, 99);
-    static readonly Color UiDanger = Color.FromArgb(242, 153, 159);
+    // Warm winter palette: midnight blue surfaces, candlelight actions, and
+    // cranberry warnings keep the compact shell calm without looking flat.
+    static readonly Color UiWindow = Color.FromArgb(18, 22, 31);
+    static readonly Color UiSidebar = Color.FromArgb(25, 27, 38);
+    static readonly Color UiSurface = Color.FromArgb(35, 35, 48);
+    static readonly Color UiRaised = Color.FromArgb(51, 46, 56);
+    static readonly Color UiBorder = Color.FromArgb(80, 70, 78);
+    static readonly Color UiText = Color.FromArgb(248, 240, 228);
+    static readonly Color UiMuted = Color.FromArgb(190, 181, 177);
+    static readonly Color UiAccent = Color.FromArgb(224, 163, 82);
+    static readonly Color UiAccentDark = Color.FromArgb(134, 83, 45);
+    static readonly Color UiDanger = Color.FromArgb(190, 82, 92);
 
     /// <summary>
     /// Rehomes the constructor-built controls in the compact application shell.
@@ -490,4 +492,5 @@ public sealed partial class HunterForm
             WireDisplaySanitizer(child);
     }
 }
+
 
