@@ -31,6 +31,7 @@ public sealed partial class HunterForm
         form.navigationViewRadius.Value = 175;
         form.guideTreasureChests.Checked = true;
         form.showTreasureChestMarkers.Checked = true;
+        form.returnToHuntLocation.Checked = true;
         form.attackPotions.Checked=true;form.defensePotions.Checked=true;
                 var expected = form.CurrentOptions(); expected.Save();
                 var restored = Options.Read();
@@ -40,6 +41,7 @@ public sealed partial class HunterForm
              !restored.ShowNavigationOverlay || restored.NavigationOverlaySize!=325 || restored.NavigationViewRadius!=175 ||
              !restored.GuideTreasureChests ||
              !restored.ShowTreasureChestMarkers ||
+             !restored.ReturnToHuntLocationAfterGamekeeper ||
              !restored.UseAttackPotions || !restored.UseDefensePotions)
                     throw new Exception("Ranged pack controls did not persist through settings save/load.");
                 // Deterministic preview data makes monster/chest rendering visible
