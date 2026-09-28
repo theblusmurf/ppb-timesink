@@ -1577,6 +1577,30 @@ public sealed partial class HunterForm : Form
                     if(!encounter.HasEngaged && healingWarning!=null && await TryHeal(drive,o,token))continue;
                 }
                 if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,level,skillDue,token))continue;
+                // A Gamekeeper can interrupt an engaged stationary farm target.
+                // Finish the priority fight, then restore the original anchor
+                // and heading before resuming that target instead of waiting
+                // at the Gamekeeper's spawn point.
+                if(!o.GroupMode && gamekeeper==null && gamekeeperReturnPending && deferredLoot.Count==0)
+                {
+                    if((pos-gamekeeperReturnLocation).Length>2)
+                    {
+                        ReleaseCombatPickup();Input.HoldMouse(false,false,token);
+                        message="Returning to saved hunt location after Gamekeeper";
+                        navigation.BeginGoal("return to saved hunt location after Gamekeeper");
+                        returningFromPriority=true;
+                        try
+                        {
+                            await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,token,boundaryRadius:responseRadius);
+                            drive.StopApproach();
+                            await RestoreSavedHuntFacing(token);
+                        }
+                        finally {returningFromPriority=false;}
+                        continue;
+                    }
+                    gamekeeperReturnPending=false;
+                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=pos,Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
+                }
                 Entity? target=o.GroupMode?gamekeeper:GamekeeperPriority.ChooseFirst(encounter,gamekeeper,()=>null);
                 if(gamekeeper==null && RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing)
                 {
@@ -1634,27 +1658,6 @@ public sealed partial class HunterForm : Form
                     drive.StopApproach();
                     if(decision.Action!=GroupAction.Attack || decision.Target==null){Input.Release(preserveNearbyPickup:true);await Input.Delay(150,token);continue;}
                     target=decision.Target;
-                }
-                if(target==null && !o.GroupMode && !healingRestPending &&
-                    gamekeeperReturnPending && gamekeeper==null && deferredLoot.Count==0)
-                {
-                    if((pos-gamekeeperReturnLocation).Length>2)
-                    {
-                        ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                        message="Returning to saved hunt location after Gamekeeper";
-                        navigation.BeginGoal("return to saved hunt location after Gamekeeper");
-                        returningFromPriority=true;
-                        try
-                        {
-                            await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,token,boundaryRadius:responseRadius);
-                            drive.StopApproach();
-                            await RestoreSavedHuntFacing(token);
-                        }
-                        finally {returningFromPriority=false;}
-                        continue;
-                    }
-                    gamekeeperReturnPending=false;
-                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=pos,Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
                 }
                 if(encounter.Active && target==null)
                 {
@@ -1858,6 +1861,19 @@ public sealed partial class HunterForm : Form
                     bool packClearing=RangedPullEnabled(o) && rangedPull.Active && rangedPull.Phase==RangedPullPhase.Clearing && !priorityFight;
                     double attackStop = packClearing ? (double)o.RangedMeleeAttackRange : o.Ranged ? (double)o.MeleeRange : Math.Min((double)o.MeleeRange, Targeting.MeleeAttackRange);
                     double chaseThreshold = packClearing ? attackStop : attackStop + Math.Max(bodyAllowance,combatStart != 0 ? 1.25 : 0);
+                    bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
+                    double stationaryAttackStop=stationaryFarmTarget ? Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange) : attackStop;
+                    if(stationaryFarmTarget && delta.Length>stationaryAttackStop)
+                    {
+                        // Mimics, Pulkhans, Tribals, and Towers are held at the
+                        // saved anchor. Wait for melee reach instead of walking
+                        // to them; the input preflight still interrupts this
+                        // wait immediately when a Gamekeeper appears.
+                        ReleaseCombatPickup();drive.StopApproach();Input.HoldMouse(false,false,token);
+                        message=$"Holding saved position; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{stationaryAttackStop:F1}).";
+                        TraceLog.Record("stationary farm target outside melee reach",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=stationaryAttackStop,Anchor=anchor});
+                        await Input.Delay(100,token);continue;
+                    }
                     bool holdPriorityPosition=o.StationaryGamekeeperPriority && !o.GroupMode && (priorityFight || encounter.IsEngaged(current));
                     if(holdPriorityPosition && delta.Length>chaseThreshold)
                     {
@@ -1936,9 +1952,9 @@ public sealed partial class HunterForm : Form
                     // Group mode keeps the engaged pack in front even when the
                     // selected attack is ranged; the planner still enforces
                     // attack reach, tank-follow distance, boundary, and route safety.
-                    if((!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,targetRadius,attackStop,token))continue;
-                    if((!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,targetRadius,attackStop,token))continue;
-                    if(await TryCombatSideStep(drive,current,anchor,o,targetRadius,attackStop,token))continue;
+                    if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,targetRadius,attackStop,token))continue;
+                    if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,targetRadius,attackStop,token))continue;
+                    if(!stationaryFarmTarget && await TryCombatSideStep(drive,current,anchor,o,targetRadius,attackStop,token))continue;
                     // Face a new/side target before starting an attack animation.
                     // A running combo can tolerate small movements inside a 7Â°
                     // cone; skills must not wait indefinitely for 2Â° precision.

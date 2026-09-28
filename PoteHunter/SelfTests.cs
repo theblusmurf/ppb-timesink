@@ -125,6 +125,7 @@ static class SelfTests
             var mimic = new Entity(1, 0x813d1753, "Mimic", new(), 0, Model: "MON_mimic.GCMDS");
             var gamekeeper = new Entity(2, 0x80251752, "Gamekeeper", new(), 0, Model: "MON_SnowGun2.GCMDS");
             var tribal = new Entity(4, 0x80001754, "Tribal", new(2, 0), 0, Model: "MON_SsangNom.GCMDS");
+            var tower = new Entity(6, 0x80001756, "Tower", new(2, 0), 0, Model: "Mon_Tower.GCMDS");
             if (!tribal.Monster || !tribal.Targetable || tribal.PriorityLootObject || Targeting.IsGamekeeper(tribal) ||
                 (tribal with { Id = 0x40001754 }).Monster || (tribal with { Model = "MON_mimic.GCMDS" }).Monster ||
                 !(tribal with { Model = "mon_ssangnom.gcmds" }).Monster)
@@ -152,7 +153,7 @@ static class SelfTests
                 Targeting.Eligible(pulkhan, new(0, 100), Threat.Yellow, "Pulkan", ["Yellow"]) ||
                 Targeting.Eligible(pulkhan, default, Threat.Yellow, "Pulkan", ["Yellow"]))
                 throw new Exception("Pulkhan selection bypassed name/color/health rules.");
-            if (!mimic.Monster || !mimic.Targetable || !gamekeeper.Monster || !gamekeeper.Targetable || !Targeting.IsGamekeeper(gamekeeper with { Model = "models\\MON_SnowGun2.GCMDS" }) || !pulkhan.Monster || !pulkhan.Targetable || mimic.PriorityLootObject || gamekeeper.PriorityLootObject || pulkhan.PriorityLootObject)
+            if (!mimic.Monster || !mimic.Targetable || !gamekeeper.Monster || !gamekeeper.Targetable || !Targeting.IsGamekeeper(gamekeeper with { Model = "models\\MON_SnowGun2.GCMDS" }) || !pulkhan.Monster || !pulkhan.Targetable || !tower.Monster || !tower.Targetable || !Targeting.IsStationaryHuntTarget(mimic) || !Targeting.IsStationaryHuntTarget(pulkhan) || !Targeting.IsStationaryHuntTarget(tribal) || !Targeting.IsStationaryHuntTarget(tower) || Targeting.IsStationaryHuntTarget(gamekeeper) || mimic.PriorityLootObject || gamekeeper.PriorityLootObject || pulkhan.PriorityLootObject)
                 throw new Exception("Verified unprefixed farming monsters were not classified correctly.");
             if ((mimic with { Id = 0x40001753 }).Monster || (mimic with { Model = "NPC_AG_TreasureBox.GCMDS" }).Monster ||
                 (gamekeeper with { Id = 0x80250001 }).Monster || new Entity(3, 0x8000009d, "Mimic", new(), 0, Model: "NPC_AG_TreasureBox.GCMDS").Monster)
@@ -208,7 +209,7 @@ static class SelfTests
                 throw new Exception("Gamekeeper priority identity failed.");
             var optionRoundTrip = System.Text.Json.JsonSerializer.Deserialize<Options>(System.Text.Json.JsonSerializer.Serialize(new Options { PrioritizeGamekeeper = false, PrioritizeBreakables=false }));
             if (optionRoundTrip == null || optionRoundTrip.PrioritizeGamekeeper || optionRoundTrip.PrioritizeBreakables) throw new Exception("Target-priority toggles did not persist");
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "farming-monster-checks.json"), System.Text.Json.JsonSerializer.Serialize(new { Passed = true, Checks = new[] { "exact Mimic 5971 model", "exact Gamekeeper 5970 model", "exact Pulkhan 5973 model", "NPC and wrong-model rejection", "unchanged priority props", "Gamekeeper Cyan filter", "dead monster exclusion", "Gamekeeper above monsters and props", "explicit priority overrides name/color only", "toggle persistence", "radius and upstream protections", "unknown HP excluded" } }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "farming-monster-checks.json"), System.Text.Json.JsonSerializer.Serialize(new { Passed = true, Checks = new[] { "exact Mimic 5971 model", "exact Gamekeeper 5970 model", "exact Pulkhan 5973 model", "exact Tribal 5972 model", "exact Tower 5974 model", "stationary farm target classification", "qualified model paths", "NPC and wrong-model rejection", "unchanged priority props", "Gamekeeper Cyan filter", "dead monster exclusion", "Gamekeeper above monsters and props", "explicit priority overrides name/color only", "toggle persistence", "radius and upstream protections", "unknown HP excluded" } }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
             var fungus = new HotbarSlot("8", SlotKind.Item, 3204, "Fungus Recovery Potion", 12000, 0, false, 0, "Potion", "Restores health points.");
             var fungusBar = new HotbarSnapshot(0, [fungus]);
             if (!RecoveryItems.Recognized(fungus) || RecoveryItems.Choose(fungusBar, 0) != fungus || fungus.RestoresHealth != 0)
