@@ -152,7 +152,7 @@ static class SelfTests
                 Targeting.Eligible(pulkhan, new(0, 100), Threat.Yellow, "Pulkan", ["Yellow"]) ||
                 Targeting.Eligible(pulkhan, default, Threat.Yellow, "Pulkan", ["Yellow"]))
                 throw new Exception("Pulkhan selection bypassed name/color/health rules.");
-            if (!mimic.Monster || !mimic.Targetable || !gamekeeper.Monster || !gamekeeper.Targetable || !pulkhan.Monster || !pulkhan.Targetable || mimic.PriorityLootObject || gamekeeper.PriorityLootObject || pulkhan.PriorityLootObject)
+            if (!mimic.Monster || !mimic.Targetable || !gamekeeper.Monster || !gamekeeper.Targetable || !Targeting.IsGamekeeper(gamekeeper with { Model = "models\\MON_SnowGun2.GCMDS" }) || !pulkhan.Monster || !pulkhan.Targetable || mimic.PriorityLootObject || gamekeeper.PriorityLootObject || pulkhan.PriorityLootObject)
                 throw new Exception("Verified unprefixed farming monsters were not classified correctly.");
             if ((mimic with { Id = 0x40001753 }).Monster || (mimic with { Model = "NPC_AG_TreasureBox.GCMDS" }).Monster ||
                 (gamekeeper with { Id = 0x80250001 }).Monster || new Entity(3, 0x8000009d, "Mimic", new(), 0, Model: "NPC_AG_TreasureBox.GCMDS").Monster)
@@ -363,4 +363,3 @@ static class SelfTests
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "steering-checks.json"), System.Text.Json.JsonSerializer.Serialize(new { Method = "Controller simulation using the observed calibration; excludes game/render latency.", RadiansPerPixel = calibration, Results = results }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 }
-

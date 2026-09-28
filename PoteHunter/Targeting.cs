@@ -13,7 +13,12 @@ public static class Targeting
 
     public static bool IsKnownUnprefixedMonster(uint id, string model) =>
         ExpectedUnprefixedMonsterModel(id) is { Length: > 0 } expected &&
-        model.Equals(expected, StringComparison.OrdinalIgnoreCase);
+        // The client has emitted both the bare model name and a resource/path
+        // qualified name across builds. Keep the prototype/id pairing strict,
+        // while accepting a qualified model that still ends in the verified
+        // prototype name.
+        !string.IsNullOrWhiteSpace(model) &&
+        model.Trim().EndsWith(expected, StringComparison.OrdinalIgnoreCase);
 
     public static bool MatchesName(string entityName, string nameFilter)
     {
@@ -208,4 +213,3 @@ public static class Targeting
             throw new Exception("A surviving collateral monster lost its shared completion area or expanded fresh selection.");
     }
 }
-

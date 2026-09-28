@@ -920,8 +920,24 @@ public sealed partial class HunterForm : Form
         var health=world.HealthSnapshot();var position=world.PlayerPosition();
         var retained=lockedTarget is Entity locked && Targeting.IsGamekeeper(locked) ? locked : pendingPriorityGamekeeper;
         double? retainedRadius=retained!=null && (encounter.IsEngaged(retained) || courtesy.StartedHere(retained)) ? activeCompletionBoundary : null;
-        return GamekeeperPriority.Choose(entities.Where(e=>Targeting.IsGamekeeper(e) && TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)==null),
+        var candidates=entities.Where(e=>Targeting.IsGamekeeper(e)).ToArray();
+        var selected=GamekeeperPriority.Choose(candidates.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)==null),
             health,position,anchor,(double)options.HuntRadius,(double)options.GamekeeperResponseRadius,true,retained,retainedRadius);
+        if(selected!=null)return selected;
+
+        // A failed route used to place the Gamekeeper in the generic
+        // unreachable cache for 30 seconds. That cache is useful for ordinary
+        // pulls, but it also made a live priority target silently disappear.
+        // Retry only that transient guard when no protected candidate was
+        // found, preserving avoidance, courtesy, HP, and response boundaries.
+        var retry=candidates.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)=="Temporarily unreachable").ToArray();
+        selected=GamekeeperPriority.Choose(retry,health,position,anchor,(double)options.HuntRadius,(double)options.GamekeeperResponseRadius,true,retained,retainedRadius);
+        if(selected!=null)
+        {
+            unreachableTargets.Remove(TargetIdentity(selected));
+            TraceLog.Record("Gamekeeper priority recovered from transient route guard",new {selected.Id,selected.DisplayName,Position=selected.Position});
+        }
+        return selected;
     }
 
     async Task StandForGamekeeper(CancellationToken token)
