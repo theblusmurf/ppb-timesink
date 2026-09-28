@@ -1704,6 +1704,7 @@ public sealed partial class HunterForm : Form
                 int turnRecoveryAttempts=0;
                 int? lastCombatHp=null;
                 long approachStarted = now, combatStart = 0; Vec lastTargetPosition = target.Position; int missingHealth = 0;
+                long targetMissingSince = 0;
                 double bodyAllowance=0; int? bodyProbeHp=null;long bodyProbeAt=0;
                 long nextPriorityCheck = 0;
                 bool collectAfterTarget = false;
@@ -1723,13 +1724,42 @@ public sealed partial class HunterForm : Form
                     var current = world.Find(target.Id);
                     if (current == null)
                     {
-                        // Entity snapshots can miss a live creature for a
-                        // short interval during S/A/D combat corrections.
-                        // Re-read before abandoning the active encounter.
-                        await Input.Delay(70,token);
-                        current=world.Find(target.Id);
+                        // A single failed tree read is not proof that the target
+                        // disappeared. The client briefly removes/rebuilds creature
+                        // nodes while turning, strafing, or correcting a position.
+                        // Release attack input, refresh the scene, and keep the same
+                        // identity locked for a short bounded reacquisition window.
+                        if (targetMissingSince == 0) targetMissingSince = Environment.TickCount64;
+                        ReleaseCombatPickup(); drive.StopApproach(); Input.HoldMouse(false, false, token);
+                        do
+                        {
+                            await Input.Delay(70, token);
+                            RefreshGuardScene();
+                            current = entities.FirstOrDefault(e => e.Id == target.Id);
+                        }
+                        while (current == null && Environment.TickCount64 - targetMissingSince < 1200);
+                        if (current == null)
+                        {
+                            var missingHealthSnapshot = world.TargetHealth(target.Id);
+                            bool stillEngaged = encounter.IsEngaged(target);
+                            TraceLog.Record("target reacquisition timed out", new { target.Id, target.DisplayName, stillEngaged, missingHealthSnapshot.Known, missingHealthSnapshot.Dead, Elapsed = Environment.TickCount64 - targetMissingSince });
+                            if (stillEngaged && !missingHealthSnapshot.Dead && Environment.TickCount64 - targetMissingSince < 1800)
+                            {
+                                message = $"Reacquiring engaged target: {target.DisplayName}…";
+                                await Input.Delay(100, token);
+                                continue;
+                            }
+                            collectAfterTarget = courtesy.StartedHere(target);
+                            break;
+                        }
                     }
-                    if (current == null || current.Address != target.Address || current.Generation != target.Generation || current.Name != target.Name || current.Model != target.Model || !current.Targetable) { collectAfterTarget = courtesy.StartedHere(target); TraceLog.Record("target inactive or replaced", new { target.Id, target.DisplayName }); break; }
+                    if (current.Address != target.Address || current.Generation != target.Generation || current.Name != target.Name || current.Model != target.Model || !current.Targetable)
+                    {
+                        collectAfterTarget = courtesy.StartedHere(target);
+                        TraceLog.Record("target inactive or replaced", new { target.Id, target.DisplayName, Current = current.Targetable ? current.DisplayName : "non-targetable" });
+                        break;
+                    }
+                    targetMissingSince = 0;
                     lockedTarget=current;
                     lastTargetPosition = current.Position;
                     if(!o.GroupMode && !o.LeaveAreaWhenEmpty && o.PrioritizeGamekeeper && Targeting.IsGamekeeper(current) &&
@@ -1776,6 +1806,7 @@ public sealed partial class HunterForm : Form
                     }
                     if(o.GroupMode && o.PrioritizeGamekeeper && !Targeting.IsGamekeeper(current) && groupDecision.Target is Entity groupPriority && Targeting.IsGamekeeper(groupPriority))
                     { TraceLog.Record("target preempted for Gamekeeper",new {PreviousId=current.Id,PriorityId=groupPriority.Id}); break; }
+
                     string? protection=TargetGuardReason(current,hp,pos,o);
                     if (protection!=null) throw new TargetProtectionException(protection);
                     if (!o.GroupMode && !encounter.HasEngaged && !healingRestPending && (!o.LeaveAreaWhenEmpty || !completionReturnPending) && Targeting.PriorityRank(current,o.PrioritizeGamekeeper,o.PrioritizeBreakables)<2 && Environment.TickCount64 >= nextPriorityCheck)
@@ -1806,7 +1837,6 @@ public sealed partial class HunterForm : Form
                         message=$"Holding position for priority combat; waiting for {current.DisplayName} ({delta.Length:F1}m) to enter attack range.";
                         await Input.Delay(100,token);break;
                     }
-
                     if(packClearing && !RangedPull.WithinNearby3D(current,pos,world.LocalPlayer().Height,(double)o.RangedGatherRadius))
                     {
                         // This member left the melee-phase admission circle. Yield
@@ -1977,6 +2007,7 @@ public sealed partial class HunterForm : Form
                     }
                     else
                     {
+
                         Input.HoldMouse(false, true, token);
                         SetCombatPickup(o.LootDuringSkillCooldowns && CombatPickup.SkillsCooling(o.SkillKeys,bar),existingDrops,o,token);
                         await Input.Delay(50, token);
@@ -2007,7 +2038,6 @@ public sealed partial class HunterForm : Form
                     {
                         unreachableTargets[TargetIdentity(target)]=Environment.TickCount64+30000;
                         ReleaseUnstartedDefense(target);throw new RecoverUnderDamageException();
-
                     }
                     if(encounter.IsEngaged(target))throw new InvalidOperationException("Cannot reach an engaged enemy; stopped before selecting a new target: "+ex.Message);
                     collectAfterTarget=false;courtesy.Forget(target);encounter.Forget(target);Input.Release(preserveNearbyPickup:true);
@@ -2178,6 +2208,7 @@ public sealed partial class HunterForm : Form
                 if(action.Waypoint is Vec waypoint)
                 {
                     if(world.RestSupported && world.RestState().Posture!=RestPosture.Standing)
+
                     {
                         drive.StopApproach();await EnsurePosture(false,token);continue;
                     }
@@ -2208,7 +2239,6 @@ public sealed partial class HunterForm : Form
                         if(wantRest && missingSupplies)recovery.RequireFullHealth();
                         if(!await EnsurePosture(wantRest,token,CanRestNow))
                         {
-
                             await EnsurePosture(false,token);continue;
                         }
                     }
@@ -2379,6 +2409,7 @@ public sealed partial class HunterForm : Form
             {
                 var goal=position+Movement.Rotate(away,turn)*2.5;
                 if((goal-anchor).Length>boundary || Avoidance.BlockedSegment(position,goal,avoidZones)!=null)continue;
+
                 if(options.AutomaticRouting && !navigation.CanAdvance(position,goal,avoidZones))continue;
                 defenseStep=goal;navigation.BeginGoal("reacquire after incoming damage");
                 TraceLog.Record("damage response reposition",new {Position=position,Goal=goal,Boundary=boundary});
@@ -2409,7 +2440,6 @@ public sealed partial class HunterForm : Form
         if(!world.RestSupported)throw new InvalidOperationException("No healing item is slotted and the client's sitting state cannot be verified.");
         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);
         var recovery=new HealingRest(initial,Environment.TickCount64);
-
         healingRest=recovery;
         bool requestingSit=false;
         Entity? recoveryPriority=null;
@@ -2548,7 +2578,6 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
-
 
 
 
