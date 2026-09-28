@@ -1826,8 +1826,22 @@ public sealed partial class HunterForm : Form
                         activeCompletionBoundary=Math.Max(activeCompletionBoundary,targetRadius);
                         if((pos-anchor).Length>(double)o.HuntRadius || (current.Position-anchor).Length>(double)o.HuntRadius)completionReturnPending=true;
                     }
-                    activeMovementBoundary=targetRadius;
-                    if ((pos - anchor).Length > targetRadius + 2) throw new InvalidOperationException("Stopped at the target response boundary.");
+                    // Completion tracking may allow an engaged target to remain
+                    // observable beyond the hunt radius, but it must never widen
+                    // the character's movement boundary. Outside trips and the
+                    // explicit Gamekeeper response are the only exceptions.
+                    bool outsideTrip=activeExcursion is {OutsideTrip:true} && !o.GroupMode;
+                    double movementBoundary=priorityFight || outsideTrip ? targetRadius : Math.Min(targetRadius,(double)o.HuntRadius);
+                    activeMovementBoundary=movementBoundary;
+                    if ((pos - anchor).Length > movementBoundary + 2) throw new InvalidOperationException("Stopped at the target response boundary.");
+                    if (!priorityFight && !outsideTrip && !o.GroupMode && (current.Position-anchor).Length>movementBoundary)
+                    {
+                        ReleaseCombatPickup();drive.StopApproach();Input.HoldMouse(false,false,token);
+                        message=$"Holding hunt boundary while {current.DisplayName} remains outside the saved area.";
+                        TraceLog.Record("target outside strict hunt boundary",new {current.Id,current.DisplayName,TargetDistance=(current.Position-anchor).Length,Boundary=movementBoundary,Engaged=encounter.IsEngaged(current)});
+                        await Input.Delay(150,token);
+                        break;
+                    }
                     if ((current.Position - anchor).Length > targetRadius)
                     {
                         if(encounter.IsEngaged(current))throw new InvalidOperationException("An engaged enemy moved beyond the combat completion area; stopped before pulling another target.");
@@ -1911,7 +1925,7 @@ public sealed partial class HunterForm : Form
                         try
                         {
                             double completionDistance=packClearing ? attackStop : attackStop+1;
-                            if(await NavigateTo(drive,current.Position,anchor,o,token,completionDistance,boundaryRadius:targetRadius,watchTurns:true))
+                            if(await NavigateTo(drive,current.Position,anchor,o,token,completionDistance,boundaryRadius:activeMovementBoundary,watchTurns:true))
                             {
                                 if(!packClearing){bodyAllowance=1;bodyProbeHp=hp.Current;}
                                 bodyProbeAt=0;approachStarted=0;
@@ -1919,7 +1933,7 @@ public sealed partial class HunterForm : Form
                         }
                         catch(TurnUnresponsiveException ex)
                         {
-                            await RecoverUnresponsiveTurn(drive,current,anchor,o,targetRadius,++turnRecoveryAttempts,ex,token);
+                            await RecoverUnresponsiveTurn(drive,current,anchor,o,activeMovementBoundary,++turnRecoveryAttempts,ex,token);
                             approachStarted=Environment.TickCount64;
                         }
                         continue;
@@ -1936,9 +1950,9 @@ public sealed partial class HunterForm : Form
                     // Group mode keeps the engaged pack in front even when the
                     // selected attack is ranged; the planner still enforces
                     // attack reach, tank-follow distance, boundary, and route safety.
-                    if((!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,targetRadius,attackStop,token))continue;
-                    if((!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,targetRadius,attackStop,token))continue;
-                    if(await TryCombatSideStep(drive,current,anchor,o,targetRadius,attackStop,token))continue;
+                    if((!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
+                    if((!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
+                    if(await TryCombatSideStep(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
                     // Face a new/side target before starting an attack animation.
                     // A running combo can tolerate small movements inside a 7Â°
                     // cone; skills must not wait indefinitely for 2Â° precision.
@@ -1970,7 +1984,7 @@ public sealed partial class HunterForm : Form
                     }
                     catch(TurnUnresponsiveException ex)
                     {
-                        await RecoverUnresponsiveTurn(drive,current,anchor,o,targetRadius,++turnRecoveryAttempts,ex,token);
+                        await RecoverUnresponsiveTurn(drive,current,anchor,o,activeMovementBoundary,++turnRecoveryAttempts,ex,token);
                         continue;
                     }
                     Input.HoldMouse(false, true, token);
