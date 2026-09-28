@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.24
+
+- Added dedicated loot totals for Silvein, Mitheil, Iternium, Fehu, gold, and
+  gems. Matching is case-insensitive and also checks the client's item
+  description when the displayed name has a quantity or suffix.
+- Added the six named totals to the live-status tracker and the draggable loot
+  overlay, while retaining per-target kill/drop and recent-drop records.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.23
 
 - Restored combat skill rotation for stationary Mimic, Tribal, Pulkhan, and

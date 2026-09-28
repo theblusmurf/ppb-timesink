@@ -31,7 +31,7 @@ internal sealed class LootTrackerOverlay : Form
         this.positionCommitted=positionCommitted;
         AutoScaleMode=AutoScaleMode.None;BackColor=Color.FromArgb(15,22,31);DoubleBuffered=true;
         FormBorderStyle=FormBorderStyle.None;Opacity=.94;ShowIcon=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(300,215);
+        StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(330,300);
         Cursor=Cursors.SizeAll;
         MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left)return;dragging=true;dragOffset=e.Location;};
         MouseMove+=(_,e)=>{if(!dragging)return;Location=new Point(Left+e.X-dragOffset.X,Top+e.Y-dragOffset.Y);};
@@ -78,6 +78,20 @@ internal sealed class LootTrackerOverlay : Form
         using var mutedBrush=new SolidBrush(Color.FromArgb(175,196,203,210));
         using var accentBrush=new SolidBrush(Color.FromArgb(255,215,120));
         float y=HeaderHeight+7;
+        e.Graphics.DrawString("Tracked loot",detailFont,mutedBrush,new PointF(10,y));y+=16;
+        for(int i=0;i<snapshot.TrackedLoot.Count;i+=2)
+        {
+            var left=snapshot.TrackedLoot[i];
+            e.Graphics.DrawString($"{left.Name}: {left.Count}",rowFont,textBrush,new PointF(10,y));
+            if(i+1<snapshot.TrackedLoot.Count)
+            {
+                var right=snapshot.TrackedLoot[i+1];
+                e.Graphics.DrawString($"{right.Name}: {right.Count}",rowFont,textBrush,new PointF(170,y));
+            }
+            y+=17;
+        }
+        y+=3;e.Graphics.DrawLine(Pens.DimGray,8,y,ClientSize.Width-8,y);y+=5;
+        e.Graphics.DrawString("Tracked targets",detailFont,mutedBrush,new PointF(10,y));y+=16;
         foreach(var source in snapshot.Sources)
         {
             string line=$"{source.Source,-8} {source.Kills,3} kills  ·  {source.Drops,3} drops";
@@ -90,8 +104,8 @@ internal sealed class LootTrackerOverlay : Form
             foreach(var drop in snapshot.RecentDrops.Take(4))
             {
                 string name=drop.Name.Length>25?drop.Name[..22]+"…":drop.Name;
+                if(y>ClientSize.Height-30)break;
                 e.Graphics.DrawString($"{drop.Source}: {name}",detailFont,accentBrush,new PointF(12,y));y+=15;
-                if(y>ClientSize.Height-14)break;
             }
         }
         e.Graphics.DrawString($"Zone {snapshot.Zone}  ·  pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(10,ClientSize.Height-14));
