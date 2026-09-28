@@ -1822,6 +1822,7 @@ public sealed partial class HunterForm : Form
                 int turnRecoveryAttempts=0;
                 int? lastCombatHp=null;
                 long approachStarted = now, combatStart = 0; Vec lastTargetPosition = target.Position; int missingHealth = 0;
+                long stationaryAttackHeldAt=0; int stationaryAttackBaselineHp=-1;
                 long targetMissingSince = 0;
                 double bodyAllowance=0; int? bodyProbeHp=null;long bodyProbeAt=0;
                 long nextPriorityCheck = 0;
@@ -2118,24 +2119,100 @@ public sealed partial class HunterForm : Form
                     }
                     if(stationaryAttackReady)
                     {
-                        // Some client builds treat a held left button as only
-                        // one basic attack. Pulse it while stationary so each
-                        // activation can start a fresh swing, while the
-                        // target and protection checks still run on every
-                        // controller pass.
-                        Input.HoldMouse(false,false,default);
-                        try
+                        // Keep the basic attack held throughout a stationary
+                        // engagement. A few client builds stop advancing a
+                        // held swing after a long no-damage interval, so the
+                        // watchdog below re-arms it only after the target has
+                        // remained at the same HP for a bounded period.
+                        long stationaryNow=Environment.TickCount64;
+                        if(stationaryAttackBaselineHp<0 || hp.Current!=stationaryAttackBaselineHp)
                         {
+                            stationaryAttackBaselineHp=hp.Current;
+                            stationaryAttackHeldAt=stationaryNow;
+                        }
+                        bool rearm=!Input.BasicAttackHeld || stationaryNow-stationaryAttackHeldAt>=2500;
+                        if(rearm)
+                        {
+                            if(Input.BasicAttackHeld)Input.HoldMouse(false,false,default);
                             Input.HoldMouse(false,true,token);
-                            courtesy.MarkAttack(current);
-                            encounter.MarkAttack(current,hp);
-                            encounterHasAttack=true;
-                            TraceLog.Record("stationary melee swing pulse",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ConfiguredRange=attackStop,Anchor=anchor});
-                            message=$"Swinging at {current.DisplayName} from saved hunt point";
+                            stationaryAttackHeldAt=stationaryNow;
+                            TraceLog.Record("stationary melee engaged",new{current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ConfiguredRange=attackStop,Anchor=anchor,Rearmed=true});
+                        }
+                        courtesy.MarkAttack(current);
+                        encounter.MarkAttack(current,hp);
+                        encounterHasAttack=true;
+                        message=$"Swinging at {current.DisplayName} from saved hunt point";
+                        await Input.Delay(45,token);
+                        // Stationary farm targets used to continue here before
+                        // reaching the skill rotation. That made the bot swing
+                        // forever while every configured skill was skipped.
+                        // Reuse the live hotbar, target-selection, health rule,
+                        // mana reserve, and cooldown bookkeeping used by the
+                        // moving combat path, while preserving the fixed
+                        // standing position.
+                        var stationaryBar=CheckedHotbar();
+                        if(o.AutoDetectSkills)
+                        {
+                            string detected=AttackKeys(SkillRotation.DetectKeys(stationaryBar),stationaryBar,o.MaintainAreaBuffs);
+                            if(detected!=o.SkillKeys)
+                            {
+                                o.SkillKeys=detected;skillCursor=0;
+                                foreach(char key in detected)skillDue.TryAdd(key,0);
+                                TraceLog.Record("skill slots detected",new{Keys=detected,Mode="stationary"});
+                            }
+                        }
+                        int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 ?
+                            SkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
+                                slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o)) : -1;
+                        if(stationaryReadyIndex>=0)
+                        {
+                            ReleaseCombatPickup();
+                            char key=o.SkillKeys[stationaryReadyIndex];
+                            var slot=stationaryBar.Slot(key);
+                            if(o.SmartSkillTargeting)
+                            {
+                                var skillTarget=SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,world.HealthSnapshot(),pos,
+                                    (double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
+                                if(skillTarget!=null && skillTarget.Id!=current.Id)
+                                {
+                                    TraceLog.Record("skill target retarget",new{Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot),Mode="stationary"});
+                                    Input.HoldMouse(false,false,token);
+                                    stationaryAttackHeldAt=0;
+                                    target=skillTarget;lockedTarget=skillTarget;
+                                    await Input.Delay(45,token);
+                                    continue;
+                                }
+                            }
+                            TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary"});
+                            await Input.Key((Keys)key,50,token);
+                            await Input.Delay(80,token);
+                            if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                            await Input.Delay(150,token);
+                            var after=CheckedHotbar().Slot(key);
+                            bool fallbackRelease=false;
+                            if(slot.HasCooldown && after.Ready)
+                            {
+                                // If the client ignored the skill while the
+                                // left button was held, retry once with a short
+                                // release, then restore the continuous swing.
+                                fallbackRelease=true;
+                                Input.HoldMouse(false,false,token);
+                                await Input.Delay(35,token);
+                                if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                                Input.HoldMouse(false,true,token);
+                                stationaryAttackHeldAt=Environment.TickCount64;
+                                await Input.Delay(100,token);
+                                after=CheckedHotbar().Slot(key);
+                            }
+                            bool cooldownStarted=after.RemainingCooldown>0 || after.Locked;
+                            TraceLog.Record("skill cooldown observed",new{Key=key.ToString(),after.Name,Remaining=after.RemainingCooldown,after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,Mode="stationary"});
+                            skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
+                            skillCursor=(stationaryReadyIndex+1)%Math.Max(1,o.SkillKeys.Length);
+                        }
+                        else
+                        {
                             await Input.Delay(75,token);
                         }
-                        finally { Input.HoldMouse(false,false,default); }
-                        await Input.Delay(75,token);
                         continue;
                     }
                     // Start the melee hold before the final aim correction once

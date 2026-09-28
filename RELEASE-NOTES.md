@@ -1,5 +1,16 @@
 # Release notes
 
+## Release1.23
+
+- Restored combat skill rotation for stationary Mimic, Tribal, Pulkhan, and
+  Tower engagements; skills now run between attack checks with the same target,
+  cooldown, health, and mana-reserve rules as moving combat.
+- Kept the basic attack held for the full stationary engagement and added a
+  bounded no-damage re-arm watchdog so swings continue without periodic input
+  gaps. Skill casts can briefly release and then restore the swing when the
+  client does not accept a cast while the attack button is held.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.22
 
 - Added a live loot tracker for Mimic, Tribal, Pulkhan, and Tower kills. New
