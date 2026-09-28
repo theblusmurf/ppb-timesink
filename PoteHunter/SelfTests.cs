@@ -11,7 +11,7 @@ static class SelfTests
             PotionChecks.Run();
             GroupHealerChecks.Run();
             ZoneMapBackground.SelfTest();
-            CombatPositioningChecks.Run(); TightGatheringChecks.Run(); SkillHealthRuleChecks.Run(); SkillTargeting.SelfTest();
+            SkillHealthRuleChecks.Run(); SkillTargeting.SelfTest();
             GameWindow.SelfTest();
             CompatibilityChecks.Run();
             if (Math.Abs(Movement.Angle(new Vec(1, 0), new Vec(0, 1)) - Math.PI / 2) > 1e-9) throw new Exception("Quarter-turn angle");

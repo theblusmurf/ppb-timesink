@@ -11,7 +11,8 @@ public sealed partial class HunterForm
         float span=(float)NavigationViewRadius(),scale=Math.Min(canvasSize.Width,canvasSize.Height)/(span*2);
         float cx=canvasSize.Width/2f,cy=canvasSize.Height/2f;
         float radius=(float)Math.Min(span,25)*scale;
-        Vec left=Movement.Rotate(forward,CombatPositioning.ConeHalfAngle),right=Movement.Rotate(forward,-CombatPositioning.ConeHalfAngle);
+        const double attackConeHalfAngle=Math.PI/3;
+        Vec left=Movement.Rotate(forward,attackConeHalfAngle),right=Movement.Rotate(forward,-attackConeHalfAngle);
         PointF Point(Vec v)=>new(cx+(float)(v.X*radius),cy-(float)(v.Y*radius));
         var tip=new PointF(cx,cy);
         var polygon=new[]{tip,Point(left),Point(right)};
@@ -22,4 +23,3 @@ public sealed partial class HunterForm
         g.DrawString("Attack cone",font,Brushes.LightSkyBlue,cx+5,cy+5);
     }
 }
-

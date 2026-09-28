@@ -57,13 +57,6 @@ public sealed class Options
     public decimal ManaBelowPercent { get; set; } = 30;
     public decimal ManaDelaySeconds { get; set; } = 5;
     public int ManaReservePercent { get; set; }
-    public bool ContinuousCombatPositioning { get; set; } = true;
-    // Read settings supplied by the original Continuous-Positioning build.
-    [System.Text.Json.Serialization.JsonPropertyName("ContinuousPositioning")]
-    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public bool? LegacyContinuousPositioning { get=>null; set { if(value.HasValue)ContinuousCombatPositioning=value.Value; } }
-    public bool TightGathering { get; set; } = true;
-    public decimal GatherRadius { get; set; } = .5m;
     public bool ShowNavigationOverlay { get; set; }
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
@@ -91,7 +84,6 @@ public sealed class Options
     }
     public void Save() { File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
 }
-
 
 
 

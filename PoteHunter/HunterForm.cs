@@ -504,7 +504,6 @@ public sealed partial class HunterForm : Form
     }
     void Tick()
     {
-        gatheringStatusLabel.Text=working?gatherStatus:"Stopped";
         status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError);
         if (!connected || busy) return;
         try
@@ -976,8 +975,7 @@ public sealed partial class HunterForm : Form
     }
 
     object CombatState() => new {SkillHealthRule=new{Enabled=activeGuardOptions?.HealthSkillCondition ?? healthSkillCondition.Checked,Percent=activeGuardOptions?.HealthSkillPercent ?? healthSkillPercent.Value,ExtraKeys=activeGuardOptions?.HealthConditionKeys ?? healthConditionKeys.Text,HealthSource=(activeGuardOptions?.HealerMode ?? healerMode.Checked)?"Healing target":"Character"},
-        Gathering=new{Enabled=(activeGuardOptions?.ContinuousCombatPositioning ?? continuousCombatPositioning.Checked) && (activeGuardOptions?.TightGathering ?? tightGathering.Checked),Radius=activeGuardOptions?.GatherRadius ?? gatherRadius.Value,Status=working?gatherStatus:"Stopped"},
-        ContinuousCombatPositioning=activeGuardOptions?.ContinuousCombatPositioning ?? continuousCombatPositioning.Checked,AutoDetectSkills=activeGuardOptions?.AutoDetectSkills ?? autoSkills.Checked,ActiveSkillKeys=activeGuardOptions?.SkillKeys,GamekeeperResponseRadius=activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value,LootDuringSkillCooldowns=activeGuardOptions?.LootDuringSkillCooldowns ?? combatPickup.Checked,PickupHeld=Input.PickupHeld,NearbyLootPickupEnabled=activeGuardOptions?.AutoPickupNearbyLoot ?? nearbyLootPickup.Checked,NearbyLootCount=nearbyPickupCount,PickupRadius=activeGuardOptions?.NearbyEnemyRadius ?? nearbyRadius.Value,PrioritizeGamekeeper=activeGuardOptions?.PrioritizeGamekeeper ?? prioritizeGamekeeper.Checked,Enabled=activeGuardOptions?.ClearNearbyEnemies ?? clearNearby.Checked,
+        AutoDetectSkills=activeGuardOptions?.AutoDetectSkills ?? autoSkills.Checked,ActiveSkillKeys=activeGuardOptions?.SkillKeys,GamekeeperResponseRadius=activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value,LootDuringSkillCooldowns=activeGuardOptions?.LootDuringSkillCooldowns ?? combatPickup.Checked,PickupHeld=Input.PickupHeld,NearbyLootPickupEnabled=activeGuardOptions?.AutoPickupNearbyLoot ?? nearbyLootPickup.Checked,NearbyLootCount=nearbyPickupCount,PickupRadius=activeGuardOptions?.NearbyEnemyRadius ?? nearbyRadius.Value,PrioritizeGamekeeper=activeGuardOptions?.PrioritizeGamekeeper ?? prioritizeGamekeeper.Checked,Enabled=activeGuardOptions?.ClearNearbyEnemies ?? clearNearby.Checked,
         Radius=activeGuardOptions?.NearbyEnemyRadius ?? nearbyRadius.Value,encounter.Active,
         NearbyEnemies=encounter.Candidates.Select(e=>new {e.Id,e.DisplayName,e.Position}).ToArray(),
         EngagedEnemies=encounter.EngagedCandidates.Select(e=>new {e.Id,e.DisplayName,e.Position}).ToArray(),
@@ -1449,7 +1447,7 @@ public sealed partial class HunterForm : Form
             activeExcursion=o.GroupMode ? null : new HuntExcursion(anchor,(double)o.HuntRadius);
             runZone=world.ActiveZone();unreachableTargets.Clear();
             pendingPriorityGamekeeper=null;gamekeeperTransition=false;priorityInterruptibleActivity=false;
-            rangedPull.Reset(); rangedTagging=false; positioningCadence.Reset(); gatherCadence.Reset(); gatherStatus="Ready";
+            rangedPull.Reset(); rangedTagging=false;
             combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;nextEngagementObservation=0;
             courtesy.Reset(); playerGreeting.Reset(); encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; encounterQuietSince=0; encounterUnknownSince=0;
             targetSearch=null;lastTargetWait="";
@@ -2019,12 +2017,6 @@ public sealed partial class HunterForm : Form
                         encounter.Begin(); encounterHasAttack=false; encounterExistingDrops=existingDrops; encounterAnchor=anchor;
                         RefreshGuardScene(); ObserveEncounter(o,world.HealthSnapshot(),pos,level);
                     }
-                    // Group mode keeps the engaged pack in front even when the
-                    // selected attack is ranged; the planner still enforces
-                    // attack reach, tank-follow distance, boundary, and route safety.
-                    if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
-                    if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
-                    if(!stationaryFarmTarget && await TryCombatSideStep(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
                     if(stationaryAttackReady)
                     {
                         // Some client builds treat a held left button as only

@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.16
+
+- Removed the **Smooth side-step** and **Group engaged targets** settings from
+  the UI, saved options, live status, and combat controller.
+- Removed their lateral correction and tight-gathering code paths so normal
+  combat selects and faces the locked target directly without sporadic turns.
+- Preserved the navigation attack-cone overlay as a visual guide; it no longer
+  drives combat movement.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.15
 
 - Removed the remaining chase path for Mimic, Pulkhan, Tribal, and Tower

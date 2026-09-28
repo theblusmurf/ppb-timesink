@@ -298,8 +298,6 @@ public sealed partial class HunterForm
             options.Ranged=true;
             options.GroupMode=false;
             options.HealerMode=false;
-            options.ContinuousCombatPositioning=false;
-            options.TightGathering=false;
         }
         return options;
     }
