@@ -1475,10 +1475,12 @@ public sealed partial class HunterForm : Form
             var skillDue = o.SkillKeys.ToDictionary(c => c, _ => 0L);
             int skillCursor = 0; bool gamekeeperExcursion=false;
             double responseRadius=Targeting.ResponseRadius((double)o.HuntRadius,(double)o.GamekeeperResponseRadius);
-            bool gamekeeperReturnPending=false;
-            bool gamekeeperDefeated=false;
-            Vec gamekeeperReturnLocation=anchor;
-            double gamekeeperReturnHeading=savedHuntHeading;
+             bool gamekeeperReturnPending=false;
+             bool gamekeeperDefeated=false;
+             bool gamekeeperReturnRouting=false;
+             long nextGamekeeperReturnTrace=0;
+             Vec gamekeeperReturnLocation=anchor;
+             double gamekeeperReturnHeading=savedHuntHeading;
             async Task RestoreSavedHuntFacing(CancellationToken restoreToken)
             {
                 if(!double.IsFinite(gamekeeperReturnHeading))return;
@@ -1501,17 +1503,33 @@ public sealed partial class HunterForm : Form
                 // throwing EngagedTargetPriorityException before the return
                 // route can start.
                 if(o.GroupMode || !gamekeeperReturnPending || !gamekeeperDefeated)return false;
-                ReleaseCombatPickup();
-                Input.HoldMouse(false,false,returnToken);
-                drive.StopApproach();
-                lockedTarget=null;
-                Vec current=world.PlayerPosition();
+                // Keep the route alive between controller passes. Release1.20
+                // stopped and restarted W on every pass, then spent the same
+                // pass restoring the saved heading. That produced short,
+                // uneven movement pulses and could leave the player circling
+                // just outside the saved point.
+                bool startingReturn=!gamekeeperReturnRouting;
+                if(startingReturn)
+                {
+                    ReleaseCombatPickup();
+                    Input.HoldMouse(false,false,returnToken);
+                    drive.StopApproach();
+                    lockedTarget=null;
+                    navigation.BeginGoal("return to saved hunt location after Gamekeeper");
+                    TraceLog.Record("Gamekeeper return started",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Zone=runZone,Engaged=encounter.EngagedCount});
+                }
+                gamekeeperReturnRouting=true;
+                const double returnArrivalTolerance=3.25;
                 message="Returning to saved hunt location after Gamekeeper";
-                navigation.BeginGoal("return to saved hunt location after Gamekeeper");
                 returningFromPriority=true;
                 try
                 {
-                    if((current-gamekeeperReturnLocation).Length>2)
+                    Vec current=world.PlayerPosition();
+                    // The client can stop a character against a collision
+                    // envelope a few units wide. Treat that settled envelope
+                    // as the saved point, then restore facing once; do not
+                    // keep turning while the route is still moving.
+                     if((current-gamekeeperReturnLocation).Length>returnArrivalTolerance)
                     {
                         // Use the active completion boundary as a route
                         // allowance.  An engaged Gamekeeper can legitimately
@@ -1519,38 +1537,51 @@ public sealed partial class HunterForm : Form
                         // the destination is still the fixed activation point.
                         await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,returnToken,
                             boundaryRadius:Math.Max(responseRadius,activeCompletionBoundary));
-                        drive.StopApproach();
                     }
-                    await RestoreSavedHuntFacing(returnToken);
                 }
                 catch(RouteUnavailableException ex)
                 {
                     drive.StopApproach();
                     TraceLog.Record("Gamekeeper return route retry",new {Reason=ex.Message,Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Zone=runZone});
-                    await Input.Delay(150,returnToken);
+                    await Input.Delay(100,returnToken);
                     return true;
                 }
                 catch(MovementBlockedException ex)
                 {
                     drive.StopApproach();
                     TraceLog.Record("Gamekeeper return movement retry",new {Reason=ex.Message,Position=ex.Position,Location=gamekeeperReturnLocation,Zone=runZone});
-                    await Input.Delay(150,returnToken);
+                    await Input.Delay(100,returnToken);
                     return true;
                 }
                 finally { returningFromPriority=false; }
 
                 Vec settled=world.PlayerPosition();
-                bool settledAtPoint=(settled-gamekeeperReturnLocation).Length<=2;
+                bool settledAtPoint=(settled-gamekeeperReturnLocation).Length<=returnArrivalTolerance;
                 if(settledAtPoint)
                 {
+                    drive.StopApproach();
+                    try { await RestoreSavedHuntFacing(returnToken); }
+                    catch(TurnUnresponsiveException ex)
+                    {
+                        drive.ResetTurnResponse();
+                        TraceLog.Record("Gamekeeper return facing retry",new {Reason=ex.Message,Position=ex.Position,Location=gamekeeperReturnLocation,Zone=runZone});
+                        await Input.Delay(100,returnToken);
+                        return true;
+                    }
                     gamekeeperReturnPending=false;
                     gamekeeperDefeated=false;
+                    gamekeeperReturnRouting=false;
                     gamekeeperExcursion=false;
                     TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=settled,Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
                 }
                 else
                 {
-                    TraceLog.Record("Gamekeeper return still in progress",new {Position=settled,Location=gamekeeperReturnLocation,Distance=(settled-gamekeeperReturnLocation).Length,Zone=runZone,Engaged=encounter.EngagedCount});
+                    long now=Environment.TickCount64;
+                    if(now>=nextGamekeeperReturnTrace)
+                    {
+                        nextGamekeeperReturnTrace=now+500;
+                        TraceLog.Record("Gamekeeper return still in progress",new {Position=settled,Location=gamekeeperReturnLocation,Distance=(settled-gamekeeperReturnLocation).Length,Zone=runZone,Engaged=encounter.EngagedCount});
+                    }
                 }
                 return true;
             }

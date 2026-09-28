@@ -1,5 +1,16 @@
 # Release notes
 
+## Release1.21
+
+- Smoothed the Gamekeeper return route by keeping its movement state alive
+  across controller passes instead of repeatedly releasing and pressing W.
+- The saved facing is restored only after the character reaches the saved
+  point's collision envelope, preventing mid-route turning from stalling the
+  return and allowing the retained engaged encounter to resume cleanly.
+- Added bounded return progress logging and retry handling for blocked routes
+  or an unresponsive facing correction.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.20
 
 - Confirmed Gamekeeper defeat now gates the saved-point return, so a transient
