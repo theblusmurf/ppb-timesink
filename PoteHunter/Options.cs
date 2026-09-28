@@ -13,6 +13,7 @@ public sealed class Options
     // Class-8 archer profile. Existing settings remain the generic bow/crossbow profile.
     public bool ArcherClass { get; set; }
     public bool RangedPullEnabled { get; set; }
+    // RangedPullCount is the single source of truth for the pack size limit.
     public int RangedPullCount { get; set; } = 5;
     public decimal RangedGatherRadius { get; set; } = 2;
     public decimal RangedMeleeAttackRange { get; set; } = 2;
@@ -90,5 +91,7 @@ public sealed class Options
     }
     public void Save() { File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
 }
+
+
 
 
