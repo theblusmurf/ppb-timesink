@@ -11,7 +11,7 @@ public sealed class LootTracker
     const double DropAttributionRadius=12;
     static readonly TimeSpan DropAttributionWindow=TimeSpan.FromSeconds(20);
     static readonly string[] SourceOrder=["Mimic","Tribal","Pulkhan","Tower"];
-    static readonly string[] TrackedLootOrder=["Silvein","Mitheil","Iternium","Fehu","Gold","Gems"];
+    static readonly string[] TrackedLootOrder=["Silvin","Mithril","Iternium","Fehu","Gold","Gems"];
     readonly object gate=new();
     readonly Dictionary<string,SourceState> sources=SourceOrder.ToDictionary(name=>name,_=>new SourceState());
     readonly Dictionary<string,int> trackedLoot=TrackedLootOrder.ToDictionary(name=>name,_=>0,StringComparer.OrdinalIgnoreCase);
@@ -42,8 +42,8 @@ public sealed class LootTracker
     public static string? TrackedLootFor(GroundItem item)
     {
         string text=$"{item.Name} {item.Description}";
-        if(text.Contains("silvein",StringComparison.OrdinalIgnoreCase))return "Silvein";
-        if(text.Contains("mitheil",StringComparison.OrdinalIgnoreCase))return "Mitheil";
+        if(text.Contains("silvin",StringComparison.OrdinalIgnoreCase) || text.Contains("silvein",StringComparison.OrdinalIgnoreCase))return "Silvin";
+        if(text.Contains("mithril",StringComparison.OrdinalIgnoreCase) || text.Contains("mitheil",StringComparison.OrdinalIgnoreCase))return "Mithril";
         if(text.Contains("iternium",StringComparison.OrdinalIgnoreCase))return "Iternium";
         if(text.Contains("fehu",StringComparison.OrdinalIgnoreCase))return "Fehu";
         if(text.Contains("gold",StringComparison.OrdinalIgnoreCase))return "Gold";
@@ -155,8 +155,8 @@ public sealed class LootTracker
         var snap=tracker.Snapshot();var row=snap.Sources.First(source=>source.Source=="Mimic");
         if(row.Kills!=1 || row.Drops!=1 || row.Items.FirstOrDefault()?.Name!="Frost potion")throw new Exception("Tracked loot attribution failed.");
         tracker.ObserveDrops([existing,
-            new GroundItem(3,3,3,"Silvein",new(.5,.5),0),
-            new GroundItem(4,4,4,"Mitheil shard",new(.6,.5),0),
+            new GroundItem(3,3,3,"Silvin",new(.5,.5),0),
+            new GroundItem(4,4,4,"Mithril shard",new(.6,.5),0),
             new GroundItem(5,5,5,"Rare ore",new(.7,.5),0,"Iternium ore"),
             new GroundItem(6,6,6,"Fehu rune",new(.8,.5),0),
             new GroundItem(7,7,7,"Gold",new(.9,.5),0),
@@ -164,6 +164,8 @@ public sealed class LootTracker
         snap=tracker.Snapshot();
         if(snap.Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Tracked item drops were not attributed.");
         if(snap.TrackedLoot.Any(item=>item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
+        if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0)!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0)!="Mithril")
+            throw new Exception("Legacy valuable aliases did not normalize to the corrected labels.");
         tracker.ObserveDrops([existing,new GroundItem(9,9,9,"Distant",new(100,100),0)],8);
         if(tracker.Snapshot().Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Distant loot was attributed to a tracked target.");
         tracker.ObserveZone(9);

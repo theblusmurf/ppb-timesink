@@ -1,8 +1,17 @@
 # Release notes
 
+## Release1.25
+
+- Corrected the loot tracker labels from **Silvein** to **Silvin** and from
+  **Mitheil** to **Mithril**.
+- Both corrected spellings are used in the overlay and live-status totals;
+  the previous spellings remain accepted as compatibility aliases when the
+  client reports them.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.24
 
-- Added dedicated loot totals for Silvein, Mitheil, Iternium, Fehu, gold, and
+- Added dedicated loot totals for Silvin, Mithril, Iternium, Fehu, gold, and
   gems. Matching is case-insensitive and also checks the client's item
   description when the displayed name has a quantity or suffix.
 - Added the six named totals to the live-status tracker and the draggable loot
