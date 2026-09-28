@@ -1,5 +1,16 @@
 # Release notes
 
+## Release1.20
+
+- Confirmed Gamekeeper defeat now gates the saved-point return, so a transient
+  entity refresh cannot clear the return state prematurely.
+- The return transition runs before healing, nearby-loot input, or target
+  selection and suppresses the engaged-target preflight interrupt while the
+  route is active.
+- After returning and restoring the saved facing, retained engaged targets are
+  selected again from the encounter queue.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.19
 
 - Gamekeeper/Game Master priority now completes its saved-point return before
