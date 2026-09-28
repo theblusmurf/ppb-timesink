@@ -1872,6 +1872,13 @@ public sealed partial class HunterForm : Form
                     bool packClearing=RangedPullEnabled(o) && rangedPull.Active && rangedPull.Phase==RangedPullPhase.Clearing && !priorityFight;
                     double attackStop = packClearing ? (double)o.RangedMeleeAttackRange : o.Ranged ? (double)o.MeleeRange : Math.Min((double)o.MeleeRange, Targeting.MeleeAttackRange);
                     double chaseThreshold = packClearing ? attackStop : attackStop + Math.Max(bodyAllowance,combatStart != 0 ? 1.25 : 0);
+                    // Keep a small hysteresis window around melee reach. A live
+                    // creature can move a few tenths of a unit between reads;
+                    // releasing the left button at that boundary starves the
+                    // client's swing animation and makes nearby targets look
+                    // untargeted. The window is only used after the target is
+                    // already close enough to start a melee attack.
+                    double swingWindow = attackStop + .35;
                     bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
                     bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
@@ -1895,7 +1902,8 @@ public sealed partial class HunterForm : Form
                         }
                         drive.StopApproach();
                         delta=current.Position-pos;
-                        if(delta.Length>attackStop)
+                        bool keepStationarySwing=Input.BasicAttackHeld && delta.Length<=swingWindow;
+                        if(delta.Length>attackStop && !keepStationarySwing)
                         {
                             ReleaseCombatPickup();Input.HoldMouse(false,false,token);
                             try { await drive.Face(world,delta,token,.035); }
@@ -1904,19 +1912,18 @@ public sealed partial class HunterForm : Form
                             await Input.Delay(100,token);
                             continue;
                         }
-                        // Use the wider combat tolerance for the stationary
-                        // attack gate. The normal .035 aim tolerance can keep
-                        // re-aiming forever while a mob jitters at the anchor.
+                        // Enter the swing state as soon as the target is in the
+                        // hysteresis window. Facing is feedback, not a gate for
+                        // the attack input: a transient turn read must not
+                        // prevent a nearby target from receiving a swing.
+                        stationaryAttackReady=true;
                         try
                         {
-                            if(!await drive.Face(world,delta,token,.12))continue;
-                            stationaryAttackReady=true;
+                            await drive.Face(world,delta,token,.18);
                         }
                         catch(TurnUnresponsiveException)
                         {
                             TraceLog.Record("stationary target attack aim unavailable",new {current.Id,current.DisplayName});
-                            await Input.Delay(50,token);
-                            continue;
                         }
                     }
                     bool holdPriorityPosition=o.StationaryGamekeeperPriority && !o.GroupMode && (priorityFight || encounter.IsEngaged(current));
@@ -2016,16 +2023,19 @@ public sealed partial class HunterForm : Form
                         await Input.Delay(100,token);
                         continue;
                     }
-                    // Face a new/side target before starting an attack animation.
-                    // A running combo can tolerate small movements inside a 7Â°
-                    // cone; skills must not wait indefinitely for 2Â° precision.
-                    double aimError=Movement.Angle(Movement.FromClientHeading(world.PlayerHeading()),delta);
-                    if(!stationaryAttackReady && Input.BasicAttackHeld && Math.Abs(aimError)>.12)
+                    // Start the melee hold before the final aim correction once
+                    // the target is close. Keeping the held state through a
+                    // small heading correction prevents repeated down/up
+                    // pulses from starving the client's swing animation.
+                    bool meleeSwingWindow=!o.Ranged && delta.Length<=swingWindow;
+                    if(meleeSwingWindow && !Input.BasicAttackHeld)
                     {
-                        ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                        TraceLog.Record("attack released to face target",new {current.Id,ErrorDegrees=aimError*180/Math.PI,hp.Current});
-                        await Input.Delay(100,token);continue;
+                        Input.HoldMouse(false,true,token);
+                        TraceLog.Record("melee swing window entered",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=attackStop});
                     }
+                    // Face a new/side target before starting an attack
+                    // animation. A running combo stays held while the client
+                    // settles onto the target.
                     try
                     {
                         if(!stationaryAttackReady)
