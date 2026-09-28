@@ -22,7 +22,6 @@ public sealed partial class HunterForm
                 form.rangedPullEnabled.Checked = true;
                 form.experimentalInternalTargeting.Checked = true;
                 form.rangedPullCount.Value = 5;
-                form.rangedMinimumNearby.Value = 5;
                 form.rangedGatherRadius.Value = 2;
                 form.rangedMeleeAttackRange.Value = 2;
                 form.rangedVerticalAimOffset.Value = 1;
@@ -33,11 +32,11 @@ public sealed partial class HunterForm
         form.showTreasureChestMarkers.Checked = true;
         form.returnToHuntLocation.Checked = true;
         form.stationaryGamekeeperPriority.Checked = true;
-        form.attackPotions.Checked=true;form.defensePotions.Checked=true;
+                form.attackPotions.Checked=true;form.defensePotions.Checked=true;
                 var expected = form.CurrentOptions(); expected.Save();
                 var restored = Options.Read();
-                if(!restored.Ranged || !restored.RangedPullEnabled || !restored.ExperimentalInternalTargeting || restored.RangedPullCount!=5 || restored.RangedMinimumNearby!=5 || restored.RangedGatherRadius!=2 || restored.RangedMeleeAttackRange!=2 || restored.RangedVerticalAimOffset!=1 ||
-                    restored.RangedTagMilliseconds!=expected.RangedTagMilliseconds || restored.RangedGatherTimeoutSeconds!=expected.RangedGatherTimeoutSeconds ||
+                if(!restored.Ranged || !restored.RangedPullEnabled || !restored.ExperimentalInternalTargeting || restored.RangedPullCount!=5 || restored.RangedGatherRadius!=2 || restored.RangedMeleeAttackRange!=2 || restored.RangedVerticalAimOffset!=1 ||
+                    restored.RangedGatherTimeoutSeconds!=expected.RangedGatherTimeoutSeconds ||
                     restored.AutoRestoreMana!=expected.AutoRestoreMana || restored.ManaBelowPercent!=expected.ManaBelowPercent || restored.ManaDelaySeconds!=expected.ManaDelaySeconds ||
              !restored.ShowNavigationOverlay || restored.NavigationOverlaySize!=325 || restored.NavigationViewRadius!=175 ||
              !restored.GuideTreasureChests ||
@@ -142,11 +141,9 @@ public sealed partial class HunterForm
     readonly CheckBox rangedPullEnabled = new() { Text = "Tag a pack, then let it come to me", AutoSize = true };
     readonly CheckBox experimentalInternalTargeting = new() { Text = "Experimental: select Firing targets internally", AutoSize = true };
     readonly NumericUpDown rangedPullCount = Number(2, 20);
-    readonly NumericUpDown rangedMinimumNearby = Number(1, 20);
     readonly NumericUpDown rangedGatherRadius = Number(1, 8, 1);
     readonly NumericUpDown rangedMeleeAttackRange = Number(1, 4, 1);
     readonly NumericUpDown rangedVerticalAimOffset = Number(0, 4, 1);
-    readonly NumericUpDown rangedTagDuration = Number(100, 3000);
     readonly NumericUpDown rangedPullTimeout = Number(3, 60);
     readonly Button captureTargetState = new() { Text = "Capture 30 seconds", AutoSize = true };
     bool rangedTagging;
@@ -247,12 +244,11 @@ public sealed partial class HunterForm
             rangedGatherRadius.Value = Math.Clamp(options.RangedGatherRadius, 1, 8);
             rangedMeleeAttackRange.Value=Math.Clamp(options.RangedMeleeAttackRange,1,4);
             rangedVerticalAimOffset.Value=Math.Clamp(options.RangedVerticalAimOffset,0,4);
-            rangedTagDuration.Value = Math.Clamp(options.RangedTagMilliseconds, 100, 3000);
             rangedPullTimeout.Value = Math.Clamp(options.RangedPullTimeoutSeconds, 3, 60);
         }
         catch
         {
-            rangedPullCount.Value = 5; rangedGatherRadius.Value = 2; rangedMeleeAttackRange.Value=2; rangedVerticalAimOffset.Value=1; rangedTagDuration.Value = 800;
+            rangedPullCount.Value = 5; rangedGatherRadius.Value = 2; rangedMeleeAttackRange.Value=2; rangedVerticalAimOffset.Value=1;
             rangedPullTimeout.Value = 15;
         }
         captureTargetState.Click+=async (_,_)=>await CaptureTargetStateAsync();
@@ -293,11 +289,9 @@ public sealed partial class HunterForm
         options.RangedPullEnabled = rangedPullEnabled.Checked;
         options.ExperimentalInternalTargeting=experimentalInternalTargeting.Checked;
         options.RangedPullCount = (int)rangedPullCount.Value;
-        options.RangedMinimumNearby = (int)rangedPullCount.Value;
         options.RangedGatherRadius = rangedGatherRadius.Value;
         options.RangedMeleeAttackRange=rangedMeleeAttackRange.Value;
         options.RangedVerticalAimOffset=rangedVerticalAimOffset.Value;
-        options.RangedTagMilliseconds = (int)rangedTagDuration.Value;
         options.RangedPullTimeoutSeconds = (int)rangedPullTimeout.Value;
         if(options.RangedPullEnabled)
         {
@@ -306,7 +300,6 @@ public sealed partial class HunterForm
             options.HealerMode=false;
             options.ContinuousCombatPositioning=false;
             options.TightGathering=false;
-            options.RangedMinimumNearby=options.RangedPullCount;
         }
         return options;
     }
@@ -347,7 +340,7 @@ public sealed partial class HunterForm
         }
         var previous = rangedPull.Phase;
         int nearby=rangedPull.ApplyNearbyPolicy(RangedNearbyTargets(options,health,position,level),health,position,
-            (double)options.RangedGatherRadius,options.RangedMinimumNearby,Environment.TickCount64);
+            (double)options.RangedGatherRadius,options.RangedPullCount,Environment.TickCount64);
         // A normal return hit is expected while building a ranged pack. Stop adding
         // members only at the configured recovery threshold (independent of the
         // auto-heal/item state) or when recovery is already pending.
@@ -358,7 +351,7 @@ public sealed partial class HunterForm
             options.RangedGatherTimeoutSeconds, pressure, encounter.HasEngaged);
         if (previous != rangedPull.Phase)
             TraceLog.Record("ranged pack phase", new { Phase = rangedPull.Phase.ToString(), rangedPull.AttemptedCount, Nearby=nearby,
-                MinimumNearby=options.RangedMinimumNearby,NearbyRadius=options.RangedGatherRadius,Pressure = pressure });
+                NearbyTargetLimit=options.RangedPullCount,NearbyRadius=options.RangedGatherRadius,Pressure = pressure });
         if(previous!=rangedPull.Phase){ClearRangedPending();drive.StopTravel();Input.Release(preserveNearbyPickup:true);}
         if(previous==RangedPullPhase.Clearing && rangedPull.Phase==RangedPullPhase.Tagging)
         {
@@ -637,4 +630,3 @@ public sealed partial class HunterForm
         }
     }
 }
-

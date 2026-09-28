@@ -6,6 +6,7 @@ on:
       - '**'
     tags:
       - 'v*'
+      - 'Release1.*'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v5
@@ -37,7 +40,12 @@ jobs:
           if ($env:REF_TYPE -eq 'tag') {
             $version = $env:REF_NAME
           } else {
-            $version = "PoteHunteBeta-$($env:RUN_NUMBER)-$($env:COMMIT_SHA.Substring(0, 7))"
+            git fetch --tags --force
+            $numbers = @(git tag -l 'Release1.*' | ForEach-Object {
+              if ($_ -match '^Release1\.(\d+)$') { [int]$Matches[1] }
+            })
+            $next = if ($numbers.Count -gt 0) { (($numbers | Measure-Object -Maximum).Maximum + 1) } else { 1 }
+            $version = "Release1.$next"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
 
@@ -103,7 +111,7 @@ jobs:
           if ($changeLines.Count -eq 0) { $changeLines = @('- Packaging and validation updates.') }
           $subject = (git log -1 --pretty=format:'%s' HEAD).Trim()
           if ([string]::IsNullOrWhiteSpace($subject)) { $subject = 'Maintenance update' }
-          $releaseTitle = "PoteHunter $($env:RELEASE_TAG) - $subject"
+          $releaseTitle = $env:RELEASE_TAG
           @(
             "$releaseTitle for Windows x64."
             ''
@@ -125,4 +133,3 @@ jobs:
           $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } | ForEach-Object { $_.FullName })
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { throw "Release publishing failed with exit code $LASTEXITCODE." }
-

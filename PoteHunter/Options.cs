@@ -14,11 +14,9 @@ public sealed class Options
     public bool ArcherClass { get; set; }
     public bool RangedPullEnabled { get; set; }
     public int RangedPullCount { get; set; } = 5;
-    public int RangedMinimumNearby { get; set; } = 5;
     public decimal RangedGatherRadius { get; set; } = 2;
     public decimal RangedMeleeAttackRange { get; set; } = 2;
     public decimal RangedVerticalAimOffset { get; set; } = 1;
-    public int RangedTagMilliseconds { get; set; } = 800;
     public int RangedPullTimeoutSeconds { get; set; } = 15;
     public int RangedGatherTimeoutSeconds { get; set; } = 20; // Legacy settings compatibility; arrival is distance-driven.
     public bool ExperimentalInternalTargeting { get; set; }
@@ -92,7 +90,5 @@ public sealed class Options
     }
     public void Save() { File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
 }
-
-
 
 
