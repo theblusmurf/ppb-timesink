@@ -6,8 +6,8 @@ public enum GatherAction { Move, Wait, Attack, GiveUp }
 public static class TightGathering
 {
     public const double DefaultRadius=.5, Arrival=.08;
-    // A full roster is capped at ten targets. Start the swing once five
-    // members, or every member of a smaller roster, are close and forward.
+    // Start the swing once five members, or every member of a smaller roster,
+    // are close and forward. The roster itself has no artificial size cap.
     public const int SwingCloseTargetCount=5;
     public const long MoveMilliseconds=1800, SettleMilliseconds=1200, MaximumMilliseconds=3000;
     public const long SuccessCooldown=6000, FailedCooldown=15000;
@@ -48,7 +48,7 @@ public static class TightGathering
     public static TightGatherPlan? Choose(Vec position,Entity target,IReadOnlyList<Entity> enemies,
         double attackReach,Func<Vec,Vec,bool> safe,double radius=DefaultRadius)
     {
-        if(!position.Finite || !target.Position.Finite || enemies.Count<2 || enemies.Count>32 || enemies.Any(e=>!e.Position.Finite) ||
+        if(!position.Finite || !target.Position.Finite || enemies.Count<2 || enemies.Any(e=>!e.Position.Finite) ||
             !double.IsFinite(attackReach) || attackReach<=0 ||
             !enemies.Any(e=>e.Id==target.Id && e.Generation==target.Generation && e.Address==target.Address))return null;
         TightGatherPlan? best=null;double bestCost=double.MaxValue;
@@ -60,7 +60,7 @@ public static class TightGathering
             double cost=enemies.Average(e=>(e.Position-goal).Length)+travel*.15;
             // Prefer the largest close forward group, then close bodies, then
             // a central holding point. The session can release the swing once
-            // five of ten (or all of a smaller roster) are ready. Meaningful
+            // five (or all of a smaller roster) are ready. Meaningful
             // cost hysteresis limits jitter.
             if(best==null || front>best.Front || front==best.Front && close>best.Close ||
                 front==best.Front && close==best.Close && cost<bestCost-.10)

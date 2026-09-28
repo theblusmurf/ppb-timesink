@@ -8,16 +8,15 @@ public sealed record CombatSideStepPlan(bool Left,Vec Destination,int Before,int
 public static class CombatPositioning
 {
     public const double ConeHalfAngle=Math.PI/3;
-    public const int MaxConeTargets=10;
-
     public static Entity[] ConeRoster(IEnumerable<Entity> enemies,Vec position,Entity target)
     {
-        var ordered=enemies.Where(e=>e.Position.Finite).OrderBy(e=>(e.Position-position).Length).ThenBy(e=>e.Id).ToList();
-        if(ordered.Count<=MaxConeTargets)return ordered.ToArray();
-        var selected=ordered.Take(MaxConeTargets).ToList();
-        if(selected.Any(e=>e.Id==target.Id && e.Generation==target.Generation && e.Address==target.Address))return selected.ToArray();
-        selected[^1]=target;
-        return selected.ToArray();
+        // Keep every valid nearby engaged target in the roster. The previous
+        // ten-target cap dropped members from wider packs and could leave the
+        // attack loop with no valid swing opportunity.
+        return enemies.Where(e=>e.Position.Finite)
+            .OrderBy(e=>(e.Position-position).Length)
+            .ThenBy(e=>e.Id)
+            .ToArray();
     }
     public const double MaximumStep=2.5;
     public const long CheckMilliseconds=750, BurstMilliseconds=1200, RestMilliseconds=4000;
@@ -131,4 +130,3 @@ public sealed class PositioningCadence
     public void Finished(long now)=>nextCheck=now+CombatPositioning.RestMilliseconds;
     public void Reset()=>nextCheck=0;
 }
-

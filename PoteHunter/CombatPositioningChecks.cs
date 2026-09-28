@@ -27,7 +27,7 @@ public static class CombatPositioningChecks
             CombatPositioning.CorrectionKey(new(),new(-1,0),0)==Keys.D,"S/A/D correction mapping");
         Check(CombatPositioning.ConeCount(new(),new(1,0),[target,new Entity(5,0x80000005,"Lv. 1",new(1,1),0)],6)==2,"direction cone count");
         var ten=Enumerable.Range(1,12).Select(i=>Mob((uint)(20+i),i*.1,0)).ToArray();
-        Check(CombatPositioning.ConeRoster(ten,new(),ten[^1]).Length==10 && CombatPositioning.ConeRoster(ten,new(),ten[^1]).Any(e=>e.Id==ten[^1].Id),"cone roster caps at ten and retains target");
+        Check(CombatPositioning.ConeRoster(ten,new(),ten[^1]).Length==ten.Length && CombatPositioning.ConeRoster(ten,new(),ten[^1]).Any(e=>e.Id==ten[^1].Id),"cone roster keeps every target and retains target");
         Check(CombatPositioning.Choose(player,target,[],2,6,(_,_)=>true)==null,"empty scene unchanged");
         Check(CombatPositioning.Choose(player,target,surround,2,6,(_,_)=>false)==null,"blocked routes yield no move");
         var bounded=CombatPositioning.Choose(player,target,surround,2,6,(_,to)=>to.Y>=0 && to.Length<=1.5);
@@ -80,4 +80,3 @@ public static class CombatPositioningChecks
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }
-
