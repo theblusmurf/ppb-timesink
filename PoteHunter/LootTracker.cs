@@ -53,7 +53,7 @@ public sealed class LootTracker
 
     public void Reset()
     {
-        lock(gate) ResetLocked(zone);
+        lock(gate) ResetLocked(zone,resetSession:true);
     }
 
     public void ObserveZone(int newZone)
@@ -135,11 +135,11 @@ public sealed class LootTracker
 
     void PrunePending(DateTime now) => pending.RemoveAll(k=>now-k.SeenUtc>DropAttributionWindow);
 
-    void ResetLocked(int newZone)
+    void ResetLocked(int newZone,bool resetSession=false)
     {
         zone=newZone;initialized=false;seen.Clear();pending.Clear();recent.Clear();
         foreach(SourceState state in sources.Values){state.Kills=0;state.Drops=0;state.Items.Clear();}
-        foreach(string name in TrackedLootOrder)trackedLoot[name]=0;
+        if(resetSession)foreach(string name in TrackedLootOrder)trackedLoot[name]=0;
     }
 
     public static void SelfTest()
@@ -169,6 +169,10 @@ public sealed class LootTracker
         tracker.ObserveDrops([existing,new GroundItem(9,9,9,"Distant",new(100,100),0)],8);
         if(tracker.Snapshot().Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Distant loot was attributed to a tracked target.");
         tracker.ObserveZone(9);
-        if(tracker.Snapshot().Sources.Any(source=>source.Kills!=0 || source.Drops!=0))throw new Exception("Zone changes did not reset tracked loot.");
+        snap=tracker.Snapshot();
+        if(snap.Sources.Any(source=>source.Kills!=0 || source.Drops!=0))throw new Exception("Zone changes did not reset zone attribution.");
+        if(snap.TrackedLoot.Any(item=>item.Count!=1))throw new Exception("Zone changes erased session loot totals.");
+        tracker.Reset();
+        if(tracker.Snapshot().TrackedLoot.Any(item=>item.Count!=0))throw new Exception("Explicit tracker reset did not clear session loot totals.");
     }
 }

@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.26
+
+- Made the Silvin, Mithril, Iternium, Fehu, Gold, and Gems totals
+  application-session scoped. They now survive map changes, reconnects, and
+  hunt restarts while the app remains open.
+- The overlay's **Reset loot** control clears the current session totals;
+  launching a new application session starts a fresh record.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.25
 
 - Corrected the loot tracker labels from **Silvein** to **Silvin** and from

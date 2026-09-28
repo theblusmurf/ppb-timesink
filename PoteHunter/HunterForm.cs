@@ -437,7 +437,7 @@ public sealed partial class HunterForm : Form
     {
         if (busy || working) return;
         nextCharacterReconnect=Environment.TickCount64+5000;
-        busy = true; connected = false; movement = null; lootTracker.Reset(); connect.Enabled = false; message = "Reading active creaturesâ€¦";
+        busy = true; connected = false; movement = null; connect.Enabled = false; message = "Reading active creaturesâ€¦";
         player.Text="";
         WriteState(new { TimeUtc=DateTime.UtcNow, Connected=false, Working=false, Calibrated=false, Status=message });
         try { var options = CurrentOptions(); options.Save(); await Task.Run(world.Connect); WindowsClientInput.ValidateReady(); connected = true; UpdateDetectedCharacter(world.LocalPlayer()); message = (world.AutomaticProfile ? "Updated client detected automatically. " : "Connected. ") + "Press F8 or Start to calibrate and hunt."; }
