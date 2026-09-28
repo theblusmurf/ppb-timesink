@@ -1878,7 +1878,13 @@ public sealed partial class HunterForm : Form
                     // client's swing animation and makes nearby targets look
                     // untargeted. The window is only used after the target is
                     // already close enough to start a melee attack.
-                    double swingWindow = attackStop + .35;
+                    // The client's melee check uses the target's collision
+                    // envelope around its center. Keep the configured stop as
+                    // the navigation preference, but allow a center distance
+                    // up to the verified 1.5-unit attack gate plus a small
+                    // hitbox allowance before declaring a target out of reach.
+                    double swingWindow = o.Ranged ? attackStop + .35 :
+                        Math.Max(attackStop + .35, Targeting.MeleeAttackRange + .5);
                     bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
                     bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
@@ -1903,12 +1909,12 @@ public sealed partial class HunterForm : Form
                         drive.StopApproach();
                         delta=current.Position-pos;
                         bool keepStationarySwing=Input.BasicAttackHeld && delta.Length<=swingWindow;
-                        if(delta.Length>attackStop && !keepStationarySwing)
+                        if(delta.Length>swingWindow && !keepStationarySwing)
                         {
                             ReleaseCombatPickup();Input.HoldMouse(false,false,token);
                             try { await drive.Face(world,delta,token,.035); }
                             catch(TurnUnresponsiveException) { TraceLog.Record("stationary target face unavailable",new {current.Id,current.DisplayName}); }
-                            message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{attackStop:F1})";
+                            message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{swingWindow:F1})";
                             await Input.Delay(100,token);
                             continue;
                         }
@@ -2018,7 +2024,7 @@ public sealed partial class HunterForm : Form
                         courtesy.MarkAttack(current);
                         encounter.MarkAttack(current,hp);
                         encounterHasAttack=true;
-                        if(beganSwing)TraceLog.Record("stationary melee swing started",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=attackStop,Anchor=anchor});
+                        if(beganSwing)TraceLog.Record("stationary melee swing started",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ConfiguredRange=attackStop,Anchor=anchor});
                         message=$"Swinging at {current.DisplayName} from saved hunt point";
                         await Input.Delay(100,token);
                         continue;

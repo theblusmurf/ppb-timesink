@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.12
+
+- Fixed stationary Mimic, Pulkhan, Tribal, and Tower targets being held in a
+  wait state when their center was near but just outside the configured melee
+  stop. The swing gate now includes the verified melee attack distance and a
+  small target collision allowance, while navigation remains stationary.
+- The live status now reports the effective melee swing distance in the wait
+  message, making range decisions visible during a hunt.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.11
 
 - Fixed melee attacks being starved when a nearby target moved slightly between
