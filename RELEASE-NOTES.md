@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.14
+
+- Fixed stationary combat sending one persistent left-button hold that some
+  client builds treated as a single attack. Stationary targets now receive
+  repeated bounded attack pulses with a release between swings.
+- Target, protection, facing, and saved-position checks remain active on every
+  pulse; the character stays at the saved hunt point.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.13
 
 - Increased the stationary target swing window to cover the live client's

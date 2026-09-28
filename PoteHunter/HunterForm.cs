@@ -2018,18 +2018,24 @@ public sealed partial class HunterForm : Form
                     if(!stationaryFarmTarget && await TryCombatSideStep(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
                     if(stationaryAttackReady)
                     {
-                        // Stationary farm targets use a direct, persistent
-                        // melee hold once the anchor and facing gates pass.
-                        // This bypasses optional cone repositioning and the
-                        // tighter general aim loop that can starve the swing.
-                        bool beganSwing=!Input.BasicAttackHeld;
-                        Input.HoldMouse(false,true,token);
-                        courtesy.MarkAttack(current);
-                        encounter.MarkAttack(current,hp);
-                        encounterHasAttack=true;
-                        if(beganSwing)TraceLog.Record("stationary melee swing started",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ConfiguredRange=attackStop,Anchor=anchor});
-                        message=$"Swinging at {current.DisplayName} from saved hunt point";
-                        await Input.Delay(100,token);
+                        // Some client builds treat a held left button as only
+                        // one basic attack. Pulse it while stationary so each
+                        // activation can start a fresh swing, while the
+                        // target and protection checks still run on every
+                        // controller pass.
+                        Input.HoldMouse(false,false,default);
+                        try
+                        {
+                            Input.HoldMouse(false,true,token);
+                            courtesy.MarkAttack(current);
+                            encounter.MarkAttack(current,hp);
+                            encounterHasAttack=true;
+                            TraceLog.Record("stationary melee swing pulse",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ConfiguredRange=attackStop,Anchor=anchor});
+                            message=$"Swinging at {current.DisplayName} from saved hunt point";
+                            await Input.Delay(75,token);
+                        }
+                        finally { Input.HoldMouse(false,false,default); }
+                        await Input.Delay(75,token);
                         continue;
                     }
                     // Start the melee hold before the final aim correction once
