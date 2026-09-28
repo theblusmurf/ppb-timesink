@@ -9,6 +9,7 @@ public sealed class Encounter
     readonly Dictionary<Identity, Member> members = new();
     List<Entity> candidates = new();
     List<Entity> engagedCandidates = new();
+    List<Entity> trackedEngagedCandidates = new();
     Vec lastPlayer;
     double lastRadius;
     bool clearNearby = true;
@@ -16,6 +17,9 @@ public sealed class Encounter
     public bool Active { get; private set; }
     public IReadOnlyList<Entity> Candidates => candidates;
     public IReadOnlyList<Entity> EngagedCandidates => engagedCandidates;
+    // Last-known identities for engaged targets whose current snapshot is temporarily missing.
+    // Combat revalidates these identities before sending input.
+    public IReadOnlyList<Entity> TrackedEngagedCandidates => trackedEngagedCandidates;
     public int EngagedCount => members.Values.Count(member => member.Engaged);
     public bool HasUnresolvedNearby { get; private set; }
     public bool HasEngaged { get; private set; }
@@ -32,6 +36,7 @@ public sealed class Encounter
         members.Clear();
         candidates.Clear();
         engagedCandidates.Clear();
+        trackedEngagedCandidates.Clear();
         HasUnresolvedNearby = false;
         HasEngaged = false;
         HasUnresolvedEngaged = false;
@@ -199,6 +204,15 @@ public sealed class Encounter
     {
         static bool Readable(Member member) => member.Visible && member.Health.Known && !member.Health.Dead && member.UnknownHealthObservations == 0;
         engagedCandidates = members.Values.Where(member => member.Engaged && member.SafeToAttack && Readable(member))
+            .OrderBy(member => (member.Entity.Position - lastPlayer).Length).ThenBy(member => member.Entity.Id)
+            .Select(member => member.Entity).ToList();
+        // A missing world snapshot increments UnknownHealthObservations while
+        // preserving the last known identity. Keep that identity in the engaged
+        // queue so combat can reacquire it instead of selecting fresh work or
+        // stopping with a false no-target state. Protected/blocked engagements
+        // remain excluded when their HP is still readable.
+        trackedEngagedCandidates = members.Values.Where(member => member.Engaged && !member.Health.Dead &&
+                (member.SafeToAttack || member.UnknownHealthObservations > 0))
             .OrderBy(member => (member.Entity.Position - lastPlayer).Length).ThenBy(member => member.Entity.Id)
             .Select(member => member.Entity).ToList();
         candidates = members.Values.Where(member => Readable(member) && (member.Engaged ? member.SafeToAttack : clearNearby && member.Nearby && member.LegacyEligible))
@@ -500,8 +514,8 @@ public sealed class Encounter
         if (Targeting.ChooseEngagedFirst(queue, FreshPriority)?.Id != first.Id || freshSelections != 0)
             throw new Exception("A fresh target was considered after only one of two engaged enemies died.");
         queue.Observe([first], new Dictionary<uint, Health>(), player, 6, (_, _) => true, (_, _) => true);
-        if (Targeting.ChooseEngagedFirst(queue, FreshPriority) != null || freshSelections != 0)
-            throw new Exception("An unresolved engagement allowed a fresh target selection.");
+        if (Targeting.ChooseEngagedFirst(queue, FreshPriority)?.Id != first.Id || freshSelections != 0)
+            throw new Exception("A missing snapshot did not keep the last-known engaged target active.");
         queue.Observe([first], Hp((first, new(0, 100))), player, 6, (_, _) => true, (_, _) => true);
         if (Targeting.ChooseEngagedFirst(queue, FreshPriority)?.Id != priority.Id || freshSelections != 1)
             throw new Exception("Fresh target selection did not resume after both engaged enemies died.");
@@ -513,3 +527,4 @@ public sealed class Encounter
             throw new Exception("Reset retained combat engagement state.");
     }
 }
+

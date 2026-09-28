@@ -116,7 +116,9 @@ public static class Targeting
     }
 
     public static Entity? ChooseEngagedFirst(Encounter encounter, Func<Entity?> chooseFresh) =>
-        encounter.HasEngaged ? encounter.EngagedCandidates.FirstOrDefault() : chooseFresh();
+        encounter.HasEngaged
+            ? encounter.TrackedEngagedCandidates.FirstOrDefault() ?? (encounter.HasUnresolvedEngaged ? null : chooseFresh())
+            : chooseFresh();
 
     // Callers supply candidates that already passed avoidance, route and ownership protections.
     // Emergency monster priority spans the hunt area, even while clearing a smaller encounter.
@@ -206,3 +208,4 @@ public static class Targeting
             throw new Exception("A surviving collateral monster lost its shared completion area or expanded fresh selection.");
     }
 }
+
