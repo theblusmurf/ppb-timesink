@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.15
+
+- Removed the remaining chase path for Mimic, Pulkhan, Tribal, and Tower
+  assignments. Their verified target IDs now keep the character at the saved
+  hunt point even when the client briefly refreshes or omits the model name.
+- Those targets may only trigger a return to the saved point, facing, and
+  stationary swing pulses; group mode and Gamekeeper priority remain the
+  explicit movement exceptions.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.14
 
 - Fixed stationary combat sending one persistent left-button hold that some

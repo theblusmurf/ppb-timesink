@@ -83,8 +83,10 @@ public static class Targeting
     // These farm targets are stationary melee assignments. They can turn and
     // attack when they enter reach, but the character does not chase them away
     // from the saved hunt point. Gamekeeper priority remains the exception.
+    public static bool IsStationaryHuntTargetId(uint id) =>
+        (id & 0xffff) is 5971 or 5972 or 5973 or 5974;
     public static bool IsStationaryHuntTarget(Entity entity) =>
-        (entity.Id & 0xffff) is 5971 or 5972 or 5973 or 5974 && IsKnownUnprefixedMonster(entity.Id,entity.Model);
+        IsStationaryHuntTargetId(entity.Id) && IsKnownUnprefixedMonster(entity.Id,entity.Model);
     public static int PriorityRank(Entity entity, bool prioritizeGamekeeper, bool prioritizeBreakables = true) =>
         prioritizeGamekeeper && IsGamekeeper(entity) ? 2 : prioritizeBreakables && entity.PriorityLootObject ? 1 : 0;
     public static double ResponseRadius(double huntRadius,double gamekeeperRadius) => Math.Max(huntRadius,gamekeeperRadius);

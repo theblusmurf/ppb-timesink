@@ -1888,7 +1888,16 @@ public sealed partial class HunterForm : Form
                     // in basic-attack reach.
                     double swingWindow = o.Ranged ? attackStop + .35 :
                         Math.Max(attackStop + .35, Targeting.MeleeAttackRange + 1.0);
-                    bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
+                    // Once one of the four fixed hunt assignments is locked,
+                    // its low-word identity is authoritative for movement. The
+                    // client can briefly report a qualified or blank model while
+                    // refreshing a creature node; using the model gate here made
+                    // the controller fall through to NavigateTo(target) during
+                    // that refresh and caused the character to chase the target.
+                    // These assignments may only return to the saved anchor, then
+                    // face and swing in place. Gamekeeper priority and group mode
+                    // remain the explicit movement exceptions.
+                    bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTargetId(current.Id);
                     bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
                     {
