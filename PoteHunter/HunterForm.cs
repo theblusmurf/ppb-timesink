@@ -198,7 +198,6 @@ public sealed partial class HunterForm : Form
             priorityHint.SetToolTip(attackRangeLabel, ranged.Checked
                 ? (archerClass.Checked ? "Archer class: 24-unit engine range. The bot stops at this distance and uses Firing skills while closing." : "Bow/crossbow: 18-unit engine range. The bot stops at this distance and uses Firing skills while closing.")
                 : "Melee approach distance. The client's own gate is 1.5 units (ATTACKABLE_RANGE 150).");
-
         }
         ranged.Click += (_, _) => { if (!ranged.Checked) archerClass.Checked = false; ApplyRangedMode(); };
         archerClass.Click += (_, _) => ApplyRangedMode();
@@ -399,7 +398,6 @@ public sealed partial class HunterForm : Form
             if (id == 9 || id == 8 && working) Stop("Stopped by hotkey.");
             else if (id == 6) _ = Calibrate();
             else if (id == 8) _ = StartHunting();
-
         }
         base.WndProc(ref m);
     }
@@ -600,7 +598,6 @@ public sealed partial class HunterForm : Form
                     e.Id,e.Position,HP=health.GetValueOrDefault(e.Id),Distance=(e.Position-pos).Length,
                     AnchorDistance=(e.Position-(activeHuntAnchor ?? pos)).Length,
                     ResponseRadius=Targeting.ResponseRadius((double)(activeGuardOptions?.HuntRadius ?? radius.Value),(double)(activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value)),
-
                     Protection=TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos)
                 }), LockedTarget = lockedTarget == null ? null : new { lockedTarget.Name, lockedTarget.DisplayName, lockedTarget.Id, lockedTarget.Generation, lockedTarget.PriorityLootObject }, Status = message, GroundLoot = groundLoot.OrderBy(i => (i.Position-pos).Length).Take(20), PriorityObjects = entities.Where(e => e.PriorityLootObject).OrderBy(e => (e.Position-pos).Length).Select(e => new { e.DisplayName, e.Name, e.Id, e.Model, e.Position, HP = health.GetValueOrDefault(e.Id), Allowed = Targeting.Eligible(e, health.GetValueOrDefault(e.Id), Threat.Unknown, filter.Text, allowedColors) && TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos)==null, Distance = (e.Position-pos).Length }), Monsters = entities.Where(e => e.Monster).OrderBy(e => (e.Position - pos).Length).Take(10).Select(e => new { e.Name, e.Id, e.Position, HP = health.GetValueOrDefault(e.Id), Difficulty = world.Difficulty(e, level).ToString(), Distance = (e.Position - pos).Length }) });
             }
@@ -801,7 +798,6 @@ public sealed partial class HunterForm : Form
                         float sx=Math.Abs(dx)>1e-4f?maxX/Math.Abs(dx):float.MaxValue;
                         float sy=Math.Abs(dy)>1e-4f?maxY/Math.Abs(dy):float.MaxValue;
                         float s=Math.Min(sx,sy);
-
                         float edgeX=cx+dx*s, edgeY=cy+dy*s;
 
                         float nx=dx/len, ny=dy/len;
@@ -1002,7 +998,6 @@ public sealed partial class HunterForm : Form
         if(!o.MaintainAreaBuffs)return false;
         var bar=CheckedHotbar();ObserveBuffs(o,bar);
         var decision=buffDecisions.FirstOrDefault(b=>b.ShouldCast && HealthSkillAllowed(bar.Slot(b.Key[0]),o));
-
         if(decision==null)return false;
         var hp=world.HealthSnapshot().GetValueOrDefault(world.LocalPlayer().Id);
         if(!hp.Known||hp.Dead)return false;
@@ -1203,7 +1198,6 @@ public sealed partial class HunterForm : Form
                     !activeHuntAnchor.HasValue || (live.Position-activeHuntAnchor.Value).Length>(double)o.HuntRadius)
                     throw new TargetProtectionException("Ranged tag target changed or left the hunt area.");
                 if(!rangedApproaching && (live.Position-position).Length>(double)o.MeleeRange)
-
                     throw new RangedTargetOutOfRangeException();
                 lockedTarget=live;
             }
@@ -1404,7 +1398,6 @@ public sealed partial class HunterForm : Form
                 {
                     movement?.StopApproach();Input.Release();activeHealTarget=null;
                     message="Healbot: recipient changed or left range; selecting again.";
-
                     continue;
                 }
                 finally{healerCasting=false;healerRecipientKey=null;}
@@ -1476,6 +1469,23 @@ public sealed partial class HunterForm : Form
                     }
                 }
                 throw new TurnUnresponsiveException(world.PlayerPosition(),desiredForward);
+            }
+            async Task ReturnToSavedHuntPointAfterLoot(CancellationToken returnToken)
+            {
+                Vec current=world.PlayerPosition();
+                if((current-anchor).Length>1.5)
+                {
+                    ReleaseCombatPickup();
+                    Input.HoldMouse(false,false,returnToken);
+                    message="Returning to saved hunt point after loot";
+                    navigation.BeginGoal("return to saved hunt point after loot");
+                    returningFromPriority=true;
+                    try { await NavigateTo(drive,anchor,anchor,o,returnToken,boundaryRadius:activeCompletionBoundary); }
+                    finally { returningFromPriority=false; }
+                }
+                drive.StopApproach();
+                await RestoreSavedHuntFacing(returnToken);
+                TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
             }
             void RememberGamekeeperReturn(Vec current)
             {
@@ -1605,7 +1615,6 @@ public sealed partial class HunterForm : Form
                         catch(RouteUnavailableException ex){drive.StopApproach();message="Tank follow route blocked: "+ex.Message;await Input.Delay(500,token);}
                         continue;
                     }
-
                     drive.StopApproach();
                     if(decision.Action!=GroupAction.Attack || decision.Target==null){Input.Release(preserveNearbyPickup:true);await Input.Delay(150,token);continue;}
                     target=decision.Target;
@@ -1650,7 +1659,11 @@ public sealed partial class HunterForm : Form
                         if(Environment.TickCount64-encounterQuietSince<500) { message="Checking that nearby enemies are clearâ€¦"; await Input.Delay(100,token); continue; }
                         if(deferredLoot.Count>0)
                         {
-                            if(await RunLootJob(deferredLoot.Peek(),drive,anchor,o,token)) deferredLoot.Dequeue();
+                            if(await RunLootJob(deferredLoot.Peek(),drive,anchor,o,token))
+                            {
+                                deferredLoot.Dequeue();
+                                await ReturnToSavedHuntPointAfterLoot(token);
+                            }
                             continue;
                         }
                         TraceLog.Record("encounter cleared",new {Position=pos});
@@ -1806,7 +1819,6 @@ public sealed partial class HunterForm : Form
                     }
                     if(o.GroupMode && o.PrioritizeGamekeeper && !Targeting.IsGamekeeper(current) && groupDecision.Target is Entity groupPriority && Targeting.IsGamekeeper(groupPriority))
                     { TraceLog.Record("target preempted for Gamekeeper",new {PreviousId=current.Id,PriorityId=groupPriority.Id}); break; }
-
                     string? protection=TargetGuardReason(current,hp,pos,o);
                     if (protection!=null) throw new TargetProtectionException(protection);
                     if (!o.GroupMode && !encounter.HasEngaged && !healingRestPending && (!o.LeaveAreaWhenEmpty || !completionReturnPending) && Targeting.PriorityRank(current,o.PrioritizeGamekeeper,o.PrioritizeBreakables)<2 && Environment.TickCount64 >= nextPriorityCheck)
@@ -2007,7 +2019,6 @@ public sealed partial class HunterForm : Form
                     }
                     else
                     {
-
                         Input.HoldMouse(false, true, token);
                         SetCombatPickup(o.LootDuringSkillCooldowns && CombatPickup.SkillsCooling(o.SkillKeys,bar),existingDrops,o,token);
                         await Input.Delay(50, token);
@@ -2208,7 +2219,6 @@ public sealed partial class HunterForm : Form
                 if(action.Waypoint is Vec waypoint)
                 {
                     if(world.RestSupported && world.RestState().Posture!=RestPosture.Standing)
-
                     {
                         drive.StopApproach();await EnsurePosture(false,token);continue;
                     }
@@ -2409,7 +2419,6 @@ public sealed partial class HunterForm : Form
             {
                 var goal=position+Movement.Rotate(away,turn)*2.5;
                 if((goal-anchor).Length>boundary || Avoidance.BlockedSegment(position,goal,avoidZones)!=null)continue;
-
                 if(options.AutomaticRouting && !navigation.CanAdvance(position,goal,avoidZones))continue;
                 defenseStep=goal;navigation.BeginGoal("reacquire after incoming damage");
                 TraceLog.Record("damage response reposition",new {Position=position,Goal=goal,Boundary=boundary});
