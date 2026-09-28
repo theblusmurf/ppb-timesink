@@ -1872,6 +1872,38 @@ public sealed partial class HunterForm : Form
                     bool packClearing=RangedPullEnabled(o) && rangedPull.Active && rangedPull.Phase==RangedPullPhase.Clearing && !priorityFight;
                     double attackStop = packClearing ? (double)o.RangedMeleeAttackRange : o.Ranged ? (double)o.MeleeRange : Math.Min((double)o.MeleeRange, Targeting.MeleeAttackRange);
                     double chaseThreshold = packClearing ? attackStop : attackStop + Math.Max(bodyAllowance,combatStart != 0 ? 1.25 : 0);
+                    bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
+                    if(stationaryFarmTarget)
+                    {
+                        // These farm targets are allowed to approach the saved
+                        // point, but the character must never chase them. Return
+                        // to the anchor first, then face and attack only after
+                        // the target enters the configured melee range.
+                        if((pos-anchor).Length>.35)
+                        {
+                            ReleaseCombatPickup();Input.HoldMouse(false,false,token);
+                            message=$"Returning to saved hunt point before {current.DisplayName}";
+                            try { await NavigateTo(drive,anchor,anchor,o,token,boundaryRadius:activeMovementBoundary); }
+                            catch(RouteUnavailableException ex)
+                            {
+                                drive.StopApproach();
+                                TraceLog.Record("stationary target return route unavailable",new {current.Id,current.DisplayName,Reason=ex.Message});
+                                await Input.Delay(150,token);
+                            }
+                            continue;
+                        }
+                        drive.StopApproach();
+                        delta=current.Position-pos;
+                        if(delta.Length>attackStop)
+                        {
+                            ReleaseCombatPickup();Input.HoldMouse(false,false,token);
+                            try { await drive.Face(world,delta,token,.035); }
+                            catch(TurnUnresponsiveException) { TraceLog.Record("stationary target face unavailable",new {current.Id,current.DisplayName}); }
+                            message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{attackStop:F1})";
+                            await Input.Delay(100,token);
+                            continue;
+                        }
+                    }
                     bool holdPriorityPosition=o.StationaryGamekeeperPriority && !o.GroupMode && (priorityFight || encounter.IsEngaged(current));
                     if(holdPriorityPosition && delta.Length>chaseThreshold)
                     {
@@ -1950,9 +1982,9 @@ public sealed partial class HunterForm : Form
                     // Group mode keeps the engaged pack in front even when the
                     // selected attack is ranged; the planner still enforces
                     // attack reach, tank-follow distance, boundary, and route safety.
-                    if((!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
-                    if((!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
-                    if(await TryCombatSideStep(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
+                    if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
+                    if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
+                    if(!stationaryFarmTarget && await TryCombatSideStep(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
                     // Face a new/side target before starting an attack animation.
                     // A running combo can tolerate small movements inside a 7Â°
                     // cone; skills must not wait indefinitely for 2Â° precision.
