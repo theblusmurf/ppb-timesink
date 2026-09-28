@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.17
+
+- Fixed Mimic, Pulkhan, Tribal, and Tower combat repeatedly navigating back to
+  the saved point while the target was already in attack range.
+- Stationary-target combat now stops all approach input immediately and waits
+  or swings from the current standing point; it never sends a return route or
+  chases the target. Facing and attack pulses continue as the target enters
+  range.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.16
 
 - Removed the **Smooth side-step** and **Group engaged targets** settings from

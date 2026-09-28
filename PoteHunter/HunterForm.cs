@@ -1892,30 +1892,22 @@ public sealed partial class HunterForm : Form
                     // refreshing a creature node; using the model gate here made
                     // the controller fall through to NavigateTo(target) during
                     // that refresh and caused the character to chase the target.
-                    // These assignments may only return to the saved anchor, then
-                    // face and swing in place. Gamekeeper priority and group mode
-                    // remain the explicit movement exceptions.
+                    // These assignments never navigate to the target or back to
+                    // the anchor from inside the combat loop. The saved point is
+                    // the standing reference; once combat starts, the controller
+                    // stops approach input and only faces and swings in place.
+                    // Gamekeeper priority and group mode remain the explicit
+                    // movement exceptions.
                     bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTargetId(current.Id);
                     bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
                     {
-                        // These farm targets are allowed to approach the saved
-                        // point, but the character must never chase them. Return
-                        // to the anchor first, then face and attack only after
-                        // the target enters the configured melee range.
-                        if((pos-anchor).Length>.35)
-                        {
-                            ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                            message=$"Returning to saved hunt point before {current.DisplayName}";
-                            try { await NavigateTo(drive,anchor,anchor,o,token,boundaryRadius:activeMovementBoundary); }
-                            catch(RouteUnavailableException ex)
-                            {
-                                drive.StopApproach();
-                                TraceLog.Record("stationary target return route unavailable",new {current.Id,current.DisplayName,Reason=ex.Message});
-                                await Input.Delay(150,token);
-                            }
-                            continue;
-                        }
+                        // Do not correct anchor drift here. A return route uses
+                        // forward input and can overshoot the saved point while a
+                        // target is moving, producing the oscillating W pulses
+                        // seen in the live trace and starving the swing state.
+                        // Hunt-area/loot recovery owns any deliberate return;
+                        // fixed-target combat itself is always stationary.
                         drive.StopApproach();
                         delta=current.Position-pos;
                         bool keepStationarySwing=Input.BasicAttackHeld && delta.Length<=swingWindow;
