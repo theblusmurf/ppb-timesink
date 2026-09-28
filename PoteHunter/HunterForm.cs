@@ -1873,6 +1873,7 @@ public sealed partial class HunterForm : Form
                     double attackStop = packClearing ? (double)o.RangedMeleeAttackRange : o.Ranged ? (double)o.MeleeRange : Math.Min((double)o.MeleeRange, Targeting.MeleeAttackRange);
                     double chaseThreshold = packClearing ? attackStop : attackStop + Math.Max(bodyAllowance,combatStart != 0 ? 1.25 : 0);
                     bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
+                    bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
                     {
                         // These farm targets are allowed to approach the saved
@@ -1901,6 +1902,20 @@ public sealed partial class HunterForm : Form
                             catch(TurnUnresponsiveException) { TraceLog.Record("stationary target face unavailable",new {current.Id,current.DisplayName}); }
                             message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{attackStop:F1})";
                             await Input.Delay(100,token);
+                            continue;
+                        }
+                        // Use the wider combat tolerance for the stationary
+                        // attack gate. The normal .035 aim tolerance can keep
+                        // re-aiming forever while a mob jitters at the anchor.
+                        try
+                        {
+                            if(!await drive.Face(world,delta,token,.12))continue;
+                            stationaryAttackReady=true;
+                        }
+                        catch(TurnUnresponsiveException)
+                        {
+                            TraceLog.Record("stationary target attack aim unavailable",new {current.Id,current.DisplayName});
+                            await Input.Delay(50,token);
                             continue;
                         }
                     }
@@ -1989,7 +2004,7 @@ public sealed partial class HunterForm : Form
                     // A running combo can tolerate small movements inside a 7Â°
                     // cone; skills must not wait indefinitely for 2Â° precision.
                     double aimError=Movement.Angle(Movement.FromClientHeading(world.PlayerHeading()),delta);
-                    if(Input.BasicAttackHeld && Math.Abs(aimError)>.12)
+                    if(!stationaryAttackReady && Input.BasicAttackHeld && Math.Abs(aimError)>.12)
                     {
                         ReleaseCombatPickup();Input.HoldMouse(false,false,token);
                         TraceLog.Record("attack released to face target",new {current.Id,ErrorDegrees=aimError*180/Math.PI,hp.Current});
@@ -1997,9 +2012,12 @@ public sealed partial class HunterForm : Form
                     }
                     try
                     {
-                        if(packClearing && !await drive.Face(world,delta,token,Input.BasicAttackHeld ? .12 : .035))continue;
-                        if(!await (o.Ranged ? drive.FaceTarget3D(world,current,token,Input.BasicAttackHeld ? .025 : .01) :
-                            drive.Face(world,delta,token,Input.BasicAttackHeld ? .12 : .035)))continue;
+                        if(!stationaryAttackReady)
+                        {
+                            if(packClearing && !await drive.Face(world,delta,token,Input.BasicAttackHeld ? .12 : .035))continue;
+                            if(!await (o.Ranged ? drive.FaceTarget3D(world,current,token,Input.BasicAttackHeld ? .025 : .01) :
+                                drive.Face(world,delta,token,Input.BasicAttackHeld ? .12 : .035)))continue;
+                        }
                         if(packClearing)
                         {
                             // Optical aim is necessary for this 3D client, but the
