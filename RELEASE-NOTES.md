@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.13
+
+- Increased the stationary target swing window to cover the live client's
+  center-to-collision-envelope distance. Release1.12 was still waiting at
+  2.2/2.0 units for a Mimic, so it never reached the attack hold.
+- The character remains at the saved hunt point and faces the target while the
+  attack hold starts inside the expanded window.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.12
 
 - Fixed stationary Mimic, Pulkhan, Tribal, and Tower targets being held in a

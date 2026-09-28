@@ -1881,10 +1881,13 @@ public sealed partial class HunterForm : Form
                     // The client's melee check uses the target's collision
                     // envelope around its center. Keep the configured stop as
                     // the navigation preference, but allow a center distance
-                    // up to the verified 1.5-unit attack gate plus a small
-                    // hitbox allowance before declaring a target out of reach.
+                    // up to the verified 1.5-unit attack gate plus a generous
+                    // target-envelope allowance before declaring a target out
+                    // of reach. The live client reports Mimic centers about
+                    // two units away while their collision envelope is already
+                    // in basic-attack reach.
                     double swingWindow = o.Ranged ? attackStop + .35 :
-                        Math.Max(attackStop + .35, Targeting.MeleeAttackRange + .5);
+                        Math.Max(attackStop + .35, Targeting.MeleeAttackRange + 1.0);
                     bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTarget(current);
                     bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
