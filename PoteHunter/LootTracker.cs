@@ -164,7 +164,7 @@ public sealed class LootTracker
         snap=tracker.Snapshot();
         if(snap.Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Tracked item drops were not attributed.");
         if(snap.TrackedLoot.Any(item=>item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
-        if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0)!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0)!="Mithril")
+        if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0))!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0))!="Mithril")
             throw new Exception("Legacy valuable aliases did not normalize to the corrected labels.");
         tracker.ObserveDrops([existing,new GroundItem(9,9,9,"Distant",new(100,100),0)],8);
         if(tracker.Snapshot().Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Distant loot was attributed to a tracked target.");
