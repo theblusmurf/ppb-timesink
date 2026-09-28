@@ -6,6 +6,9 @@ public enum GatherAction { Move, Wait, Attack, GiveUp }
 public static class TightGathering
 {
     public const double DefaultRadius=.5, Arrival=.08;
+    // A full roster is capped at ten targets. Start the swing once five
+    // members, or every member of a smaller roster, are close and forward.
+    public const int SwingCloseTargetCount=5;
     public const long MoveMilliseconds=1800, SettleMilliseconds=1200, MaximumMilliseconds=3000;
     public const long SuccessCooldown=6000, FailedCooldown=15000;
     public static int CloseCount(Vec position,IReadOnlyList<Entity> enemies,double radius=DefaultRadius)=>enemies.Count(e=>
@@ -15,7 +18,9 @@ public static class TightGathering
     public static bool Ready(Vec position,Entity target,IReadOnlyList<Entity> enemies)=>
         Ready(position,target,enemies,DefaultRadius);
     public static bool Ready(Vec position,Entity target,IReadOnlyList<Entity> enemies,double radius)=>
-        enemies.Count>=2 && CloseCount(position,enemies,radius)==enemies.Count && FrontCount(position,target,enemies,radius)==enemies.Count;
+        enemies.Count>=2 &&
+        CloseCount(position,enemies,radius)>=Math.Min(SwingCloseTargetCount,enemies.Count) &&
+        FrontCount(position,target,enemies,radius)>=Math.Min(SwingCloseTargetCount,enemies.Count);
 
     // Keep the initial roster throughout an attempt. A creature leaving the
     // observation radius is not a successful gather or a confirmed death.
@@ -54,7 +59,9 @@ public static class TightGathering
             int close=CloseCount(goal,enemies,radius),front=FrontCount(goal,target,enemies,radius);
             double cost=enemies.Average(e=>(e.Position-goal).Length)+travel*.15;
             // Prefer the largest close forward group, then close bodies, then
-            // a central holding point. Meaningful cost hysteresis limits jitter.
+            // a central holding point. The session can release the swing once
+            // five of ten (or all of a smaller roster) are ready. Meaningful
+            // cost hysteresis limits jitter.
             if(best==null || front>best.Front || front==best.Front && close>best.Close ||
                 front==best.Front && close==best.Close && cost<bestCost-.10)
             {best=new(goal,close,front,enemies.Count);bestCost=cost;}
@@ -200,4 +207,3 @@ public sealed partial class HunterForm
         return true; // Normal loop revalidates health/identity/range and re-aims.
     }
 }
-

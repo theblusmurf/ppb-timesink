@@ -14,6 +14,8 @@ public static class TightGatheringChecks
         Check(TightGathering.CloseCount(player,edge)==2,"0.5 included and 0.5001 excluded");
         Entity[] pairwise=[target,Mob(2,.4,.3),Mob(3,.4,-.3)];
         Check((pairwise[1].Position-pairwise[2].Position).Length>.5 && TightGathering.Ready(player,target,pairwise),"radius is from player, not pairwise spacing");
+        var tenClose=Enumerable.Range(1,10).Select(i=>i<=5 ? Mob((uint)i,.4,.02*i) : Mob((uint)i,1.2,.02*i)).ToArray();
+        Check(TightGathering.CloseCount(player,tenClose)==5 && TightGathering.Ready(player,tenClose[0],tenClose),"five of ten engaged targets release the swing");
         Entity[] opposite=[target,Mob(2,-.4,0),Mob(3,-.3,.1)];
         Check(TightGathering.CloseCount(player,opposite)==3 && !TightGathering.Ready(player,target,opposite),"close bodies behind character not in cone");
         Entity[] tied=[target,Mob(2,-.4,0)];
@@ -86,4 +88,3 @@ public static class TightGatheringChecks
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }
-
