@@ -1512,7 +1512,7 @@ public sealed partial class HunterForm : Form
             void RememberGamekeeperReturn(Vec current)
             {
                 if(o.GroupMode || !o.ReturnToHuntLocationAfterGamekeeper || gamekeeperReturnPending)return;
-                gamekeeperReturnPending=true;gamekeeperReturnLocation=anchor;
+                gamekeeperReturnPending=true;gamekeeperReturnLocation=activationLocation;
                 TraceLog.Record("saved hunt location for Gamekeeper return",new {Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Current=current,Zone=runZone});
             }
             completionReturnPending=false;
@@ -1582,6 +1582,41 @@ public sealed partial class HunterForm : Form
                     }
                     if(!encounter.HasEngaged && healingWarning!=null && await TryHeal(drive,o,token))continue;
                 }
+                // Finish the priority assignment before choosing another
+                // engaged target.  The old ordering selected a surviving
+                // engagement first, so the return block below was skipped and
+                // the character stayed at the Gamekeeper's death position.
+                if(!o.GroupMode && !healingRestPending && gamekeeperReturnPending && gamekeeper==null && deferredLoot.Count==0)
+                {
+                    ReleaseCombatPickup();Input.HoldMouse(false,false,token);drive.StopApproach();
+                    if((pos-gamekeeperReturnLocation).Length>2)
+                    {
+                        message="Returning to saved hunt location after Gamekeeper";
+                        navigation.BeginGoal("return to saved hunt location after Gamekeeper");
+                        returningFromPriority=true;
+                        try
+                        {
+                            await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,token,boundaryRadius:responseRadius);
+                            drive.StopApproach();
+                            await RestoreSavedHuntFacing(token);
+                        }
+                        finally {returningFromPriority=false;}
+                    }
+                    else
+                    {
+                        await RestoreSavedHuntFacing(token);
+                    }
+                    pos=world.PlayerPosition();
+                    gamekeeperReturnPending=false;gamekeeperExcursion=false;
+                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=pos,Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
+                    if((pos-gamekeeperReturnLocation).Length>2)
+                    {
+                        message="Saved hunt location return is still settling; checking again before selecting a target.";
+                        gamekeeperReturnPending=true;
+                        await Input.Delay(100,token);
+                        continue;
+                    }
+                }
                 if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,level,skillDue,token))continue;
                 Entity? target=o.GroupMode?gamekeeper:GamekeeperPriority.ChooseFirst(encounter,gamekeeper,()=>null);
                 if(gamekeeper==null && RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing)
@@ -1640,27 +1675,6 @@ public sealed partial class HunterForm : Form
                     drive.StopApproach();
                     if(decision.Action!=GroupAction.Attack || decision.Target==null){Input.Release(preserveNearbyPickup:true);await Input.Delay(150,token);continue;}
                     target=decision.Target;
-                }
-                if(target==null && !o.GroupMode && !healingRestPending &&
-                    gamekeeperReturnPending && gamekeeper==null && deferredLoot.Count==0)
-                {
-                    if((pos-gamekeeperReturnLocation).Length>2)
-                    {
-                        ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                        message="Returning to saved hunt location after Gamekeeper";
-                        navigation.BeginGoal("return to saved hunt location after Gamekeeper");
-                        returningFromPriority=true;
-                        try
-                        {
-                            await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,token,boundaryRadius:responseRadius);
-                            drive.StopApproach();
-                            await RestoreSavedHuntFacing(token);
-                        }
-                        finally {returningFromPriority=false;}
-                        continue;
-                    }
-                    gamekeeperReturnPending=false;
-                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=pos,Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
                 }
                 if(encounter.Active && target==null)
                 {
