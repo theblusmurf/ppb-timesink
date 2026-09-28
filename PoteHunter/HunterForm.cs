@@ -2000,6 +2000,22 @@ public sealed partial class HunterForm : Form
                     if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryTightGathering(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
                     if(!stationaryFarmTarget && (!o.Ranged || packClearing || o.GroupMode) && await TryCombatPositioning(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
                     if(!stationaryFarmTarget && await TryCombatSideStep(drive,current,anchor,o,activeMovementBoundary,attackStop,token))continue;
+                    if(stationaryAttackReady)
+                    {
+                        // Stationary farm targets use a direct, persistent
+                        // melee hold once the anchor and facing gates pass.
+                        // This bypasses optional cone repositioning and the
+                        // tighter general aim loop that can starve the swing.
+                        bool beganSwing=!Input.BasicAttackHeld;
+                        Input.HoldMouse(false,true,token);
+                        courtesy.MarkAttack(current);
+                        encounter.MarkAttack(current,hp);
+                        encounterHasAttack=true;
+                        if(beganSwing)TraceLog.Record("stationary melee swing started",new {current.Id,current.DisplayName,Distance=delta.Length,AttackRange=attackStop,Anchor=anchor});
+                        message=$"Swinging at {current.DisplayName} from saved hunt point";
+                        await Input.Delay(100,token);
+                        continue;
+                    }
                     // Face a new/side target before starting an attack animation.
                     // A running combo can tolerate small movements inside a 7Â°
                     // cone; skills must not wait indefinitely for 2Â° precision.
