@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.22
+
+- Added a live loot tracker for Mimic, Tribal, Pulkhan, and Tower kills. New
+  ground items are attributed to the nearest recent tracked kill and grouped
+  by source and item name.
+- Added a compact draggable overlay with kill/drop totals and recent drops;
+  its position and visibility are saved in the normal settings file.
+- Added a reset control and live-status JSON output for the tracker.
+- Validation: Release build, offline self-test, and ranged UI check passed.
+
 ## Release1.21
 
 - Smoothed the Gamekeeper return route by keeping its movement state alive

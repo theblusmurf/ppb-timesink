@@ -110,6 +110,7 @@ static class SelfTests
             if (autoRoundTrip == null || autoRoundTrip.AutoDetectSkills) throw new Exception("Manual skill mode was not preserved");
             CombatPickup.SelfTest();
             NearbyLootPickup.SelfTest();
+            LootTracker.SelfTest();
             Input.CheckNearbyLootInput().GetAwaiter().GetResult();
             var pickupDefault = JsonSerializer.Deserialize<Options>("{}");
             var pickupRoundTrip = JsonSerializer.Deserialize<Options>(JsonSerializer.Serialize(new Options { AutoPickupNearbyLoot = false, NearbyEnemyRadius = 7 }));

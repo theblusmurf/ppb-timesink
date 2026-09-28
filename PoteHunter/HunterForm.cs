@@ -21,6 +21,7 @@ public sealed partial class HunterForm : Form
     readonly ToolTip priorityHint = new();
     readonly Navigation navigation = new();
     readonly ChestCatalog chestCatalog = new();
+    readonly LootTracker lootTracker = new();
     readonly Dictionary<(int Zone,uint Id),long> chestGuideCooldown = new();
     readonly ZoneMapBackground zoneMapBackground = new();
     readonly TabPage groupPage=new("Group");
@@ -436,7 +437,7 @@ public sealed partial class HunterForm : Form
     {
         if (busy || working) return;
         nextCharacterReconnect=Environment.TickCount64+5000;
-        busy = true; connected = false; movement = null; connect.Enabled = false; message = "Reading active creaturesâ€¦";
+        busy = true; connected = false; movement = null; lootTracker.Reset(); connect.Enabled = false; message = "Reading active creaturesâ€¦";
         player.Text="";
         WriteState(new { TimeUtc=DateTime.UtcNow, Connected=false, Working=false, Calibrated=false, Status=message });
         try { var options = CurrentOptions(); options.Save(); await Task.Run(world.Connect); WindowsClientInput.ValidateReady(); connected = true; UpdateDetectedCharacter(world.LocalPlayer()); message = (world.AutomaticProfile ? "Updated client detected automatically. " : "Connected. ") + "Press F8 or Start to calibrate and hunt."; }
@@ -518,6 +519,7 @@ public sealed partial class HunterForm : Form
             latestHealth = health;
             navigationZone=world.ActiveZone(); navigationPosition=pos;
             chestCatalog.Observe(navigationZone,entities.Where(entity=>Targeting.IsChest(entity) && !health.GetValueOrDefault(entity.Id).Dead));
+            lootTracker.ObserveZone(navigationZone);
             if(beforeZone!=navigationZone) {navigation.Clear();if(working)Stop("Map zone changed; stopped.");return;}
             navigation.Observe(world.NavigationContext(self),pos,self.Height);
             if(working && runZone.HasValue && navigationZone!=runZone) Stop("Map zone changed; stopped.");
@@ -556,7 +558,7 @@ public sealed partial class HunterForm : Form
                 list.Items.Add(row);
             }
             list.EndUpdate();
-            groundLoot = world.Loot(); lootPage.Text = $"Ground loot ({groundLoot.Count})";
+            groundLoot = world.Loot(); lootTracker.ObserveDrops(groundLoot,navigationZone); lootPage.Text = $"Ground loot ({groundLoot.Count})";
             string? lootTop = lootList.TopItem?.Tag as string;
             lootList.BeginUpdate(); lootList.Items.Clear();
             foreach (var item in groundLoot.OrderBy(item => (item.Position-pos).Length).Take(100))
@@ -593,7 +595,7 @@ public sealed partial class HunterForm : Form
                 lastEvidence = Environment.TickCount64;
                 RecordObservations(self, level, health);
                 var targetState=world.TargetState();
-                WriteState(new { TimeUtc = DateTime.UtcNow, Connected = true, Working = working, Calibrated = movement != null, Player = self.Name, PlayerHP = selfHealth, PlayerMP = selfMana, ManaRecoveryStatus=manaRecoveryStatus, CameraSupported=world.CameraSupported, CameraStatus=world.CameraStatus, TargetState=new {targetState.Available,targetState.Status,TargetIds=targetState.Ids.Select(id=>$"0x{id:X8}").ToArray()}, Level = level, Position = pos, Hotbar = currentHotbar, DetectedHealingItems = currentHotbar.Slots.Where(RecoveryItems.Recognized), DetectedManaItems=currentHotbar.Slots.Where(ManaRecovery.Recognized), Radar=new{Enabled=showNavigationOverlay.Checked,Visible=navigationOverlay is {Visible:true},Size=(int)navigationOverlaySize.Value}, Healer = HealerState(), Recording = new { Enabled = true, ObjectCount = entities.Count, Error = recordingError }, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot(), Gamekeepers=entities.Where(Targeting.IsGamekeeper).Select(e=>new {
+                WriteState(new { TimeUtc = DateTime.UtcNow, Connected = true, Working = working, Calibrated = movement != null, Player = self.Name, PlayerHP = selfHealth, PlayerMP = selfMana, ManaRecoveryStatus=manaRecoveryStatus, CameraSupported=world.CameraSupported, CameraStatus=world.CameraStatus, TargetState=new {targetState.Available,targetState.Status,TargetIds=targetState.Ids.Select(id=>$"0x{id:X8}").ToArray()}, Level = level, Position = pos, Hotbar = currentHotbar, DetectedHealingItems = currentHotbar.Slots.Where(RecoveryItems.Recognized), DetectedManaItems=currentHotbar.Slots.Where(ManaRecovery.Recognized), Radar=new{Enabled=showNavigationOverlay.Checked,Visible=navigationOverlay is {Visible:true},Size=(int)navigationOverlaySize.Value}, LootTrackerOverlay=new{Enabled=showLootTrackerOverlay.Checked,Visible=lootTrackerOverlay is {Visible:true},Position=lootTrackerOverlay?.Location}, LootTracker=lootTracker.Snapshot(), Healer = HealerState(), Recording = new { Enabled = true, ObjectCount = entities.Count, Error = recordingError }, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot(), Gamekeepers=entities.Where(Targeting.IsGamekeeper).Select(e=>new {
                     e.Id,e.Position,HP=health.GetValueOrDefault(e.Id),Distance=(e.Position-pos).Length,
                     AnchorDistance=(e.Position-(activeHuntAnchor ?? pos)).Length,
                     ResponseRadius=Targeting.ResponseRadius((double)(activeGuardOptions?.HuntRadius ?? radius.Value),(double)(activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value)),
@@ -617,7 +619,7 @@ public sealed partial class HunterForm : Form
             }).ToArray();
             recorder.Capture(new { TimeUtc = DateTime.UtcNow, ClientSha256 = world.ClientHash, ProcessId = world.Pid,
                 Working = working, PlayerId = self.Id, PlayerLevel = level, LoadedObjectCount = world.CandidateCount,
-                ReadableObjectCount = observed.Length, Objects = observed, GroundItems = groundLoot, Hotbar = currentHotbar,
+                ReadableObjectCount = observed.Length, Objects = observed, GroundItems = groundLoot, LootTracker = lootTracker.Snapshot(), Hotbar = currentHotbar,
                 LockedTargetId = lockedTarget?.Id, Status = message, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot() },
                 observed.Select(e => new ObjectTypeObservation($"{e.Id >> 28:X}:{e.PrototypeId?.ToString() ?? e.Name}:{e.Model}",
                     e.PrototypeId, e.Name, e.Model, e.Definition.Name ?? "", e.PrototypeId.HasValue ? e.Definition.Level : null,
@@ -1867,6 +1869,8 @@ public sealed partial class HunterForm : Form
                             }
                             if(Targeting.IsGamekeeper(target) && missingHealthSnapshot.Known && missingHealthSnapshot.Dead)
                                 gamekeeperDefeated=true;
+                            if(missingHealthSnapshot.Known && missingHealthSnapshot.Dead)
+                                lootTracker.RecordKill(target,target.Position,runZone??navigationZone);
                             collectAfterTarget = courtesy.StartedHere(target);
                             break;
                         }
@@ -1886,6 +1890,7 @@ public sealed partial class HunterForm : Form
                     if (hp.Dead)
                     {
                         if(Targeting.IsGamekeeper(target))gamekeeperDefeated=true;
+                        lootTracker.RecordKill(target,current.Position,runZone??navigationZone);
                         collectAfterTarget = courtesy.StartedHere(target);
                         TraceLog.Record("target dead", new { target.Id, target.Name, target.DisplayName, target.PriorityLootObject, hp.Current, hp.Maximum, Position = current.Position });
                         break;

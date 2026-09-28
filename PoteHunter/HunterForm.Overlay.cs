@@ -6,6 +6,7 @@ public sealed partial class HunterForm
 {
     const int NavigationOverlayMargin = 24;
     readonly CheckBox showNavigationOverlay = new() { Text = "Show radar overlay", AutoSize = true };
+    readonly CheckBox showLootTrackerOverlay = new() { Text = "Show loot tracker", AutoSize = true, Checked = true };
     readonly CheckBox guideTreasureChests = new() { Text = "Guide to treasure chests", AutoSize = true, Checked = true };
     readonly CheckBox showTreasureChestMarkers = new() { Text = "Show treasure boxes on map", AutoSize = true, Checked = true };
     readonly NumericUpDown navigationOverlaySize = new()
@@ -18,7 +19,9 @@ public sealed partial class HunterForm
     };
     readonly NumericUpDown navigationViewRadius = new() { Minimum = 10, Maximum = 2000, Increment = 10, Value = 150, Width = 70 };
     readonly Button fitNavigationRadius = new() { Text = "Fit loaded", AutoSize = true };
+    readonly Button resetLootTracker = new() { Text = "Reset loot", AutoSize = true };
     NavigationOverlay? navigationOverlay;
+    LootTrackerOverlay? lootTrackerOverlay;
 
     /// <summary>Adds and restores the passive radar controls in the Navigation header.</summary>
     void InitializeNavigationOverlay(FlowLayoutPanel navControls)
@@ -34,6 +37,7 @@ public sealed partial class HunterForm
         {
             var options = Options.Read();
             showNavigationOverlay.Checked = options.ShowNavigationOverlay;
+            showLootTrackerOverlay.Checked = options.ShowLootTrackerOverlay;
             navigationOverlaySize.Value = Math.Clamp(options.NavigationOverlaySize,
                 (int)navigationOverlaySize.Minimum, (int)navigationOverlaySize.Maximum);
             navigationViewRadius.Value = Math.Clamp(options.NavigationViewRadius,
@@ -44,12 +48,14 @@ public sealed partial class HunterForm
         catch
         {
             showNavigationOverlay.Checked = false;
+            showLootTrackerOverlay.Checked = true;
             navigationOverlaySize.Value = 450;
             navigationViewRadius.Value = 150;
         }
 
         var sizeLabel = new Label { Text = "Size:", AutoSize = true, Padding = new Padding(5, 5, 0, 0) };
         navControls.Controls.Add(showNavigationOverlay);
+        navControls.Controls.Add(showLootTrackerOverlay);
         navControls.Controls.Add(guideTreasureChests);
         navControls.Controls.Add(showTreasureChestMarkers);
         navControls.Controls.Add(sizeLabel);
@@ -58,13 +64,16 @@ public sealed partial class HunterForm
         navControls.Controls.Add(navigationViewRadius);
         navControls.Controls.Add(new Label { Text = "m", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         navControls.Controls.Add(fitNavigationRadius);
+        navControls.Controls.Add(resetLootTracker);
 
         showNavigationOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
+        showLootTrackerOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
         guideTreasureChests.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showTreasureChestMarkers.CheckedChanged += (_, _) => OverlaySettingsChanged();
         navigationOverlaySize.ValueChanged += (_, _) => OverlaySettingsChanged();
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
+        resetLootTracker.Click += (_, _) => { lootTracker.Reset(); UpdateNavigationOverlay(); };
     }
 
     void OverlaySettingsChanged()
@@ -81,10 +90,21 @@ public sealed partial class HunterForm
     Options WithOverlaySettings(Options options)
     {
         options.ShowNavigationOverlay = showNavigationOverlay.Checked;
+        options.ShowLootTrackerOverlay = showLootTrackerOverlay.Checked;
         options.NavigationOverlaySize = (int)navigationOverlaySize.Value;
         options.NavigationViewRadius = (int)navigationViewRadius.Value;
         options.GuideTreasureChests = guideTreasureChests.Checked;
         options.ShowTreasureChestMarkers = showTreasureChestMarkers.Checked;
+        try
+        {
+            var saved=Options.Read();
+            options.LootTrackerOverlayX=saved.LootTrackerOverlayX;options.LootTrackerOverlayY=saved.LootTrackerOverlayY;
+        }
+        catch { }
+        if(lootTrackerOverlay is { IsDisposed:false })
+        {
+            options.LootTrackerOverlayX=lootTrackerOverlay.Left;options.LootTrackerOverlayY=lootTrackerOverlay.Top;
+        }
         return options;
     }
 
@@ -107,10 +127,11 @@ public sealed partial class HunterForm
     /// <summary>Refreshes visibility, position and pixels without activating the overlay.</summary>
     void UpdateNavigationOverlay()
     {
-        if (IsDisposed || !showNavigationOverlay.Checked || !connected || world.Window == IntPtr.Zero ||
+        if (IsDisposed || !connected || world.Window == IntPtr.Zero ||
             !GameProcessAlive() || !NavigationOverlay.TryGetClientScreenBounds(world.Window, out var clientBounds))
         {
             HideNavigationOverlay();
+            HideLootTrackerOverlay();
             return;
         }
 
@@ -118,26 +139,47 @@ public sealed partial class HunterForm
         if (foreground != world.Window && foreground != Handle)
         {
             HideNavigationOverlay();
+            HideLootTrackerOverlay();
             return;
         }
 
-        int requested = (int)navigationOverlaySize.Value;
-        int width = Math.Min(requested, Math.Max(1, clientBounds.Width - NavigationOverlayMargin * 2));
-        int height = Math.Min(requested, Math.Max(1, clientBounds.Height - NavigationOverlayMargin * 2));
-        if (width < 100 || height < 100)
+        if (showNavigationOverlay.Checked)
         {
-            HideNavigationOverlay();
-            return;
+            int requested = (int)navigationOverlaySize.Value;
+            int width = Math.Min(requested, Math.Max(1, clientBounds.Width - NavigationOverlayMargin * 2));
+            int height = Math.Min(requested, Math.Max(1, clientBounds.Height - NavigationOverlayMargin * 2));
+            if (width < 100 || height < 100) HideNavigationOverlay();
+            else
+            {
+                navigationOverlay ??= new NavigationOverlay(DrawNavigation);
+                navigationOverlay.Bounds = new Rectangle(
+                    clientBounds.Right - NavigationOverlayMargin - width,
+                    clientBounds.Top + NavigationOverlayMargin,
+                    width,
+                    height);
+                if (!navigationOverlay.Visible) navigationOverlay.Show();
+                navigationOverlay.Invalidate();
+            }
         }
+        else HideNavigationOverlay();
 
-        navigationOverlay ??= new NavigationOverlay(DrawNavigation);
-        navigationOverlay.Bounds = new Rectangle(
-            clientBounds.Right - NavigationOverlayMargin - width,
-            clientBounds.Top + NavigationOverlayMargin,
-            width,
-            height);
-        if (!navigationOverlay.Visible) navigationOverlay.Show();
-        navigationOverlay.Invalidate();
+        if (showLootTrackerOverlay.Checked)
+        {
+            lootTrackerOverlay ??= new LootTrackerOverlay(lootTracker.Snapshot, CommitLootTrackerPosition);
+            if (!lootTrackerOverlay.Visible)
+            {
+                Options options=Options.Read();
+                Rectangle workingArea=Screen.FromRectangle(clientBounds).WorkingArea;
+                int x=options.LootTrackerOverlayX>=0 ? options.LootTrackerOverlayX : clientBounds.Left+NavigationOverlayMargin;
+                int y=options.LootTrackerOverlayY>=0 ? options.LootTrackerOverlayY : clientBounds.Top+NavigationOverlayMargin;
+                x=Math.Clamp(x,workingArea.Left,Math.Max(workingArea.Left,workingArea.Right-lootTrackerOverlay.Width));
+                y=Math.Clamp(y,workingArea.Top,Math.Max(workingArea.Top,workingArea.Bottom-lootTrackerOverlay.Height));
+                lootTrackerOverlay.Location=new Point(x,y);
+                lootTrackerOverlay.Show();
+            }
+            lootTrackerOverlay.Invalidate();
+        }
+        else HideLootTrackerOverlay();
     }
 
     bool GameProcessAlive()
@@ -159,11 +201,23 @@ public sealed partial class HunterForm
         if (navigationOverlay is { IsDisposed: false, Visible: true }) navigationOverlay.Hide();
     }
 
+    void HideLootTrackerOverlay()
+    {
+        if (lootTrackerOverlay is { IsDisposed: false, Visible: true }) lootTrackerOverlay.Hide();
+    }
+
+    void CommitLootTrackerPosition(Point location)
+    {
+        try
+        {
+            var options=Options.Read();options.LootTrackerOverlayX=location.X;options.LootTrackerOverlayY=location.Y;options.Save();
+        }
+        catch(Exception ex){message=ex.Message;}
+    }
+
     void DisposeNavigationOverlay()
     {
-        if (navigationOverlay == null) return;
-        navigationOverlay.Dispose();
-        navigationOverlay = null;
+        navigationOverlay?.Dispose();navigationOverlay=null;
+        lootTrackerOverlay?.Dispose();lootTrackerOverlay=null;
     }
 }
-
