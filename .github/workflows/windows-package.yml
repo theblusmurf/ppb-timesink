@@ -122,9 +122,6 @@ jobs:
             '--title', $releaseTitle,
             '--notes-file', $notesPath
           )
-          if ($env:RELEASE_TAG.Contains('-')) {
-            $arguments += '--prerelease'
-          }
           $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } | ForEach-Object { $_.FullName })
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { throw "Release publishing failed with exit code $LASTEXITCODE." }
