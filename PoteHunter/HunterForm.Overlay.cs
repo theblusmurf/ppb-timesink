@@ -19,6 +19,9 @@ public sealed partial class HunterForm
     };
     readonly NumericUpDown navigationViewRadius = new() { Minimum = 10, Maximum = 2000, Increment = 10, Value = 150, Width = 70 };
     readonly Button fitNavigationRadius = new() { Text = "Fit loaded", AutoSize = true };
+    readonly CheckBox useSavedRecoveryRoute = new() { Text = "Use saved death route", AutoSize = true, Checked = true };
+    readonly Button saveNavigationRoute = new() { Text = "Save route", AutoSize = true };
+    readonly Button clearSavedNavigationRoute = new() { Text = "Clear route", AutoSize = true };
     readonly Button resetLootTracker = new() { Text = "Reset loot", AutoSize = true };
     readonly Button resetLootTimer = new() { Text = "Reset timer", AutoSize = true };
     NavigationOverlay? navigationOverlay;
@@ -45,6 +48,8 @@ public sealed partial class HunterForm
                 (int)navigationViewRadius.Minimum, (int)navigationViewRadius.Maximum);
             guideTreasureChests.Checked = options.GuideTreasureChests;
             showTreasureChestMarkers.Checked = options.ShowTreasureChestMarkers;
+            useSavedRecoveryRoute.Checked = options.UseSavedRecoveryRoute;
+            navigation.LoadSavedRoute(navigationZone);
         }
         catch
         {
@@ -52,6 +57,7 @@ public sealed partial class HunterForm
             showLootTrackerOverlay.Checked = true;
             navigationOverlaySize.Value = 450;
             navigationViewRadius.Value = 150;
+            useSavedRecoveryRoute.Checked = true;
         }
 
         var sizeLabel = new Label { Text = "Size:", AutoSize = true, Padding = new Padding(5, 5, 0, 0) };
@@ -65,6 +71,9 @@ public sealed partial class HunterForm
         navControls.Controls.Add(navigationViewRadius);
         navControls.Controls.Add(new Label { Text = "m", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         navControls.Controls.Add(fitNavigationRadius);
+        navControls.Controls.Add(useSavedRecoveryRoute);
+        navControls.Controls.Add(saveNavigationRoute);
+        navControls.Controls.Add(clearSavedNavigationRoute);
         navControls.Controls.Add(resetLootTracker);
         navControls.Controls.Add(resetLootTimer);
 
@@ -75,6 +84,9 @@ public sealed partial class HunterForm
         navigationOverlaySize.ValueChanged += (_, _) => OverlaySettingsChanged();
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
+        useSavedRecoveryRoute.CheckedChanged += (_, _) => OverlaySettingsChanged();
+        saveNavigationRoute.Click += (_, _) => SaveNavigationRouteFromNavigationTab();
+        clearSavedNavigationRoute.Click += (_, _) => { navigation.ClearSavedRoute(); message="Saved death-recovery route cleared."; navigationCanvas.Invalidate(); };
         resetLootTracker.Click += (_, _) => { bool saved = SaveLootLog("Reset loot"); lootTracker.Reset(); if (saved) message = "Loot totals reset."; UpdateNavigationOverlay(); };
         resetLootTimer.Click += (_, _) => { bool saved = SaveLootLog("Reset timer"); lootTracker.ResetTimer(); if (saved) message = "Loot earning timer reset."; UpdateNavigationOverlay(); };
     }
@@ -98,6 +110,7 @@ public sealed partial class HunterForm
         options.NavigationViewRadius = (int)navigationViewRadius.Value;
         options.GuideTreasureChests = guideTreasureChests.Checked;
         options.ShowTreasureChestMarkers = showTreasureChestMarkers.Checked;
+        options.UseSavedRecoveryRoute = useSavedRecoveryRoute.Checked;
         try
         {
             var saved=Options.Read();
@@ -109,6 +122,20 @@ public sealed partial class HunterForm
             options.LootTrackerOverlayX=lootTrackerOverlay.Left;options.LootTrackerOverlayY=lootTrackerOverlay.Top;
         }
         return options;
+    }
+
+    void SaveNavigationRouteFromNavigationTab()
+    {
+        try
+        {
+            Vec anchor=activeHuntAnchor ?? navigationPosition;
+            double heading=connected ? world.PlayerHeading() : 0;
+            if(navigation.SaveCurrentRoute(navigationZone,anchor,heading))
+                message=$"Saved navigation route ({navigation.SavedRoute?.Points.Length ?? 0} points) for death recovery.";
+            else message="Walk a route first; there are not enough navigation points to save.";
+            navigationCanvas.Invalidate();
+        }
+        catch(Exception ex){message="Could not save navigation route: "+ex.Message;}
     }
 
     double NavigationViewRadius() => (double)navigationViewRadius.Value;

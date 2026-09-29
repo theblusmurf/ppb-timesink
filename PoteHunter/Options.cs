@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace PoteHunter;
 
@@ -76,6 +76,11 @@ public sealed class Options
     public decimal NearbyEnemyRadius { get; set; } = 6;
     public bool AutomaticRouting { get; set; } = true;
     public bool GuideTreasureChests { get; set; } = true;
+    public bool AutoReviveAfterDeath { get; set; } = true;
+    // The death screen is client/UI specific. Keep the key configurable instead
+    // of assuming that every client uses the same revive prompt.
+    public string ReviveKey { get; set; } = "R";
+    public bool UseSavedRecoveryRoute { get; set; } = true;
     public string GroupTankName { get; set; } = "";
     public bool GroupMode { get; set; }
     public decimal GroupFollowDistance { get; set; } = 4;

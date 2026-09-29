@@ -8,6 +8,7 @@ artifacts/
 !/packaging/settings.json
 *.log
 *.jsonl
+navigation-route.json
 self-test.txt
 launcher-error.txt
 startup-trace.txt
@@ -19,4 +20,3 @@ ranged-ui-check.json
 ui-layout.txt
 radar-preview.png
 ui-page-*.png
-

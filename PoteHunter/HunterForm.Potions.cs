@@ -36,7 +36,13 @@ public sealed partial class HunterForm
     {
         if(!o.UseAttackPotions&&!o.UseDefensePotions)return false;
         var hp=world.TargetHealth(world.LocalPlayer().Id);
-        if(!hp.Known||hp.Dead || o.AutoHeal && hp.Current*100m<=hp.Maximum*o.HealBelowPercent)return false;
+        if(!hp.Known)return false;
+        if(hp.Dead)
+        {
+            if(o.AutoReviveAfterDeath)deathRecoveryRequested=true;
+            return false;
+        }
+        if(o.AutoHeal && hp.Current*100m<=hp.Maximum*o.HealBelowPercent)return false;
         var decision=ObservePotionBuffs(o,CheckedHotbar()).FirstOrDefault(d=>d.Use);
         if(decision==null)return false;
         var current=CheckedHotbar().Slot(decision.Slot.Key[0]);

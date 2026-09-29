@@ -1,5 +1,26 @@
 # Release notes
 
+## Release1.39
+
+- Added optional automatic death recovery. When the local character reaches
+  stable zero HP, combat and pickup input are released, the configured death
+  screen key is sent (default `R`, with an `Enter` fallback), and the hunt
+  resumes only after live HP is readable again.
+- The activation position and facing remain the recovery anchor. After revival,
+  the character returns to that point and restores its saved direction before
+  target selection resumes.
+- Navigation now records the observed path for the active hunt. The Navigation
+  tab can save or clear an anchor route, and the saved route is reused during
+  death recovery when the respawn position is near the recorded path. The route
+  is stored in the ignored local `navigation-route.json` runtime file.
+- Added settings for **Auto revive after death**, **Death recovery key**, and
+  **Use saved death route**. Disable either option when the client uses a manual
+  death flow or when direct anchor recovery is preferred.
+- Loot collection now yields immediately when death recovery is requested so
+  pickup movement cannot compete with the revive and return sequence.
+- Validation: offline navigation recording/reversal checks and bounded source
+  verification. The Windows build is validated by GitHub Actions.
+
 ## Release1.38
 
 - Added a single bounded melee-assist step for engaged Mimic, Tribal, Pulkhan,
