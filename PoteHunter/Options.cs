@@ -78,6 +78,8 @@ public sealed class Options
     public bool GuideTreasureChests { get; set; } = true;
     public bool UseAlternativeHuntRoutes { get; set; } = true;
     public bool AutoReviveAfterDeath { get; set; } = true;
+    public int RevivalDelaySeconds { get; set; }
+    public bool FarmOnArrival { get; set; } = true;
     // The death screen is client/UI specific. Keep the key configurable instead
     // of assuming that every client uses the same revive prompt.
     public string ReviveKey { get; set; } = "R";
@@ -98,9 +100,10 @@ public sealed class Options
             options=defaults == null ? new() : JsonSerializer.Deserialize<Options>(defaults) ?? new();
         }
         if(options.MeleeRange<MinimumMeleeRange)options.MeleeRange=MinimumMeleeRange;
+        options.RevivalDelaySeconds=Math.Clamp(options.RevivalDelaySeconds,0,600);
         return options;
     }
-    public void Save() { if(MeleeRange<MinimumMeleeRange)MeleeRange=MinimumMeleeRange; File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
+    public void Save() { if(MeleeRange<MinimumMeleeRange)MeleeRange=MinimumMeleeRange; RevivalDelaySeconds=Math.Clamp(RevivalDelaySeconds,0,600); File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
 }
 
 

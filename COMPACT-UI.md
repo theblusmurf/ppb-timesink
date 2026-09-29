@@ -25,10 +25,16 @@ administrator requirements remain unchanged.
 
 Navigation stores three local route slots: Primary hunt route, Alternative
 route 1, and Alternative route 2. Save each location from the Navigation page.
-When the primary saved point is occupied by another recognized player, the
-first free alternative is selected automatically. The single-route
-`navigation-route.json` file from earlier releases is migrated to the primary
-slot; the new slots are stored in `navigation-routes.json`.
+Each slot stores its character, floor/height, farming radius, revival delay,
+farm-on-arrival policy, facing, and observed waypoints. A movement gap over 8
+map units cancels recording. When the primary saved point is occupied by
+another recognized player, the first free alternative with a matching
+character and floor is selected using that slot's farming radius. Recovery
+uses a saved path only when the nearest waypoint is within 20 map units, then
+restores the saved facing. The single-route `navigation-route.json` file from
+earlier releases is migrated to the primary slot; the new slots are stored in
+`navigation-routes.json`. Death recovery honors the saved or profile revival
+delay before sending the revive key.
 
 Changes save automatically after a short pause. Text edits save after leaving
 the field; the Setup status shows Saved or Check settings. Invalid edits do

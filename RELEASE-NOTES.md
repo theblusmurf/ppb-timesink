@@ -6,6 +6,13 @@
   builds cleanly and does not capture an uninitialized return heading.
 - Stationary saved anchors now survive reloads, so a route can be saved before
   walking and still be used for occupancy fallback and direct travel.
+- Saved routes now carry the character, floor/height, farming radius, revival
+  delay, and farm-on-arrival policy. Alternative routes are ignored when their
+  character or floor does not match the active client.
+- Route recording cancels itself after an unsafe movement gap larger than 8
+  map units instead of persisting a discontinuous path. Death recovery honors
+  the configured delay before sending the revive key and preserves the active
+  route profile when refreshing the saved path.
 
 ## Release1.40
 

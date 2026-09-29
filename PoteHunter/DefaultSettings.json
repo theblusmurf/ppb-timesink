@@ -22,6 +22,8 @@
   ],
   "AutoHeal": true,
   "AutoReviveAfterDeath": true,
+  "RevivalDelaySeconds": 0,
+  "FarmOnArrival": true,
   "ReviveKey": "R",
   "UseSavedRecoveryRoute": true,
   "UseAlternativeHuntRoutes": true,

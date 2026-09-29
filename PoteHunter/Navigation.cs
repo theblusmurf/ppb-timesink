@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PoteHunter;
 
@@ -9,7 +10,14 @@ public sealed class MovementBlockedException(Vec position,Vec direction) : Excep
 }
 public sealed class RouteUnavailableException(string message) : Exception(message);
 public sealed record LearnedObstacle(Vec Center,double Radius,double Height,DateTime ExpiresUtc);
-public sealed record SavedNavigationRoute(int Zone,Vec Anchor,double Heading,Vec[] Points,DateTime SavedUtc);
+public sealed record NavigationRouteProfile(string Character,double Height,double HuntRadius,int RevivalDelaySeconds,bool FarmOnArrival,bool RepairAfterDeath);
+public sealed record SavedNavigationRoute(int Zone,Vec Anchor,double Heading,Vec[] Points,DateTime SavedUtc,
+    string Character="",double Height=0,double HuntRadius=0,int RevivalDelaySeconds=0,bool FarmOnArrival=true,bool RepairAfterDeath=false)
+{
+    [JsonIgnore] public Vec Destination=>Anchor;
+    [JsonIgnore] public Vec RevivalOrigin=>Points is {Length:>0} ? Points[^1] : Anchor;
+    [JsonIgnore] public bool HasRecordedRoute=>Points is {Length:>1};
+}
 public sealed record SavedNavigationRouteSet(SavedNavigationRoute?[] Routes);
 
 public sealed class Navigation
@@ -28,6 +36,7 @@ public sealed class Navigation
     Vec recordingAnchor;
     bool hasPosition;
     bool recording;
+    bool recordingCancelled;
     double height;
     int attempts;
     readonly SavedNavigationRoute?[] savedRoutes = new SavedNavigationRoute?[SavedRouteSlotCount];
@@ -35,6 +44,7 @@ public sealed class Navigation
     public string Status {get;private set;}="Recording observed movement";
     public IReadOnlyList<Vec> Trail=>trail;
     public IReadOnlyList<Vec> RecordingTrail=>recordingTrail;
+    public bool RecordingCancelled=>recordingCancelled;
     public IReadOnlyList<Vec> Route=>route;
     public IReadOnlyList<LearnedObstacle> Blocked=>blocked;
     public IReadOnlyList<SavedNavigationRoute?> SavedRoutes=>savedRoutes;
@@ -45,6 +55,12 @@ public sealed class Navigation
     public void Observe(string newContext,Vec position,double newHeight)
     {
         if(!position.Finite || !double.IsFinite(newHeight)) return;
+        double positionGap=hasPosition ? (position-lastPosition).Length : 0;
+        if(recording && hasPosition && positionGap>8)
+        {
+            recording=false;recordingCancelled=true;recordingTrail.Clear();
+            Status="Route recording cancelled after an unsafe movement gap";
+        }
         if(context!=newContext || hasPosition && (position-lastPosition).Length>40)
         {
             Clear(); context=newContext; hasPosition=false;
@@ -64,7 +80,7 @@ public sealed class Navigation
 
     public void BeginRecording(Vec anchor)
     {
-        recordingTrail.Clear(); recordingAnchor=anchor; recording=anchor.Finite;
+        recordingTrail.Clear(); recordingAnchor=anchor; recordingCancelled=false; recording=anchor.Finite;
         if(recording)recordingTrail.Add(anchor);
     }
 
@@ -77,12 +93,26 @@ public sealed class Navigation
             .Select(item=>(item.slot,item.route!));
 
     public bool SaveCurrentRoute(int zone,Vec anchor,double heading,string? path=null) =>
-        SaveCurrentRoute(zone,anchor,heading,0,path);
+        SaveCurrentRoute(zone,anchor,heading,0,path,null);
 
-    public bool SaveCurrentRoute(int zone,Vec anchor,double heading,int slot,string? path=null)
+    public bool SaveCurrentSpot(int zone,Vec anchor,double heading,int slot,string? path=null,NavigationRouteProfile? profile=null)
+    {
+        bool wasRecording=recording,wasCancelled=recordingCancelled;
+        var priorRecordingTrail=recordingTrail.ToArray();
+        recording=false;recordingCancelled=true;recordingTrail.Clear();
+        try { return SaveCurrentRoute(zone,anchor,heading,slot,path,profile); }
+        finally
+        {
+            recording=wasRecording;recordingCancelled=wasCancelled;
+            recordingTrail.Clear();recordingTrail.AddRange(priorRecordingTrail);
+        }
+    }
+
+    public bool SaveCurrentRoute(int zone,Vec anchor,double heading,int slot,string? path=null,NavigationRouteProfile? profile=null)
     {
         if(slot is < 0 or >= SavedRouteSlotCount || !anchor.Finite || !double.IsFinite(heading))return false;
-        var source=(recordingTrail.Count>0?recordingTrail:trail).Where(point=>point.Finite).ToList();
+        IEnumerable<Vec> raw=recordingCancelled ? new[]{anchor} : recordingTrail.Count>0 ? recordingTrail : trail;
+        var source=raw.Where(point=>point.Finite).ToList();
         // A route slot is also useful as a stationary anchor. Keep a single
         // point when the user saves before walking; navigation can still
         // travel directly to that anchor and occupancy detection can use it.
@@ -90,7 +120,10 @@ public sealed class Navigation
         var points=NormalizeRoute(source,anchor);
         if(points.Count<1)return false;
         var previous=savedRoutes[slot];
-        savedRoutes[slot]=new SavedNavigationRoute(zone,anchor,heading,points.ToArray(),DateTime.UtcNow);
+        var metadata=profile ?? (previous is null ? null : new NavigationRouteProfile(previous.Character,previous.Height,previous.HuntRadius,previous.RevivalDelaySeconds,previous.FarmOnArrival,previous.RepairAfterDeath));
+        savedRoutes[slot]=new SavedNavigationRoute(zone,anchor,heading,points.ToArray(),DateTime.UtcNow,
+            metadata?.Character?.Trim() ?? "",FiniteOrZero(metadata?.Height ?? 0),PositiveOrZero(metadata?.HuntRadius ?? 0),
+            Math.Clamp(metadata?.RevivalDelaySeconds ?? 0,0,600),metadata?.FarmOnArrival ?? true,metadata?.RepairAfterDeath ?? false);
         try
         {
             string destination=path??DefaultSavedRoutesPath;
@@ -127,7 +160,14 @@ public sealed class Navigation
                 if(loaded is null || !loaded.Anchor.Finite || !double.IsFinite(loaded.Heading) ||
                     loaded.Points is null || loaded.Points.Length<1 || loaded.Points.Any(point=>!point.Finite))continue;
                 var normalized=NormalizeRoute(loaded.Points,loaded.Anchor);
-                if(normalized.Count>0)savedRoutes[slot]=loaded with {Points=normalized.ToArray()};
+                if(normalized.Count>0)savedRoutes[slot]=loaded with
+                {
+                    Points=normalized.ToArray(),
+                    Character=loaded.Character?.Trim() ?? "",
+                    Height=FiniteOrZero(loaded.Height),
+                    HuntRadius=PositiveOrZero(loaded.HuntRadius),
+                    RevivalDelaySeconds=Math.Clamp(loaded.RevivalDelaySeconds,0,600)
+                };
             }
             return savedRoutes.Any(route=>route!=null);
         }
@@ -221,6 +261,9 @@ public sealed class Navigation
             saved.Points.Where(point=>point.Finite).Select(point=>(point-anchor).Length).DefaultIfEmpty(0).Max();
     }
 
+    static double FiniteOrZero(double value)=>double.IsFinite(value) ? value : 0;
+    static double PositiveOrZero(double value)=>double.IsFinite(value) && value>0 ? value : 0;
+
     static List<Vec> NormalizeRoute(IEnumerable<Vec> raw,Vec anchor)
     {
         var points=new List<Vec>();
@@ -238,7 +281,7 @@ public sealed class Navigation
 
     public void Clear()
     {
-        blocked.Clear(); trail.Clear(); recordingTrail.Clear(); route.Clear(); goalKey=""; attempts=0; recording=false; RouteVersion++;
+        blocked.Clear(); trail.Clear(); recordingTrail.Clear(); route.Clear(); goalKey=""; attempts=0; recording=false; recordingCancelled=false; RouteVersion++;
         Status="Observed map cleared";
     }
     public void BeginGoal(string key)
@@ -308,7 +351,7 @@ public sealed class Navigation
     }
 
     public object Snapshot() => new {Context,Status,RecoveryAttempts=attempts,BlockedAreas=blocked.ToArray(),Route=route.ToArray(),RecentTrail=trail.TakeLast(250).ToArray(),
-        Recording=recording,RecordedPoints=recordingTrail.Count,SavedRoutes=savedRoutes.Select((saved,slot)=>saved is null?null:new {Slot=slot,saved.Zone,saved.Anchor,saved.Heading,saved.SavedUtc,PointCount=saved.Points.Length,Radius=SavedRouteRadius(slot,saved.Anchor)}).ToArray(),
+        Recording=recording,RecordingCancelled=recordingCancelled,RecordedPoints=recordingTrail.Count,SavedRoutes=savedRoutes.Select((saved,slot)=>saved is null?null:new {Slot=slot,saved.Zone,saved.Anchor,saved.Destination,saved.RevivalOrigin,saved.Heading,saved.Character,saved.Height,saved.HuntRadius,saved.RevivalDelaySeconds,saved.FarmOnArrival,saved.RepairAfterDeath,saved.SavedUtc,PointCount=saved.Points.Length,Radius=SavedRouteRadius(slot,saved.Anchor)}).ToArray(),
         Coverage="Observed local movement only; unknown ground is not verified walkable"};
 
     public static void SelfTest()
@@ -345,15 +388,22 @@ public sealed class Navigation
 
         string selfTestRoute=Path.Combine(Path.GetTempPath(),"PoteHunter-navigation-self-test-route.json");
         var recorded=new Navigation();recorded.Observe("route",anchor,10);recorded.BeginRecording(anchor);recorded.Observe("route",anchor,10);recorded.Observe("route",new Vec(2,0),10);recorded.Observe("route",new Vec(4,0),10);
-        if(!recorded.SaveCurrentRoute(7,anchor,1.25,0,selfTestRoute) || recorded.SavedRoute?.Points[0]!=anchor)
+        var profile=new NavigationRouteProfile("Domitus",12,35,30,true,false);
+        if(!recorded.SaveCurrentRoute(7,anchor,1.25,0,selfTestRoute,profile) || recorded.SavedRoute?.Points[0]!=anchor ||
+            recorded.SavedRoute.Character!="Domitus" || recorded.SavedRoute.HuntRadius!=35 || recorded.SavedRoute.RevivalDelaySeconds!=30)
             throw new Exception("Navigation recording did not save an anchor-first route.");
         if(!recorded.TryGetRecoveryRoute(7,new Vec(4,0),anchor,out var recovery) || recovery.Count==0 || recovery[^1]!=new Vec(2,0))
             throw new Exception("Saved navigation route did not reverse toward the anchor.");
         if(!recorded.SaveCurrentRoute(7,new Vec(4,0),1.5,1,selfTestRoute) ||
             !recorded.TryGetRouteToSavedAnchor(7,new Vec(0,0),1,out var alternate) || alternate.Count==0 || alternate[^1]!=new Vec(2,0))
             throw new Exception("Alternative navigation route did not reverse toward its saved anchor.");
+        var unsafeGap=new Navigation();unsafeGap.Observe("gap",anchor,10);unsafeGap.BeginRecording(anchor);unsafeGap.Observe("gap",new Vec(1,0),10);unsafeGap.Observe("gap",new Vec(10,0),10);
+        if(!unsafeGap.RecordingCancelled || unsafeGap.RecordingTrail.Count!=0 ||
+            !unsafeGap.SaveCurrentRoute(7,anchor,0,0,selfTestRoute) || unsafeGap.SavedRoute?.Points.Length!=1)
+            throw new Exception("An unsafe movement gap did not cancel route recording.");
         var stationary=new Navigation();
-        if(!stationary.SaveCurrentRoute(7,new Vec(8,0),2,2,selfTestRoute) || stationary.GetSavedRoute(2)?.Points.Length!=1 ||
+        stationary.Observe("stationary",new Vec(8,0),10);stationary.BeginRecording(new Vec(8,0));stationary.Observe("stationary",new Vec(10,0),10);
+        if(!stationary.SaveCurrentSpot(7,new Vec(8,0),2,2,selfTestRoute) || stationary.GetSavedRoute(2)?.Points.Length!=1 ||
             !stationary.LoadSavedRoutes(selfTestRoute) || stationary.GetSavedRoute(2)?.Anchor!=new Vec(8,0))
             throw new Exception("A stationary route slot did not persist its anchor.");
         recorded.ClearSavedRoute(selfTestRoute);

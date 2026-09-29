@@ -23,7 +23,8 @@ public sealed partial class HunterForm
     readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when a player occupies the primary spot", AutoSize = true, Checked = true };
     readonly ComboBox savedNavigationSlot = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly Label savedNavigationRoutesStatus = new() { AutoSize = true, ForeColor = Color.Silver };
-    readonly Button saveNavigationRoute = new() { Text = "Save selected route", AutoSize = true };
+    readonly Button saveNavigationSpot = new() { Text = "Save current spot", AutoSize = true };
+    readonly Button saveNavigationRoute = new() { Text = "Finish route & save spot", AutoSize = true };
     readonly Button clearSavedNavigationRoute = new() { Text = "Clear selected", AutoSize = true };
     readonly Button clearAllSavedNavigationRoutes = new() { Text = "Clear all routes", AutoSize = true };
     readonly Button resetLootTracker = new() { Text = "Reset loot", AutoSize = true };
@@ -85,6 +86,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(useAlternativeHuntRoutes);
         navControls.Controls.Add(new Label { Text = "Save slot:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
         navControls.Controls.Add(savedNavigationSlot);
+        navControls.Controls.Add(saveNavigationSpot);
         navControls.Controls.Add(saveNavigationRoute);
         navControls.Controls.Add(clearSavedNavigationRoute);
         navControls.Controls.Add(clearAllSavedNavigationRoutes);
@@ -102,7 +104,8 @@ public sealed partial class HunterForm
         useSavedRecoveryRoute.CheckedChanged += (_, _) => OverlaySettingsChanged();
         useAlternativeHuntRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
         savedNavigationSlot.SelectedIndexChanged += (_, _) => RefreshSavedNavigationRouteStatus();
-        saveNavigationRoute.Click += (_, _) => SaveNavigationRouteFromNavigationTab();
+        saveNavigationSpot.Click += (_, _) => SaveNavigationRouteFromNavigationTab(true);
+        saveNavigationRoute.Click += (_, _) => SaveNavigationRouteFromNavigationTab(false);
         clearSavedNavigationRoute.Click += (_, _) =>
         {
             int slot=SelectedSavedNavigationSlot();
@@ -154,7 +157,7 @@ public sealed partial class HunterForm
         return options;
     }
 
-    void SaveNavigationRouteFromNavigationTab()
+    void SaveNavigationRouteFromNavigationTab(bool spotOnly)
     {
         try
         {
@@ -164,8 +167,21 @@ public sealed partial class HunterForm
             // position so they can be separate fallback farming locations.
             Vec anchor=slot==0 && activeHuntAnchor is Vec runningAnchor ? runningAnchor : navigationPosition;
             double heading=connected ? world.PlayerHeading() : 0;
-            if(navigation.SaveCurrentRoute(navigationZone,anchor,heading,slot))
-                message=$"Saved {SavedNavigationSlotName(slot)} ({navigation.GetSavedRoute(slot)?.Points.Length ?? 0} points).";
+            Options routeOptions=Options.Read();
+            string routeCharacter=routeOptions.Player;
+            double routeHeight=0;
+            if(connected)
+            {
+                try { var current=world.LocalPlayer(); routeCharacter=current.Name; routeHeight=current.Height; }
+                catch { }
+            }
+            var profile=new NavigationRouteProfile(routeCharacter,routeHeight,(double)routeOptions.HuntRadius,
+                routeOptions.RevivalDelaySeconds,routeOptions.FarmOnArrival,false);
+            bool saved=spotOnly
+                ? navigation.SaveCurrentSpot(navigationZone,anchor,heading,slot,profile:profile)
+                : navigation.SaveCurrentRoute(navigationZone,anchor,heading,slot,profile:profile);
+            if(saved)
+                message=$"Saved {SavedNavigationSlotName(slot)} {(spotOnly?"spot":"route")} ({navigation.GetSavedRoute(slot)?.Points.Length ?? 0} points, {profile.Character} / radius {profile.HuntRadius:0.#}).";
             else message="Save the current position or walk a route first; no valid navigation point was found.";
             RefreshSavedNavigationRouteStatus();
             navigationCanvas.Invalidate();
@@ -183,8 +199,10 @@ public sealed partial class HunterForm
     void RefreshSavedNavigationRouteStatus()
     {
         if(savedNavigationRoutesStatus.IsDisposed)return;
+        double defaultRadius=0;
+        try { defaultRadius=(double)Options.Read().HuntRadius; } catch { }
         savedNavigationRoutesStatus.Text=string.Join("  ·  ",navigation.SavedRoutes.Select((route,slot)=>
-            $"{(slot==0?"Primary":$"Alt {slot}")}: {(route==null?"—":$"Z{route.Zone} · {route.Points.Length} pts")}"));
+            $"{(slot==0?"Primary":$"Alt {slot}")}: {(route==null?"—":$"Z{route.Zone} · {route.Points.Length} pts · {(string.IsNullOrWhiteSpace(route.Character)?"any":route.Character)} · R{(route.HuntRadius>0?route.HuntRadius:defaultRadius):0.#}")}"));
     }
 
     double NavigationViewRadius() => (double)navigationViewRadius.Value;
