@@ -79,7 +79,7 @@ internal sealed class LootTrackerOverlay : Form
         using var accentBrush=new SolidBrush(Color.FromArgb(255,215,120));
         float y=HeaderHeight+7;
         e.Graphics.DrawString($"Tracked loot  ·  Gold is amount  ·  Elapsed {FormatDuration(snapshot.Elapsed)}",detailFont,mutedBrush,new PointF(10,y));y+=16;
-        e.Graphics.DrawString($"Earning rates since {FormatDuration(snapshot.RateElapsed)}  ·  per hour",detailFont,mutedBrush,new PointF(10,y));y+=15;
+        e.Graphics.DrawString($"Active earning time {FormatDuration(snapshot.RateElapsed)}  ·  per hour",detailFont,mutedBrush,new PointF(10,y));y+=15;
         var hourly=snapshot.HourlyLoot.ToDictionary(item=>item.Name,StringComparer.OrdinalIgnoreCase);
         for(int i=0;i<snapshot.TrackedLoot.Count;i+=2)
         {

@@ -507,6 +507,7 @@ public sealed partial class HunterForm : Form
     void Tick()
     {
         status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError);
+        lootTracker.ObserveActivity(working && connected && activeGuardOptions!=null);
         if (!connected || busy) return;
         try
         {
@@ -563,7 +564,10 @@ public sealed partial class HunterForm : Form
                 list.Items.Add(row);
             }
             list.EndUpdate();
-            groundLoot = world.Loot(); lootTracker.ObserveDrops(groundLoot,navigationZone); lootPage.Text = $"Ground loot ({groundLoot.Count})";
+            groundLoot = world.Loot();
+            Vec? lootCenter=working?activeHuntAnchor:null;
+            double? lootRadius=working?(double?)(activeGuardOptions?.HuntRadius ?? radius.Value):null;
+            lootTracker.ObserveDrops(groundLoot,navigationZone,lootCenter,lootRadius); lootPage.Text = $"Ground loot ({groundLoot.Count})";
             string? lootTop = lootList.TopItem?.Tag as string;
             lootList.BeginUpdate(); lootList.Items.Clear();
             foreach (var item in groundLoot.OrderBy(item => (item.Position-pos).Length).Take(100))
@@ -716,6 +720,7 @@ public sealed partial class HunterForm : Form
     }
     void Stop(string reason)
     {
+        lootTracker.ObserveActivity(false);
         startVersion++;
         rangedPull.Reset(); rangedTagging = false;
         Input.PickupHoldProvider=null;nearbyPickupSnapshot.Clear();nearbyPickupCount=0;

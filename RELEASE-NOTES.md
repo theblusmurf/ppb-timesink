@@ -1,5 +1,18 @@
 # Release notes
 
+## Release1.34
+
+- Corrected loot attribution so a new pile is retried when it is seen before
+  the matching kill record, instead of being permanently discarded.
+- Loot identities now include zone, both client key fields, and item type;
+  counted piles remain suppressed if they temporarily disappear and return.
+- Drops outside the saved farming radius are ignored, and the Gold parser now
+  prefers the displayed pile amount before using the encoded id fallback.
+- GPH now uses active farming time, excluding idle, stopped, and disconnected
+  periods.
+- Validation: release build and offline tracker self-tests for attribution,
+  identity, radius, and active-time behavior.
+
 ## Release1.33
 
 - Preserved the event-log write failure message when a reset is pressed, so a
