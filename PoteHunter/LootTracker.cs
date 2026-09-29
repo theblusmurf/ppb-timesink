@@ -13,16 +13,15 @@ public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList
 public sealed class LootTracker
 {
     const double DropAttributionRadius=12;
+    const uint MaximumPileQuantity=10_000_000;
     static readonly TimeSpan DropAttributionWindow=TimeSpan.FromSeconds(20);
     static readonly string[] SourceOrder=["Mimic","Tribal","Pulkhan","Tower"];
     static readonly string[] TrackedLootOrder=["Silvin","Mithril","Iternium","Fehu","Gold","Gems"];
-    // The client exposes currency as negative item ids with a display name such as
-    // "Special drop (115)".  Gem records use their actual names (for example
-    // Emerald and BlackMoon), so matching only the words "gold" and "gem" misses
-    // the labels that are present in the live loot list.
+    // Currency records use negative item ids. Gem records use their actual names
+    // (for example Emerald and BlackMoon), so matching only the words "gold" and
+    // "gem" misses the labels that are present in the live loot list.
     static readonly string[] GoldTokens=["gold","coin","currency","money"];
     static readonly string[] GemTokens=["gem","emerald","blackmoon","black moon","diamond","sapphire","ruby","topaz","amethyst","opal","pearl","onyx","moonstone"];
-    static readonly Regex SpecialDropAmountPattern=new(@"\bspecial\s+drop\s*\(\s*(?<amount>[\d,]+)\s*\)",RegexOptions.IgnoreCase|RegexOptions.CultureInvariant|RegexOptions.Compiled);
     static readonly Regex GoldAmountPattern=new(@"(?:(?<before>[\d,]+)\s*(?:gold|coins?|currency|money)\b|(?:gold|coins?|currency|money)\D{0,8}(?<after>[\d,]+))",RegexOptions.IgnoreCase|RegexOptions.CultureInvariant|RegexOptions.Compiled);
     readonly object gate=new();
     readonly Dictionary<string,SourceState> sources=SourceOrder.ToDictionary(name=>name,_=>new SourceState());
@@ -30,7 +29,7 @@ public sealed class LootTracker
     readonly List<PendingKill> pending=[];
     readonly List<LootTrackerDropSummary> recent=[];
     readonly HashSet<LootIdentity> known=[];
-    readonly Dictionary<LootIdentity,DateTime> unmatched=[];
+    readonly Dictionary<LootIdentity,UnmatchedDrop> unmatched=[];
     readonly DateTime sessionStartedUtc;
     readonly Dictionary<string,long> rateBaseline=TrackedLootOrder.ToDictionary(name=>name,_=>0L,StringComparer.OrdinalIgnoreCase);
     DateTime rateStartedUtc;
@@ -52,6 +51,7 @@ public sealed class LootTracker
         public int Drops;
         public readonly Dictionary<string,int> Items=new(StringComparer.OrdinalIgnoreCase);
     }
+    sealed record UnmatchedDrop(GroundItem Item,DateTime FirstSeenUtc);
     sealed record PendingKill(string Source,uint Id,uint Generation,Vec Position,DateTime SeenUtc,int Zone);
     // KeyA/KeyB identify the ground-pile object.  TypeId is the pile's current
     // item value and can change while the same pile is being refreshed (gold
@@ -78,27 +78,19 @@ public sealed class LootTracker
         if(GemTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gems";
         // Only a negative special-drop type is a currency pile.  A textual
         // fallback alone is not enough: unidentified item records can also be
-        // surfaced as "Special drop (...)" and must remain unclassified.
+        // surfaced as an unqualified "Special drop" and must remain unclassified.
         if(item.TypeId<0 && text.Contains("special drop",StringComparison.OrdinalIgnoreCase))return "Gold";
         if(GoldTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gold";
         return null;
     }
 
-    /// <summary>Returns the currency represented by a drop. The displayed amount is preferred, with the encoded id as a fallback.</summary>
+    /// <summary>Returns the currency represented by a drop. The ground-pile quantity is authoritative when present; textual amounts are only a fallback for explicitly named currency records.</summary>
     public static long GoldAmountFor(GroundItem item)
     {
+        if(item.Quantity>0 && item.Quantity<=MaximumPileQuantity)return item.Quantity;
         string text=$"{item.Name} {item.Description}";
-        Match special=SpecialDropAmountPattern.Match(text);
-        if(special.Success && long.TryParse(special.Groups["amount"].Value.Replace(",",""),NumberStyles.None,CultureInfo.InvariantCulture,out long displayedAmount) && displayedAmount>0)
-            return displayedAmount;
-        if(item.TypeId<0)
-        {
-            uint encoded=unchecked((uint)item.TypeId)&0x7fffffffu;
-            if(encoded>0)return encoded;
-        }
         Match named=GoldAmountPattern.Match(text);
-        string raw=special.Success?special.Groups["amount"].Value:
-            named.Success?(named.Groups["before"].Success?named.Groups["before"].Value:named.Groups["after"].Value):"";
+        string raw=named.Success?(named.Groups["before"].Success?named.Groups["before"].Value:named.Groups["after"].Value):"";
         return long.TryParse(raw.Replace(",",""),NumberStyles.None,CultureInfo.InvariantCulture,out long amount) && amount>0?amount:1;
     }
 
@@ -145,8 +137,13 @@ public sealed class LootTracker
             DateTime now=DateTime.UtcNow;
             if(pending.Any(k=>k.Source==source && k.Id==target.Id && k.Generation==target.Generation && now-k.SeenUtc<TimeSpan.FromSeconds(5)))return;
             sources[source].Kills++;
-            pending.Add(new PendingKill(source,target.Id,target.Generation,position,now,targetZone));
+            var kill=new PendingKill(source,target.Id,target.Generation,position,now,targetZone);
+            pending.Add(kill);
             PrunePending(now);
+            // A fast auto-pickup can remove a pile before the kill event is
+            // delivered. Match recent observations here as well as in the
+            // normal ground-list poll so those drops are not lost.
+            CreditUnmatchedForKillLocked(kill,now);
         }
     }
 
@@ -181,37 +178,65 @@ public sealed class LootTracker
                 {
                     known.Add(key);unmatched.Remove(key);continue;
                 }
-                if(!unmatched.TryGetValue(key,out DateTime firstSeen))unmatched[key]=firstSeen=now;
-                PendingKill? match=pending.Where(k=>k.Zone==currentZone && now-k.SeenUtc<=DropAttributionWindow && (item.Position-k.Position).Length<=DropAttributionRadius)
-                    .OrderBy(k=>(item.Position-k.Position).Length).ThenByDescending(k=>k.SeenUtc).FirstOrDefault();
+                if(!unmatched.TryGetValue(key,out UnmatchedDrop? observed))
+                {
+                    observed=new UnmatchedDrop(item,now);
+                    unmatched[key]=observed;
+                }
+                else if(!Equals(observed.Item,item))
+                {
+                    // Keep the original observation time, but retain the
+                    // freshest quantity and position for delayed matching.
+                    unmatched[key]=observed=new UnmatchedDrop(item,observed.FirstSeenUtc);
+                }
+                PendingKill? match=FindMatchLocked(item,currentZone,now);
                 if(match==null)
                 {
-                    if(now-firstSeen>DropAttributionWindow){known.Add(key);unmatched.Remove(key);}
+                    if(now-observed.FirstSeenUtc>DropAttributionWindow){known.Add(key);unmatched.Remove(key);}
                     continue;
                 }
-                string? trackedName=TrackedLootFor(item);
-                string itemName=trackedName ?? (string.IsNullOrWhiteSpace(item.Name)?"Unknown item":item.Name.Trim());
-                SourceState state=sources[match.Source];state.Drops++;
-                state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+1;
-                long amount=trackedName=="Gold"?GoldAmountFor(item):1;
-                if(trackedName!=null)
-                {
-                    trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+amount;
-                }
-                string recentName=trackedName=="Gold"?$"Gold ({amount:N0})":itemName;
-                recent.Insert(0,new LootTrackerDropSummary(match.Source,recentName,item.Position,now));
-                if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
-                known.Add(key);unmatched.Remove(key);
+                CreditDropLocked(key,item,match,now);
             }
             // Keep a short tombstone for a pile that disappears between two
             // reads.  Auto-pickup can remove a pile before the kill record is
             // observed; retaining the identity lets a reappearing pile still
             // be attributed within the same drop window without double count.
-            foreach(LootIdentity key in unmatched.Keys.Where(key=>now-unmatched[key]>DropAttributionWindow).ToArray())
+            foreach(LootIdentity key in unmatched.Keys.Where(key=>now-unmatched[key].FirstSeenUtc>DropAttributionWindow).ToArray())
             {
                 unmatched.Remove(key);known.Add(key);
             }
         }
+    }
+
+    PendingKill? FindMatchLocked(GroundItem item,int currentZone,DateTime now) =>
+        pending.Where(k=>k.Zone==currentZone && now-k.SeenUtc<=DropAttributionWindow && (item.Position-k.Position).Length<=DropAttributionRadius)
+            .OrderBy(k=>(item.Position-k.Position).Length).ThenByDescending(k=>k.SeenUtc).FirstOrDefault();
+
+    void CreditUnmatchedForKillLocked(PendingKill kill,DateTime now)
+    {
+        foreach(var entry in unmatched.ToArray())
+        {
+            UnmatchedDrop observed=entry.Value;
+            if(now-observed.FirstSeenUtc>DropAttributionWindow || (observed.Item.Position-kill.Position).Length>DropAttributionRadius)
+                continue;
+            CreditDropLocked(entry.Key,observed.Item,kill,now);
+        }
+    }
+
+    void CreditDropLocked(LootIdentity key,GroundItem item,PendingKill match,DateTime now)
+    {
+        string? trackedName=TrackedLootFor(item);
+        string itemName=trackedName ?? (string.IsNullOrWhiteSpace(item.Name)?"Unknown item":item.Name.Trim());
+        SourceState state=sources[match.Source];
+        state.Drops++;
+        state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+1;
+        long amount=trackedName=="Gold"?GoldAmountFor(item):1;
+        if(trackedName!=null)trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+amount;
+        string recentName=trackedName=="Gold"?$"Gold ({amount:N0})":itemName;
+        recent.Insert(0,new LootTrackerDropSummary(match.Source,recentName,item.Position,now));
+        if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
+        known.Add(key);
+        unmatched.Remove(key);
     }
 
     public LootTrackerSnapshot Snapshot()
@@ -295,8 +320,9 @@ public sealed class LootTracker
         if(snap.TrackedLoot.Any(item=>item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
         if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0))!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0))!="Mithril")
             throw new Exception("Legacy valuable aliases did not normalize to the corrected labels.");
-        var encodedGold=new GroundItem(12,12,unchecked((int)(0x80000000u|115u)),"Special drop (115)",new(.5,.5),0);
+        var encodedGold=new GroundItem(12,12,unchecked((int)(0x80000000u|115u)),"Special drop",new(.5,.5),0,Quantity:115);
         if(TrackedLootFor(encodedGold)!="Gold" || GoldAmountFor(encodedGold)!=115 ||
+            GoldAmountFor(new GroundItem(18,18,unchecked((int)(0x80000000u|115u)),"Special drop",new(.5,.5),0))!=1 ||
             TrackedLootFor(new GroundItem(13,13,13,"Gold coin",new(.5,.5),0))!="Gold" ||
             GoldAmountFor(new GroundItem(16,16,16,"Gold 1,250",new(.5,.5),0))!=1250 ||
             GoldAmountFor(new GroundItem(17,17,17,"8 gold",new(.5,.5),0))!=8 ||
@@ -306,7 +332,7 @@ public sealed class LootTracker
         var amountTracker=new LootTracker();amountTracker.ObserveDrops([existing],8);amountTracker.RecordKill(mimic,new(0,0),8);amountTracker.ObserveDrops([existing,encodedGold],8);
         if(amountTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
             throw new Exception("Gold amount was not accumulated from the special-drop id.");
-        var baselineGold=new GroundItem(30,30,unchecked((int)(0x80000000u|115u)),"Special drop (115)",new(0,0),0);
+        var baselineGold=new GroundItem(30,30,unchecked((int)(0x80000000u|115u)),"Special drop",new(0,0),0,Quantity:115);
         var dedupeTracker=new LootTracker();
         dedupeTracker.ObserveDrops([baselineGold],8,new(0,0),10);
         dedupeTracker.RecordKill(mimic,new(0,0),8);
@@ -325,16 +351,23 @@ public sealed class LootTracker
         delayedTracker.ObserveDrops([newGold],8,new(0,0),10);
         if(delayedTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
             throw new Exception("A drop seen before its kill was not retried for attribution.");
+        var transientTracker=new LootTracker();
+        transientTracker.ObserveDrops([],8,new(0,0),10);
+        transientTracker.ObserveDrops([newGold],8,new(0,0),10);
+        transientTracker.ObserveDrops([],8,new(0,0),10);
+        transientTracker.RecordKill(mimic,new(0,0),8);
+        if(transientTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
+            throw new Exception("A pile removed before the kill event was not retained for attribution.");
         var radiusTracker=new LootTracker();
         radiusTracker.ObserveDrops([],8,new(0,0),10);
         radiusTracker.RecordKill(mimic,new(0,0),8);
-        radiusTracker.ObserveDrops([new GroundItem(32,32,unchecked((int)(0x80000000u|99u)),"Special drop (99)",new(20,0),0)],8,new(0,0),10);
+        radiusTracker.ObserveDrops([new GroundItem(32,32,unchecked((int)(0x80000000u|99u)),"Special drop",new(20,0),0,Quantity:99)],8,new(0,0),10);
         if(radiusTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
             throw new Exception("A pile outside the saved farming radius was credited.");
         var typeIdentityTracker=new LootTracker();
         typeIdentityTracker.ObserveDrops([new GroundItem(40,40,1,"Existing",new(0,0),0)],8,new(0,0),10);
         typeIdentityTracker.RecordKill(mimic,new(0,0),8);
-        typeIdentityTracker.ObserveDrops([new GroundItem(40,40,unchecked((int)(0x80000000u|77u)),"Special drop (77)",new(0,0),0)],8,new(0,0),10);
+        typeIdentityTracker.ObserveDrops([new GroundItem(40,40,unchecked((int)(0x80000000u|77u)),"Special drop",new(0,0),0,Quantity:77)],8,new(0,0),10);
         if(typeIdentityTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
             throw new Exception("A refreshed pile was double-counted when its item type changed.");
         var idleTracker=new LootTracker();idleTracker.ResetTimer();

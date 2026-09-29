@@ -1,5 +1,18 @@
 # Release notes
 
+## Release1.48
+
+- Corrected gold pile accounting to use the ground record's quantity field.
+  Negative item IDs are now used only to classify a currency pile; their lower
+  bits are no longer reported as a payout amount.
+- Removed the generated amount from the `Special drop` fallback label so an
+  internal type code cannot be mistaken for gold.
+- Retained recently observed piles until the kill event arrives, allowing fast
+  auto-pickup to be attributed even when the pile disappears between reads.
+- Increased tracker sampling to 40 ms in the pickup and active-hunt loops.
+- Validation: .NET 10 build and the offline PoteHunter self-test pass. Live
+  gameplay verification is still recommended for the current client build.
+
 ## Release1.47
 
 - Increased the bounded turn correction for large and medium heading errors so
