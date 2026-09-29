@@ -2719,6 +2719,12 @@ public sealed partial class HunterForm : Form
         (entity.Position-anchor).Length<=Math.Max(activeCompletionBoundary,
             Targeting.CompletionRadius(BaseTargetRadius(entity,options),(double)options.NearbyEnemyRadius,(double)options.MeleeRange));
 
+    bool HoldStationaryAnchorDuringDamage(Options options,Vec position)
+    {
+        if(activeHuntAnchor is not Vec anchor || lockedTarget is not Entity target)return false;
+        return Targeting.ShouldHoldStationaryAnchor(target,options,position,anchor,world.TargetHealth(target.Id));
+    }
+
     void ObserveCombatPressure(Options options,Health playerHealth,Vec position)
     {
         if(options.GroupMode)return;
@@ -2735,6 +2741,16 @@ public sealed partial class HunterForm : Form
                 if(current==null || ambiguous || !encounter.IsEngaged(inferred) || !hp.Known || hp.Dead ||
                     !DefenseWithinBoundary(current,options) || TargetGuardReason(current,hp,position,options)!=null)ReleaseUnstartedDefense(inferred);
             }
+        }
+        if(HoldStationaryAnchorDuringDamage(options,position))
+        {
+            // Fixed hunt assignments should keep swinging at the activation
+            // point instead of taking the generic defensive sidestep. If an
+            // earlier damage response already moved us, RepositionUnderPressure
+            // will route back to the same anchor before combat resumes.
+            defensePending=false;defenseStep=null;movement?.StopApproach();
+            if(damaged)TraceLog.Record("stationary anchor held after incoming damage",new {Position=position,Anchor=activeHuntAnchor,Target=lockedTarget?.Id,HP=playerHealth});
+            return;
         }
         if(damaged && !HasActiveFight())defensePending=true;
         if(HasActiveFight() || !combatPressure.RecentDamage(now))
@@ -2772,6 +2788,41 @@ public sealed partial class HunterForm : Form
         // be selected. Each step stays inside the current completion area.
         ReleaseCombatPickup();Input.HoldMouse(false,false,token);
         var position=world.PlayerPosition();
+        if(!options.GroupMode && lockedTarget is Entity fixedTarget &&
+            Targeting.IsStationaryHuntTargetId(fixedTarget.Id) && (position-anchor).Length>1.5)
+        {
+            // A fixed hunt target may have triggered the generic damage response
+            // during the short window before the encounter roster was marked.
+            // Once outside the activation tolerance, return directly to that
+            // saved point instead of taking another outward defensive step.
+            message="Incoming damage: returning to the saved hunt anchor.";
+            navigation.BeginGoal("return to saved hunt anchor after damage");
+            defenseRepositioning=true;
+            try
+            {
+                await NavigateTo(drive,anchor,anchor,options,token,
+                    boundaryRadius:Math.Max((double)options.HuntRadius,activeCompletionBoundary));
+            }
+            catch(RouteUnavailableException ex)
+            {
+                drive.StopApproach();
+                TraceLog.Record("saved hunt anchor return retry",new {Reason=ex.Message,Position=world.PlayerPosition(),Anchor=anchor,Target=fixedTarget.Id});
+                await Input.Delay(100,token);
+            }
+            catch(MovementBlockedException ex)
+            {
+                drive.StopApproach();
+                TraceLog.Record("saved hunt anchor return blocked",new {Reason=ex.Message,Position=ex.Position,Anchor=anchor,Target=fixedTarget.Id});
+                await Input.Delay(100,token);
+            }
+            finally { defenseRepositioning=false; }
+            if((world.PlayerPosition()-anchor).Length<=1.5)
+            {
+                defensePending=false;defenseStep=null;drive.StopApproach();
+                TraceLog.Record("returned to saved hunt anchor after damage",new {Position=world.PlayerPosition(),Anchor=anchor,Target=fixedTarget.Id});
+            }
+            return;
+        }
         double boundary=(position-anchor).Length>(double)options.HuntRadius ?
             Math.Max((double)options.HuntRadius,activeCompletionBoundary) : (double)options.HuntRadius;
         if(defenseStep is Vec reached && (reached-position).Length<=1){drive.StopApproach();defenseStep=null;}

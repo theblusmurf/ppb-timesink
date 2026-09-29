@@ -87,6 +87,16 @@ public static class Targeting
         (id & 0xffff) is 5971 or 5972 or 5973 or 5974;
     public static bool IsStationaryHuntTarget(Entity entity) =>
         IsStationaryHuntTargetId(entity.Id) && IsKnownUnprefixedMonster(entity.Id,entity.Model);
+    public static bool ShouldHoldStationaryAnchor(Entity? lockedTarget, Options options, Vec position, Vec anchor, Health targetHealth)
+    {
+        // Fixed Mimic/Tribal/Pulkhan/Tower assignments must not trigger the
+        // generic incoming-damage sidestep while the character is still at the
+        // activation point. The damage response can otherwise move the player
+        // away from the saved point before the encounter has been registered.
+        return !options.GroupMode && lockedTarget is Entity target &&
+            IsStationaryHuntTargetId(target.Id) && position.Finite && anchor.Finite &&
+            (position-anchor).Length<=1.5 && !targetHealth.Dead;
+    }
     public static int PriorityRank(Entity entity, bool prioritizeGamekeeper, bool prioritizeBreakables = true) =>
         prioritizeGamekeeper && IsGamekeeper(entity) ? 2 : prioritizeBreakables && entity.PriorityLootObject ? 1 : 0;
     public static double ResponseRadius(double huntRadius,double gamekeeperRadius) => Math.Max(huntRadius,gamekeeperRadius);
@@ -206,6 +216,17 @@ public static class Targeting
             BoundaryStepAllowed(new Vec(26.2,0),new Vec(26.2,0),anchor,26) ||
             BoundaryStepAllowed(player,new Vec(double.NaN,0),anchor,26))
             throw new Exception("The completion movement boundary blocked return or permitted outward movement.");
+
+        var fixedTarget=new Entity(301,0x80001753,"Mimic",new Vec(),0,Model:"MON_mimic.GCMDS");
+        var fixedOptions=new Options { GroupMode=false };
+        if(!ShouldHoldStationaryAnchor(fixedTarget,fixedOptions,new Vec(1,0),anchor,new(40,100)) ||
+            ShouldHoldStationaryAnchor(fixedTarget,fixedOptions,new Vec(1.6,0),anchor,new(40,100)) ||
+            ShouldHoldStationaryAnchor(fixedTarget with { Id=0x80001760 },fixedOptions,new Vec(1,0),anchor,new(40,100)) ||
+            ShouldHoldStationaryAnchor(fixedTarget,fixedOptions,new Vec(1,0),anchor,new(0,100)) ||
+            !ShouldHoldStationaryAnchor(fixedTarget,fixedOptions,new Vec(1,0),anchor,new()))
+            throw new Exception("Fixed-target damage response did not honor the saved anchor guard.");
+        if(ShouldHoldStationaryAnchor(fixedTarget,new Options { GroupMode=true },new Vec(1,0),anchor,new(40,100)))
+            throw new Exception("Group mode incorrectly inherited the stationary anchor damage guard.");
 
         // Incidental enemies in an authorized Gamekeeper fight share that fight's
         // completion area; it must not become a wider fresh-monster search.

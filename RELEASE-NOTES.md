@@ -1,5 +1,16 @@
 # Release notes
 
+## Release1.37
+
+- Prevented incoming-damage recovery from sidestepping fixed Mimic, Tribal,
+  Pulkhan, and Tower assignments while the character is at the saved activation
+  point.
+- If a damage response had already moved a fixed-target fight away from the
+  anchor, the recovery path now routes back to the saved point before resuming
+  target selection and swinging.
+- Added offline checks for stationary-anchor damage handling and bounded return
+  behavior.
+
 ## Release1.36
 
 - Kept the basic swing explicitly held across skill selection, activation,
