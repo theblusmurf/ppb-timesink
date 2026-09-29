@@ -97,7 +97,7 @@ public sealed partial class HunterForm : Form
     readonly TextBox player = new() {ReadOnly=true,PlaceholderText="Waiting for character...",TabStop=false}, filter = new(), skillKeys = new();
     Entity? detectedCharacter,runCharacter;
     long nextCharacterReconnect;
-    readonly NumericUpDown radius = Number(5, 150), melee = Number(.5m, 10, 1), skillSeconds = Number(1, 120);
+    readonly NumericUpDown radius = Number(5, 150), melee = Number(1.5m, 10, 1), skillSeconds = Number(1, 120);
     readonly CheckBox ranged = new() { Text = "Ranged (bow/crossbow)", AutoSize = true };
     readonly CheckBox archerClass = new() { Text = "Archer class", AutoSize = true };
     readonly NumericUpDown lootHold = Number(0, 3000);

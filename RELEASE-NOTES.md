@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.35
+
+- Corrected the melee distance baseline to the client’s verified 1.5-unit
+  melee gate. The UI and settings loader now prevent invalid sub-gate values,
+  and new profiles use 1.5 units.
+- Existing Release1.34 profiles with a 1-unit melee setting are normalized to
+  1.5 units when loaded or saved.
+
 ## Release1.34
 
 - Corrected loot attribution so a new pile is retried when it is seen before

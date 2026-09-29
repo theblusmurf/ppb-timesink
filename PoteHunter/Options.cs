@@ -4,11 +4,14 @@ namespace PoteHunter;
 
 public sealed class Options
 {
+    const decimal MinimumMeleeRange = 1.5m;
     public string Player { get; set; } = ""; // Last detected name; never an identity selector.
     public string Target { get; set; } = "";
     public decimal HuntRadius { get; set; } = 35;
     public bool LeaveAreaWhenEmpty { get; set; }
-    public decimal MeleeRange { get; set; } = 2;
+    // The client melee gate is 1.5 units; keep the default aligned with that
+    // verified range so a fresh profile does not stop short of valid swings.
+    public decimal MeleeRange { get; set; } = 1.5m;
     public bool Ranged { get; set; }
     // Class-8 archer profile. Existing settings remain the generic bow/crossbow profile.
     public bool ArcherClass { get; set; }
@@ -81,11 +84,17 @@ public sealed class Options
     public static string PathName => Path.Combine(AppContext.BaseDirectory, "settings.json");
     public static Options Read()
     {
-        if (File.Exists(PathName)) return JsonSerializer.Deserialize<Options>(File.ReadAllText(PathName)) ?? new();
-        using var defaults = typeof(Options).Assembly.GetManifestResourceStream("PoteHunter.DefaultSettings.json");
-        return defaults == null ? new() : JsonSerializer.Deserialize<Options>(defaults) ?? new();
+        Options options;
+        if (File.Exists(PathName)) options=JsonSerializer.Deserialize<Options>(File.ReadAllText(PathName)) ?? new();
+        else
+        {
+            using var defaults = typeof(Options).Assembly.GetManifestResourceStream("PoteHunter.DefaultSettings.json");
+            options=defaults == null ? new() : JsonSerializer.Deserialize<Options>(defaults) ?? new();
+        }
+        if(options.MeleeRange<MinimumMeleeRange)options.MeleeRange=MinimumMeleeRange;
+        return options;
     }
-    public void Save() { File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
+    public void Save() { if(MeleeRange<MinimumMeleeRange)MeleeRange=MinimumMeleeRange; File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }
 }
 
 
