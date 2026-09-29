@@ -1,5 +1,11 @@
 # Release notes
 
+## Release1.42
+
+- Saved route profiles now honor an explicit zero-second revival delay instead
+  of falling back to the global delay, while legacy routes without profile
+  metadata continue to use the current hunt settings.
+
 ## Release1.41
 
 - Fixed the route-selection startup ordering so alternative-route navigation

@@ -1539,13 +1539,16 @@ public sealed partial class HunterForm : Form
             bool RouteCompatible(SavedNavigationRoute route) =>
                 (string.IsNullOrWhiteSpace(route.Character) || string.Equals(route.Character,runCharacter.Name,StringComparison.OrdinalIgnoreCase)) &&
                 (route.Height<=0 || Math.Abs(route.Height-runCharacter.Height)<2);
+            bool RouteHasProfile(SavedNavigationRoute route) =>
+                !string.IsNullOrWhiteSpace(route.Character) || route.Height>0 || route.HuntRadius>0 ||
+                route.RevivalDelaySeconds>0 || !route.FarmOnArrival || route.RepairAfterDeath;
             SavedNavigationRoute? activeRouteProfile=null;
             int activeRevivalDelaySeconds=Math.Clamp(o.RevivalDelaySeconds,0,600);
             bool activeFarmOnArrival=o.FarmOnArrival;
             void ApplyRouteProfile(SavedNavigationRoute? route)
             {
                 activeRouteProfile=route;
-                activeRevivalDelaySeconds=Math.Clamp(route is {RevivalDelaySeconds:>0} ? route.RevivalDelaySeconds : o.RevivalDelaySeconds,0,600);
+                activeRevivalDelaySeconds=Math.Clamp(route is not null && RouteHasProfile(route) ? route.RevivalDelaySeconds : o.RevivalDelaySeconds,0,600);
                 activeFarmOnArrival=route?.FarmOnArrival ?? o.FarmOnArrival;
             }
             NavigationRouteProfile CurrentRouteProfile() => new(
