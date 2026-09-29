@@ -1,5 +1,17 @@
 # Release notes
 
+## Release1.32
+
+- Replaced periodic loot snapshots with event snapshots for the tracker log.
+- The app now appends an Excel-compatible `loot-session-log.csv` row before
+  stopping on character death and before either loot reset control clears or
+  restarts its counters.
+- Each row preserves the session totals, rate-window values, and Mimic,
+  Tribal, Pulkhan, and Tower kill/drop counts so the record can be reviewed
+  after a run without interrupting the live overlay.
+- Validation: release build and offline self-test, including append and reset
+  event coverage.
+
 ## Release1.31
 
 - Added an application-session timer to the loot tracker and displayed elapsed

@@ -112,6 +112,7 @@ static class SelfTests
             CombatPickup.SelfTest();
             NearbyLootPickup.SelfTest();
             LootTracker.SelfTest();
+            LootTrackerLog.SelfTest();
             Input.CheckNearbyLootInput().GetAwaiter().GetResult();
             var pickupDefault = JsonSerializer.Deserialize<Options>("{}");
             var pickupRoundTrip = JsonSerializer.Deserialize<Options>(JsonSerializer.Serialize(new Options { AutoPickupNearbyLoot = false, NearbyEnemyRadius = 7 }));

@@ -75,8 +75,8 @@ public sealed partial class HunterForm
         navigationOverlaySize.ValueChanged += (_, _) => OverlaySettingsChanged();
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
-        resetLootTracker.Click += (_, _) => { lootTracker.Reset(); UpdateNavigationOverlay(); };
-        resetLootTimer.Click += (_, _) => { lootTracker.ResetTimer(); message = "Loot earning timer reset."; UpdateNavigationOverlay(); };
+        resetLootTracker.Click += (_, _) => { SaveLootLog("Reset loot"); lootTracker.Reset(); message = "Loot totals reset."; UpdateNavigationOverlay(); };
+        resetLootTimer.Click += (_, _) => { SaveLootLog("Reset timer"); lootTracker.ResetTimer(); message = "Loot earning timer reset."; UpdateNavigationOverlay(); };
     }
 
     void OverlaySettingsChanged()

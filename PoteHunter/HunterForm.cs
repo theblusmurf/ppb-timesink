@@ -22,6 +22,7 @@ public sealed partial class HunterForm : Form
     readonly Navigation navigation = new();
     readonly ChestCatalog chestCatalog = new();
     readonly LootTracker lootTracker = new();
+    readonly LootTrackerLog lootTrackerLog = new(System.IO.Path.Combine(AppContext.BaseDirectory, "loot-session-log.csv"));
     readonly Dictionary<(int Zone,uint Id),long> chestGuideCooldown = new();
     readonly ZoneMapBackground zoneMapBackground = new();
     readonly TabPage groupPage=new("Group");
@@ -531,7 +532,11 @@ public sealed partial class HunterForm : Form
             int level = world.PlayerLevel();
             if(working && activeGuardOptions?.GroupMode==true)RefreshGroupDecision();
             if(working && activeGuardOptions is {GroupMode:false} combatOptions) ObserveEncounter(combatOptions,health,pos,level);
-            if (working && health.GetValueOrDefault(self.Id).Dead) Stop("Character died; stopped.");
+            if (working && health.GetValueOrDefault(self.Id).Dead)
+            {
+                SaveLootLog("Death");
+                Stop("Character died; stopped.");
+            }
             var selfHealth = health.GetValueOrDefault(self.Id);
             var selfMana = world.ReadMana();
             int chestCount = entities.Count(e => Targeting.IsChest(e) && !health.GetValueOrDefault(e.Id).Dead);
@@ -715,6 +720,11 @@ public sealed partial class HunterForm : Form
         rangedPull.Reset(); rangedTagging = false;
         Input.PickupHoldProvider=null;nearbyPickupSnapshot.Clear();nearbyPickupCount=0;
         cancel?.Cancel(); ReleaseCombatPickup(); Input.Release(); movement = null; lockedTarget = null; message = reason;
+    }
+    void SaveLootLog(string reason)
+    {
+        if (!lootTrackerLog.TrySave(lootTracker.Snapshot(), reason))
+            message = $"Loot event could not be saved ({reason}).";
     }
     void PaintNavigation(object? sender,PaintEventArgs e)
     {
