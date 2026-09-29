@@ -161,7 +161,11 @@ public static class Input
     }
     public static async Task CastSkill(SkillUseKind use,int chargeMilliseconds,CancellationToken token,Action? onInputStarted=null)
     {
-        int duration=use switch
+        // Older clients do not expose a use-kind for ordinary active skills.
+        // Treat that missing metadata as the short instance activation rather
+        // than throwing after the basic attack has already been interrupted.
+        SkillUseKind activation=use==SkillUseKind.Unknown ? SkillUseKind.Instance : use;
+        int duration=activation switch
         {
             SkillUseKind.Instance or SkillUseKind.Chant=>70,
             SkillUseKind.Cast when chargeMilliseconds is >=50 and <=10000=>chargeMilliseconds,
@@ -198,9 +202,11 @@ public static class Input
             try {await CastSkill(SkillUseKind.Instance,1000,default,()=>started++);} catch(InvalidOperationException){rejectedTag=true;}
             if(!rejectedTag || started!=1)throw new Exception("Rejected ranged input counted a tag.");
             selfTestSink=packets.Add;
-            bool rejected=false;try{await CastSkill(SkillUseKind.Unknown,1000,default);}catch(InvalidOperationException){rejected=true;}
-            if(!rejected||packets.Count!=8)throw new Exception("Unknown skill type sent input.");
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-type-input-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,Checks=new[]{"instance uses short click despite charge setting","chant uses short click","cast uses charge","one mouse down/up per activation","no party F-key inputs","unknown types rejected"}}));
+            int unknownBefore=packets.Count;
+            await CastSkill(SkillUseKind.Unknown,1000,default);
+            if(packets.Count!=unknownBefore+2 || packets[^2].Value.Mouse.Flags!=8 || packets[^1].Value.Mouse.Flags!=16)
+                throw new Exception("Unknown skill type did not use the safe short activation.");
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-type-input-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,Checks=new[]{"instance uses short click despite charge setting","chant uses short click","cast uses charge","one mouse down/up per activation","no party F-key inputs","unknown skill metadata uses safe short activation"}}));
         }
         finally{Preflight=null;Release();selfTestSink=null;Allowed=savedAllowed;Preflight=savedPreflight;}
     }
@@ -563,4 +569,3 @@ public sealed partial class Movement
         await Input.Delay(25, token);
     }
 }
-

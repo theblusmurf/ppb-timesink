@@ -1,5 +1,23 @@
 # Release notes
 
+## Release1.29
+
+- Kept the basic attack armed through every offensive skill exit, including a
+  health/mana re-check that declines a cast and the short fallback release used
+  by clients that reject a skill while swinging.
+- Treated missing skill-use metadata as a safe short activation and skipped
+  unsupported passive/item/set actions instead of letting one slot exception
+  stop the combat loop.
+- Limited standard combat skill casts to an engaged pack of at least five live
+  targets inside the configured nearby-enemy radius, with the highest target
+  health below 80 percent.
+- Added a shared five-second delay between successful combat skill casts so a
+  skill transition cannot starve the continuous swing or be bypassed by a
+  target switch. Ranged Firing tags, healing, and area-buff support keep their
+  existing independent timing.
+- Added offline checks for the five-target/80-percent gate and attack re-arm
+  behavior.
+
 ## Release1.28
 
 - Changed the Gold total from a drop count to the actual currency amount.
@@ -175,4 +193,3 @@
 Windows releases include a **Patch notes** section generated from the commits since the previous release tag. Each release also lists the packaged ZIP and SHA256 sidecar, followed by the current feature and validation notes.
 
 Keep commit subjects specific and user-facing so the generated notes explain what changed without requiring a separate manual edit for every build.
-

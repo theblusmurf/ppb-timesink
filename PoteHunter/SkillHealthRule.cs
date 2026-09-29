@@ -55,6 +55,33 @@ public sealed partial class HunterForm
     }
     bool HealthSkillAllowed(HotbarSlot slot,Options options)=>SkillHealthRule.Allows(slot,SkillConditionHealth(options),options) && ManaSkillAllowed(slot,options);
 
+    SkillGroupStatus CombatSkillGroup(Entity current,Health currentHealth,Vec position,Options options)
+    {
+        var health=new Dictionary<uint,Health>(world.HealthSnapshot());
+        if(currentHealth.Known)health[current.Id]=currentHealth;
+        return SkillGroupGate.Evaluate(encounter.EngagedCandidates,current,health,position,
+            Math.Max(0,(double)options.NearbyEnemyRadius));
+    }
+
+    void ResumeBasicAttackAfterSkill(Entity target,Options options,CancellationToken token,string mode)
+    {
+        // A failed re-check or the fallback release below must never leave the
+        // left button up.  The next combat pass can still decide to release it
+        // for movement, but a skill transition itself must return to the swing.
+        if(token.IsCancellationRequested || !Input.Allowed() || Input.BasicAttackHeld)return;
+        try
+        {
+            Input.HoldMouse(false,true,token);
+            TraceLog.Record("basic attack rearmed after skill",new{target.Id,target.DisplayName,Mode=mode});
+        }
+        catch(InvalidOperationException ex)
+        {
+            // Preserve the combat loop's original exception/cleanup path. A
+            // later pass will retry the re-arm once the input guard is usable.
+            TraceLog.Record("basic attack rearm deferred",new{target.Id,target.DisplayName,Mode=mode,Error=ex.Message});
+        }
+    }
+
     async Task<bool> CastHealthCheckedSkill(HotbarSlot expected,Options options,CancellationToken token)
     {
         // Recheck after selecting a key and before every activation/retry. A

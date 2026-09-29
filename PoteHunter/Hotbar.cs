@@ -1,4 +1,4 @@
-namespace PoteHunter;
+﻿namespace PoteHunter;
 
 public enum SlotKind { Empty, Skill, Item, Unknown }
 public enum SkillUseKind { Unknown=-1,None=0,Passive=1,Instance=2,Cast=3,Chant=4,Enchant=5,Item=6,Set=7,Action=8 }
@@ -17,6 +17,9 @@ public record HotbarSnapshot(int PageBase, IReadOnlyList<HotbarSlot> Slots)
 }
 public static class SkillRotation
 {
+    public static bool IsRotatableSkill(HotbarSlot slot)=>slot.Kind==SlotKind.Skill &&
+        slot.SkillUse is SkillUseKind.Unknown or SkillUseKind.Instance or SkillUseKind.Cast or SkillUseKind.Chant;
+
     public static long RetryDelayMilliseconds(HotbarSlot slot,bool cooldownStarted,decimal configuredSeconds)
     {
         ArgumentNullException.ThrowIfNull(slot);
@@ -37,7 +40,7 @@ public static class SkillRotation
         {
             int index = (cursor + offset) % keys.Length;
             var slot = bar.Slot(keys[index]);
-            if (slot.Kind == SlotKind.Skill && slot.Ready && (eligible==null || eligible(slot)) &&
+            if (IsRotatableSkill(slot) && slot.Ready && (eligible==null || eligible(slot)) &&
                 (!retryAt.TryGetValue(keys[index], out long next) || now >= next)) return index;
         }
         return -1;
@@ -96,6 +99,8 @@ public static class SkillRotation
             "a no-cooldown skill no longer honors the user's configured retry interval.");
         Require(IsRangedSkill("Firing Lv.1") && IsRangedSkill("firing") && !IsRangedSkill("Meditation Lv.2") && !IsRangedSkill(""),
             "ranged skill name matching failed.");
+        Require(Choose("1",0,new HotbarSnapshot(0,[firing with {SkillUse=SkillUseKind.Enchant}]),new Dictionary<char,long>(),1000)==-1,
+            "unsupported skill activation kinds must be skipped without interrupting basic attacks.");
         Require(ChooseRanged("12",ready,new Dictionary<char,long>(),1000)==0 &&
             ChooseRanged("12",ready,new Dictionary<char,long>{['1']=2000},1000)==-1 &&
             ChooseRanged("12",cooling,new Dictionary<char,long>(),1000)==-1 &&

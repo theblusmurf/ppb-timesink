@@ -1476,6 +1476,11 @@ public sealed partial class HunterForm : Form
              TraceLog.Record("hunt started", new { Anchor = activationLocation, ActivationLocation = activationLocation, o.HuntRadius,o.LeaveAreaWhenEmpty,o.Player, o.Target, o.SkillKeys, o.LootHoldMs, PriorityLootObjects = true, o.AntiKillSteal, o.OtherPlayerRadius, o.AvoidNames });
             var skillDue = o.SkillKeys.ToDictionary(c => c, _ => 0L);
             int skillCursor = 0; bool gamekeeperExcursion=false;
+            // Offensive combat skills are deliberately infrequent.  A cast is
+            // permitted only for a wounded five-target pack; this timer is
+            // shared across target switches so a retarget cannot bypass the
+            // five-second spacing requirement.
+            long nextCombatSkillAt=0;
             double responseRadius=Targeting.ResponseRadius((double)o.HuntRadius,(double)o.GamekeeperResponseRadius);
              bool gamekeeperReturnPending=false;
              bool gamekeeperDefeated=false;
@@ -2161,7 +2166,9 @@ public sealed partial class HunterForm : Form
                                 TraceLog.Record("skill slots detected",new{Keys=detected,Mode="stationary"});
                             }
                         }
-                        int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 ?
+                        var stationarySkillGroup=CombatSkillGroup(current,hp,pos,o);
+                        bool stationarySkillGate=stationarySkillGroup.Ready && stationaryNow>=nextCombatSkillAt;
+                        int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 && stationarySkillGate ?
                             SkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
                                 slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o)) : -1;
                         if(stationaryReadyIndex>=0)
@@ -2183,31 +2190,40 @@ public sealed partial class HunterForm : Form
                                     continue;
                                 }
                             }
-                            TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary"});
-                            await Input.Key((Keys)key,50,token);
-                            await Input.Delay(80,token);
-                            if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                            await Input.Delay(150,token);
-                            var after=CheckedHotbar().Slot(key);
-                            bool fallbackRelease=false;
-                            if(slot.HasCooldown && after.Ready)
+                            try
                             {
-                                // If the client ignored the skill while the
-                                // left button was held, retry once with a short
-                                // release, then restore the continuous swing.
-                                fallbackRelease=true;
-                                Input.HoldMouse(false,false,token);
-                                await Input.Delay(35,token);
+                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,NextSkillAt=nextCombatSkillAt});
+                                await Input.Key((Keys)key,50,token);
+                                await Input.Delay(80,token);
                                 if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                Input.HoldMouse(false,true,token);
-                                stationaryAttackHeldAt=Environment.TickCount64;
-                                await Input.Delay(100,token);
-                                after=CheckedHotbar().Slot(key);
+                                nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                                await Input.Delay(150,token);
+                                var after=CheckedHotbar().Slot(key);
+                                bool fallbackRelease=false;
+                                if(slot.HasCooldown && after.Ready)
+                                {
+                                    // If the client ignored the skill while the
+                                    // left button was held, retry once with a short
+                                    // release, then restore the continuous swing.
+                                    fallbackRelease=true;
+                                    Input.HoldMouse(false,false,token);
+                                    await Input.Delay(35,token);
+                                    if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                                    nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                                    Input.HoldMouse(false,true,token);
+                                    stationaryAttackHeldAt=Environment.TickCount64;
+                                    await Input.Delay(100,token);
+                                    after=CheckedHotbar().Slot(key);
+                                }
+                                bool cooldownStarted=after.RemainingCooldown>0 || after.Locked;
+                                TraceLog.Record("skill cooldown observed",new{Key=key.ToString(),after.Name,Remaining=after.RemainingCooldown,after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,Mode="stationary"});
+                                skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
+                                skillCursor=(stationaryReadyIndex+1)%Math.Max(1,o.SkillKeys.Length);
                             }
-                            bool cooldownStarted=after.RemainingCooldown>0 || after.Locked;
-                            TraceLog.Record("skill cooldown observed",new{Key=key.ToString(),after.Name,Remaining=after.RemainingCooldown,after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,Mode="stationary"});
-                            skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
-                            skillCursor=(stationaryReadyIndex+1)%Math.Max(1,o.SkillKeys.Length);
+                            finally
+                            {
+                                ResumeBasicAttackAfterSkill(current,o,token,"stationary");
+                            }
                         }
                         else
                         {
@@ -2282,7 +2298,9 @@ public sealed partial class HunterForm : Form
                             TraceLog.Record("skill slots detected",new {Keys=detected});
                         }
                     }
-                    int readyIndex = !current.PriorityLootObject && now - combatStart >= 1200 ? SkillRotation.Choose(o.SkillKeys,
+                    var combatSkillGroup=CombatSkillGroup(current,hp,pos,o);
+                    bool combatSkillGate=combatSkillGroup.Ready && now>=nextCombatSkillAt;
+                    int readyIndex = !current.PriorityLootObject && now - combatStart >= 1200 && combatSkillGate ? SkillRotation.Choose(o.SkillKeys,
                         skillCursor,bar,skillDue,now,slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o)) : -1;
                     if (readyIndex >= 0)
                     {
@@ -2298,22 +2316,33 @@ public sealed partial class HunterForm : Form
                                 target=skillTarget; lockedTarget=skillTarget; Input.HoldMouse(false,false,token); await Input.Delay(45,token); continue;
                             }
                         }
-                        TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown });
-                        // Keep the basic combo held while the skill is selected and right-clicked.
-                        await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue; await Input.Delay(150, token);
-                        var after = CheckedHotbar().Slot(key);
-                        bool fallbackRelease = false;
-                        if (slot.HasCooldown && after.Ready)
+                        try
                         {
-                            // Some skills cannot start during a held basic attack. Retry once with a short release.
-                            fallbackRelease = true;
-                            Input.HoldMouse(false, false, token); await Input.Delay(35, token); if(!await CastHealthCheckedSkill(slot,o,token))continue; Input.HoldMouse(false, true, token); await Input.Delay(100, token);
-                            after = CheckedHotbar().Slot(key);
+                            TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, NextSkillAt=nextCombatSkillAt });
+                            // Keep the basic combo held while the skill is selected and right-clicked.
+                            await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                            nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                            await Input.Delay(150, token);
+                            var after = CheckedHotbar().Slot(key);
+                            bool fallbackRelease = false;
+                            if (slot.HasCooldown && after.Ready)
+                            {
+                                // Some skills cannot start during a held basic attack. Retry once with a short release.
+                                fallbackRelease = true;
+                                Input.HoldMouse(false, false, token); await Input.Delay(35, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                                nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                                Input.HoldMouse(false, true, token); await Input.Delay(100, token);
+                                after = CheckedHotbar().Slot(key);
+                            }
+                            bool cooldownStarted = after.RemainingCooldown > 0 || after.Locked;
+                            TraceLog.Record("skill cooldown observed", new { Key = key.ToString(), after.Name, Remaining = after.RemainingCooldown, after.Locked, FallbackRelease = fallbackRelease, CooldownStarted = cooldownStarted });
+                            skillDue[key] = Environment.TickCount64 + SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
+                            skillCursor = (readyIndex + 1) % o.SkillKeys.Length;
                         }
-                        bool cooldownStarted = after.RemainingCooldown > 0 || after.Locked;
-                        TraceLog.Record("skill cooldown observed", new { Key = key.ToString(), after.Name, Remaining = after.RemainingCooldown, after.Locked, FallbackRelease = fallbackRelease, CooldownStarted = cooldownStarted });
-                        skillDue[key] = Environment.TickCount64 + SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
-                        skillCursor = (readyIndex + 1) % o.SkillKeys.Length;
+                        finally
+                        {
+                            ResumeBasicAttackAfterSkill(current,o,token,"combat");
+                        }
                     }
                     else
                     {

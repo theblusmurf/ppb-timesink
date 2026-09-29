@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace PoteHunter;
 
@@ -29,6 +29,7 @@ static class SelfTests
             PauseRecoveryChecks.Run();
             TurnResponse.SelfTest();
             SkillRotation.RetrySelfTest();
+            SkillGroupGate.SelfTest();
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "pause-recovery-checks.json"), JsonSerializer.Serialize(new
             {
                 Passed = true,
