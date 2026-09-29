@@ -53,7 +53,10 @@ public sealed class LootTracker
         public readonly Dictionary<string,int> Items=new(StringComparer.OrdinalIgnoreCase);
     }
     sealed record PendingKill(string Source,uint Id,uint Generation,Vec Position,DateTime SeenUtc,int Zone);
-    readonly record struct LootIdentity(int Zone,uint KeyA,uint KeyB,int TypeId);
+    // KeyA/KeyB identify the ground-pile object.  TypeId is the pile's current
+    // item value and can change while the same pile is being refreshed (gold
+    // piles are the common example), so it must not make a second drop.
+    readonly record struct LootIdentity(int Zone,uint KeyA,uint KeyB);
 
     public static string? SourceFor(Entity entity) => (entity.Id & 0xffff) switch
     {
@@ -73,7 +76,11 @@ public sealed class LootTracker
         if(text.Contains("iternium",StringComparison.OrdinalIgnoreCase))return "Iternium";
         if(text.Contains("fehu",StringComparison.OrdinalIgnoreCase))return "Fehu";
         if(GemTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gems";
-        if(text.Contains("special drop",StringComparison.OrdinalIgnoreCase) || GoldTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gold";
+        // Only a negative special-drop type is a currency pile.  A textual
+        // fallback alone is not enough: unidentified item records can also be
+        // surfaced as "Special drop (...)" and must remain unclassified.
+        if(item.TypeId<0 && text.Contains("special drop",StringComparison.OrdinalIgnoreCase))return "Gold";
+        if(GoldTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gold";
         return null;
     }
 
@@ -153,7 +160,7 @@ public sealed class LootTracker
         foreach(var item in drops)
         {
             if(!item.Position.Finite)continue;
-            current.TryAdd(new LootIdentity(currentZone,item.KeyA,item.KeyB,item.TypeId),item);
+            current.TryAdd(new LootIdentity(currentZone,item.KeyA,item.KeyB),item);
         }
         lock(gate)
         {
@@ -182,20 +189,28 @@ public sealed class LootTracker
                     if(now-firstSeen>DropAttributionWindow){known.Add(key);unmatched.Remove(key);}
                     continue;
                 }
-                string itemName=string.IsNullOrWhiteSpace(item.Name)?"Unknown item":item.Name.Trim();
+                string? trackedName=TrackedLootFor(item);
+                string itemName=trackedName ?? (string.IsNullOrWhiteSpace(item.Name)?"Unknown item":item.Name.Trim());
                 SourceState state=sources[match.Source];state.Drops++;
                 state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+1;
-                string? trackedName=TrackedLootFor(item);
+                long amount=trackedName=="Gold"?GoldAmountFor(item):1;
                 if(trackedName!=null)
                 {
-                    long amount=trackedName=="Gold"?GoldAmountFor(item):1;
                     trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+amount;
                 }
-                recent.Insert(0,new LootTrackerDropSummary(match.Source,itemName,item.Position,now));
+                string recentName=trackedName=="Gold"?$"Gold ({amount:N0})":itemName;
+                recent.Insert(0,new LootTrackerDropSummary(match.Source,recentName,item.Position,now));
                 if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
                 known.Add(key);unmatched.Remove(key);
             }
-            foreach(LootIdentity key in unmatched.Keys.Where(key=>!current.ContainsKey(key)).ToArray())unmatched.Remove(key);
+            // Keep a short tombstone for a pile that disappears between two
+            // reads.  Auto-pickup can remove a pile before the kill record is
+            // observed; retaining the identity lets a reappearing pile still
+            // be attributed within the same drop window without double count.
+            foreach(LootIdentity key in unmatched.Keys.Where(key=>now-unmatched[key]>DropAttributionWindow).ToArray())
+            {
+                unmatched.Remove(key);known.Add(key);
+            }
         }
     }
 
@@ -320,8 +335,8 @@ public sealed class LootTracker
         typeIdentityTracker.ObserveDrops([new GroundItem(40,40,1,"Existing",new(0,0),0)],8,new(0,0),10);
         typeIdentityTracker.RecordKill(mimic,new(0,0),8);
         typeIdentityTracker.ObserveDrops([new GroundItem(40,40,unchecked((int)(0x80000000u|77u)),"Special drop (77)",new(0,0),0)],8,new(0,0),10);
-        if(typeIdentityTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=77)
-            throw new Exception("A changed item type was incorrectly treated as the old pile.");
+        if(typeIdentityTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
+            throw new Exception("A refreshed pile was double-counted when its item type changed.");
         var idleTracker=new LootTracker();idleTracker.ResetTimer();
         if(idleTracker.Snapshot().RateElapsed!=TimeSpan.Zero)
             throw new Exception("Idle time was included in the active earning window.");

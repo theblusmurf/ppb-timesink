@@ -111,6 +111,7 @@ public sealed partial class HunterForm : Form
     List<GroundItem> nearbyPickupSnapshot = new();
     int nearbyPickupCount;
     long nextNearbyPickupRead;
+    long nextLootTrackerRead;
     readonly CheckBox healerMode = new() {Text="Healer mode",AutoSize=true};
     readonly TableLayoutPanel supportSettings=new(){Dock=DockStyle.Top,AutoSize=true,ColumnCount=4,Padding=new Padding(8)};
     readonly TabPage supportPage=new("Healer / Buffs"){AutoScroll=true};
@@ -1172,8 +1173,15 @@ public sealed partial class HunterForm : Form
 
     void StartNearbyPickup(Options options)
     {
-        nearbyPickupSnapshot.Clear();nearbyPickupCount=0;nextNearbyPickupRead=0;
+        nearbyPickupSnapshot.Clear();nearbyPickupCount=0;nextNearbyPickupRead=0;nextLootTrackerRead=0;
         Input.PickupHoldProvider=options.AutoPickupNearbyLoot ? WantsNearbyPickup : null;
+    }
+
+    void ObserveLootTrackerDrops(Options options,IEnumerable<GroundItem> drops,Vec? center=null,double? farmingRadius=null)
+    {
+        Vec? lootCenter=center ?? (working?activeHuntAnchor:null);
+        double? lootRadius=farmingRadius ?? (working?(double?)(activeGuardOptions?.HuntRadius ?? options.HuntRadius):null);
+        lootTracker.ObserveDrops(drops,runZone ?? navigationZone,lootCenter,lootRadius);
     }
 
     bool WantsNearbyPickup()
@@ -1193,7 +1201,9 @@ public sealed partial class HunterForm : Form
         long now=Environment.TickCount64;
         if(now>=nextNearbyPickupRead)
         {
-            nearbyPickupSnapshot=world.Loot();nextNearbyPickupRead=now+100;
+            nearbyPickupSnapshot=world.Loot();
+            ObserveLootTrackerDrops(options,nearbyPickupSnapshot);
+            nextNearbyPickupRead=now+100;
         }
         var decision=NearbyLootPickup.Evaluate(self.Position,(double)options.NearbyEnemyRadius,nearbyPickupSnapshot);
         if(decision.NearbyCount!=nearbyPickupCount)
@@ -2033,6 +2043,11 @@ public sealed partial class HunterForm : Form
                 entities = world.Poll();
                 if (TryGreetNearbyPlayer(o, pos, entities, guardSelfId)) { await Input.Delay(250, token); continue; }
                 long now = Environment.TickCount64;
+                if(now>=nextLootTrackerRead)
+                {
+                    nextLootTrackerRead=now+100;
+                    ObserveLootTrackerDrops(o,world.Loot());
+                }
                 int level = world.PlayerLevel();
                 RefreshGuardScene();
                 var health = world.HealthSnapshot();
@@ -3127,10 +3142,16 @@ public sealed partial class HunterForm : Form
         if(deathRecoveryRequested)return;
         double lootRadius=options.LeaveAreaWhenEmpty && !options.GroupMode && completionReturnPending && encounter.Active ? activeCompletionBoundary : (double)options.HuntRadius;
         bool EligibleDrop(GroundItem i) => (!options.AntiKillSteal || !existingDrops.Contains((i.KeyA,i.KeyB))) && (i.Position-deathPosition).Length<=5 && (i.Position-anchor).Length<=lootRadius;
+        List<GroundItem> ReadDrops()
+        {
+            var snapshot=world.Loot();
+            ObserveLootTrackerDrops(options,snapshot,anchor,lootRadius);
+            return snapshot;
+        }
         await Input.Delay(250, token);
-        var drops = world.Loot().Where(EligibleDrop).ToList();
+        var drops = ReadDrops().Where(EligibleDrop).ToList();
         long waitUntil = Environment.TickCount64 + (priorityObject ? 1500 : 350);
-        while (drops.Count == 0 && Environment.TickCount64 < waitUntil) { await Input.Delay((int)Math.Min(100, Math.Max(1, waitUntil-Environment.TickCount64)), token); drops = world.Loot().Where(EligibleDrop).ToList(); }
+        while (drops.Count == 0 && Environment.TickCount64 < waitUntil) { await Input.Delay((int)Math.Min(100, Math.Max(1, waitUntil-Environment.TickCount64)), token); drops = ReadDrops().Where(EligibleDrop).ToList(); }
         if (drops.Count == 0) { TraceLog.Record("no nearby drops", new { Position = deathPosition }); return; }
         for (int attempt = 0; attempt < 3 && drops.Count > 0; attempt++)
         {
@@ -3151,13 +3172,13 @@ public sealed partial class HunterForm : Form
                 await NavigateTo(drive,item.Position,anchor,options,token,boundaryRadius:lootRadius);
             }
             drive.StopApproach(); await Input.Delay(100, token);
-            var before = world.Loot().Where(i => (i.Position-world.PlayerPosition()).Length <= 3).ToList();
+            var before = ReadDrops().Where(i => (i.Position-world.PlayerPosition()).Length <= 3).ToList();
             if (options.AntiKillSteal && before.Any(i=>existingDrops.Contains((i.KeyA,i.KeyB)))) throw new TargetProtectionException("Pre-existing drops are inside pickup range");
             if (before.Count == 0) break;
             message = $"Picking up {before.Count} nearby drop(s) Â· holding E";
             TraceLog.Record("loot input", new { Items = before.Select(i => new { i.Name, i.KeyA, i.KeyB }), HoldMs = pickupHoldMs });
             await Input.Key(Keys.E, pickupHoldMs, token); await Input.Delay(200, token);
-            var after = world.Loot();
+            var after = ReadDrops();
             int removed = before.Count(i => !after.Any(a => a.KeyA == i.KeyA && a.KeyB == i.KeyB));
             TraceLog.Record("loot result", new { Removed = removed, Before = before.Count, Player = world.PlayerPosition() });
             drops = after.Where(EligibleDrop).ToList();
@@ -3489,7 +3510,6 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
-
 
 
 

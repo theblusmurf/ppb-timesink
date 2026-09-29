@@ -1,5 +1,18 @@
 # Release notes
 
+## Release1.46
+
+- Sampled ground loot from the 100 ms pickup loop and the active hunt loop,
+  rather than relying only on the 200 ms UI refresh. Short-lived piles are now
+  visible to the tracker before auto-pickup removes them.
+- KeyA/KeyB now identify a ground pile across type and amount refreshes, which
+  prevents one pile from being counted twice when its client record changes.
+- Restricted the negative-ID currency fallback to actual special-drop records,
+  normalized source and recent-drop labels to Silvin, Mithril, Iternium, Fehu,
+  Gold, and Gems, and show the detected gold amount in recent-drop entries.
+- Added regression coverage for refreshed pile records and normalized tracker
+  output.
+
 ## Release1.45
 
 - Fixed fixed-target damage recovery after a stop/restart. Mimic, Tribal,
@@ -373,4 +386,3 @@
 Windows releases include a **Patch notes** section generated from the commits since the previous release tag. Each release also lists the packaged ZIP and SHA256 sidecar, followed by the current feature and validation notes.
 
 Keep commit subjects specific and user-facing so the generated notes explain what changed without requiring a separate manual edit for every build.
-
