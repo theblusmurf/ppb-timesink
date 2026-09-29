@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.27
+
+- Fixed the loot tracker to count the client's negative-id `Special drop (...)`
+  currency records as Gold, along with gold coin, currency, and money labels.
+- Fixed gem tracking for the names emitted by the live client, including Emerald,
+  BlackMoon, and other common gem names.
+
 ## Release1.26
 
 - Made the Silvin, Mithril, Iternium, Fehu, Gold, and Gems totals
@@ -159,3 +166,4 @@
 Windows releases include a **Patch notes** section generated from the commits since the previous release tag. Each release also lists the packaged ZIP and SHA256 sidecar, followed by the current feature and validation notes.
 
 Keep commit subjects specific and user-facing so the generated notes explain what changed without requiring a separate manual edit for every build.
+
