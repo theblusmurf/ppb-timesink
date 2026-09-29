@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.31
+
+- Added an application-session timer to the loot tracker and displayed elapsed
+  time plus per-hour rates for Silvin, Mithril, Iternium, Fehu, Gold, and Gems.
+- Added a **Reset timer** control that starts a fresh earning-rate window while
+  preserving the application-session totals; **Reset loot** still clears the
+  totals as before.
+- Validation: Release build, offline self-test, and Windows package workflow.
+
 ## Release1.30
 
 - Self-healing skills now bypass the shared five-second offensive skill timer,

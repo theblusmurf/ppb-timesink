@@ -20,6 +20,7 @@ public sealed partial class HunterForm
     readonly NumericUpDown navigationViewRadius = new() { Minimum = 10, Maximum = 2000, Increment = 10, Value = 150, Width = 70 };
     readonly Button fitNavigationRadius = new() { Text = "Fit loaded", AutoSize = true };
     readonly Button resetLootTracker = new() { Text = "Reset loot", AutoSize = true };
+    readonly Button resetLootTimer = new() { Text = "Reset timer", AutoSize = true };
     NavigationOverlay? navigationOverlay;
     LootTrackerOverlay? lootTrackerOverlay;
 
@@ -65,6 +66,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(new Label { Text = "m", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         navControls.Controls.Add(fitNavigationRadius);
         navControls.Controls.Add(resetLootTracker);
+        navControls.Controls.Add(resetLootTimer);
 
         showNavigationOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showLootTrackerOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
@@ -74,6 +76,7 @@ public sealed partial class HunterForm
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
         resetLootTracker.Click += (_, _) => { lootTracker.Reset(); UpdateNavigationOverlay(); };
+        resetLootTimer.Click += (_, _) => { lootTracker.ResetTimer(); message = "Loot earning timer reset."; UpdateNavigationOverlay(); };
     }
 
     void OverlaySettingsChanged()

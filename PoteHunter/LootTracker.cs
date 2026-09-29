@@ -4,9 +4,10 @@ using System.Text.RegularExpressions;
 namespace PoteHunter;
 
 public sealed record LootTrackerItemSummary(string Name,long Count);
+public sealed record LootTrackerRateSummary(string Name,double PerHour);
 public sealed record LootTrackerSourceSummary(string Source,int Kills,int Drops,IReadOnlyList<LootTrackerItemSummary> Items);
 public sealed record LootTrackerDropSummary(string Source,string Name,Vec Position,DateTime SeenUtc);
-public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList<LootTrackerSourceSummary> Sources,IReadOnlyList<LootTrackerDropSummary> RecentDrops,IReadOnlyList<LootTrackerItemSummary> TrackedLoot);
+public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList<LootTrackerSourceSummary> Sources,IReadOnlyList<LootTrackerDropSummary> RecentDrops,IReadOnlyList<LootTrackerItemSummary> TrackedLoot,DateTime SessionStartedUtc,TimeSpan Elapsed,DateTime RateStartedUtc,TimeSpan RateElapsed,IReadOnlyList<LootTrackerRateSummary> HourlyLoot);
 
 /// <summary>Attributes newly observed ground items to the nearby tracked farm target that died most recently.</summary>
 public sealed class LootTracker
@@ -29,8 +30,17 @@ public sealed class LootTracker
     readonly List<PendingKill> pending=[];
     readonly List<LootTrackerDropSummary> recent=[];
     readonly HashSet<(uint,uint)> seen=[];
+    readonly DateTime sessionStartedUtc;
+    readonly Dictionary<string,long> rateBaseline=TrackedLootOrder.ToDictionary(name=>name,_=>0L,StringComparer.OrdinalIgnoreCase);
+    DateTime rateStartedUtc;
     int zone;
     bool initialized;
+
+    public LootTracker()
+    {
+        sessionStartedUtc=DateTime.UtcNow;
+        rateStartedUtc=sessionStartedUtc;
+    }
 
     sealed class SourceState
     {
@@ -81,6 +91,12 @@ public sealed class LootTracker
     public void Reset()
     {
         lock(gate) ResetLocked(zone,resetSession:true);
+    }
+
+    /// <summary>Starts a new earning-rate window while preserving the application-session totals.</summary>
+    public void ResetTimer()
+    {
+        lock(gate) ResetRateWindowLocked(DateTime.UtcNow);
     }
 
     public void ObserveZone(int newZone)
@@ -153,6 +169,15 @@ public sealed class LootTracker
     {
         lock(gate)
         {
+            DateTime now=DateTime.UtcNow;
+            TimeSpan elapsed=PositiveDuration(now-sessionStartedUtc);
+            TimeSpan rateElapsed=PositiveDuration(now-rateStartedUtc);
+            double rateHours=rateElapsed.TotalHours;
+            var hourly=TrackedLootOrder.Select(name=>
+            {
+                long earned=Math.Max(0,trackedLoot[name]-rateBaseline.GetValueOrDefault(name));
+                return new LootTrackerRateSummary(name,rateHours>0?earned/rateHours:0);
+            }).ToArray();
             return new LootTrackerSnapshot(zone,pending.Count,
                 SourceOrder.Select(source=>
                 {
@@ -160,17 +185,29 @@ public sealed class LootTracker
                     return new LootTrackerSourceSummary(source,state.Kills,state.Drops,
                         state.Items.OrderByDescending(item=>item.Value).ThenBy(item=>item.Key,StringComparer.OrdinalIgnoreCase)
                             .Take(5).Select(item=>new LootTrackerItemSummary(item.Key,item.Value)).ToArray());
-                }).ToArray(),recent.ToArray(),TrackedLootOrder.Select(name=>new LootTrackerItemSummary(name,trackedLoot[name])).ToArray());
+                }).ToArray(),recent.ToArray(),TrackedLootOrder.Select(name=>new LootTrackerItemSummary(name,trackedLoot[name])).ToArray(),sessionStartedUtc,elapsed,rateStartedUtc,rateElapsed,hourly);
         }
     }
 
     void PrunePending(DateTime now) => pending.RemoveAll(k=>now-k.SeenUtc>DropAttributionWindow);
 
+    static TimeSpan PositiveDuration(TimeSpan duration)=>duration<TimeSpan.Zero?TimeSpan.Zero:duration;
+
+    void ResetRateWindowLocked(DateTime now)
+    {
+        rateStartedUtc=now;
+        foreach(string name in TrackedLootOrder)rateBaseline[name]=trackedLoot[name];
+    }
+
     void ResetLocked(int newZone,bool resetSession=false)
     {
         zone=newZone;initialized=false;seen.Clear();pending.Clear();recent.Clear();
         foreach(SourceState state in sources.Values){state.Kills=0;state.Drops=0;state.Items.Clear();}
-        if(resetSession)foreach(string name in TrackedLootOrder)trackedLoot[name]=0;
+        if(resetSession)
+        {
+            foreach(string name in TrackedLootOrder)trackedLoot[name]=0;
+            ResetRateWindowLocked(DateTime.UtcNow);
+        }
     }
 
     public static void SelfTest()
@@ -216,6 +253,14 @@ public sealed class LootTracker
         if(snap.TrackedLoot.Any(item=>item.Count!=1))throw new Exception("Zone changes erased session loot totals.");
         tracker.Reset();
         if(tracker.Snapshot().TrackedLoot.Any(item=>item.Count!=0))throw new Exception("Explicit tracker reset did not clear session loot totals.");
+        var timerTracker=new LootTracker();
+        timerTracker.ObserveDrops([existing],8);timerTracker.RecordKill(mimic,new(0,0),8);timerTracker.ObserveDrops([existing,encodedGold],8);
+        var timed=timerTracker.Snapshot();
+        if(timed.Elapsed<TimeSpan.Zero || timed.RateElapsed<TimeSpan.Zero || timed.HourlyLoot.Count!=TrackedLootOrder.Length || timed.HourlyLoot.First(item=>item.Name=="Gold").PerHour<0)
+            throw new Exception("Loot earnings timer snapshot was invalid.");
+        timerTracker.ResetTimer();
+        var resetTimed=timerTracker.Snapshot();
+        if(resetTimed.TrackedLoot.First(item=>item.Name=="Gold").Count!=115 || resetTimed.HourlyLoot.Any(item=>item.PerHour!=0))
+            throw new Exception("Resetting the loot timer changed totals or retained the old rate window.");
     }
 }
-

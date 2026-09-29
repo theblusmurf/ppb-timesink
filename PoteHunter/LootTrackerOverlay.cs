@@ -31,7 +31,7 @@ internal sealed class LootTrackerOverlay : Form
         this.positionCommitted=positionCommitted;
         AutoScaleMode=AutoScaleMode.None;BackColor=Color.FromArgb(15,22,31);DoubleBuffered=true;
         FormBorderStyle=FormBorderStyle.None;Opacity=.94;ShowIcon=false;ShowInTaskbar=false;
-        StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(330,300);
+        StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(390,330);
         Cursor=Cursors.SizeAll;
         MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left)return;dragging=true;dragOffset=e.Location;};
         MouseMove+=(_,e)=>{if(!dragging)return;Location=new Point(Left+e.X-dragOffset.X,Top+e.Y-dragOffset.Y);};
@@ -78,15 +78,19 @@ internal sealed class LootTrackerOverlay : Form
         using var mutedBrush=new SolidBrush(Color.FromArgb(175,196,203,210));
         using var accentBrush=new SolidBrush(Color.FromArgb(255,215,120));
         float y=HeaderHeight+7;
-        e.Graphics.DrawString("Tracked loot  ·  Gold is amount",detailFont,mutedBrush,new PointF(10,y));y+=16;
+        e.Graphics.DrawString($"Tracked loot  ·  Gold is amount  ·  Elapsed {FormatDuration(snapshot.Elapsed)}",detailFont,mutedBrush,new PointF(10,y));y+=16;
+        e.Graphics.DrawString($"Earning rates since {FormatDuration(snapshot.RateElapsed)}  ·  per hour",detailFont,mutedBrush,new PointF(10,y));y+=15;
+        var hourly=snapshot.HourlyLoot.ToDictionary(item=>item.Name,StringComparer.OrdinalIgnoreCase);
         for(int i=0;i<snapshot.TrackedLoot.Count;i+=2)
         {
             var left=snapshot.TrackedLoot[i];
-            e.Graphics.DrawString($"{left.Name}: {left.Count:N0}",rowFont,textBrush,new PointF(10,y));
+            double leftRate=hourly.GetValueOrDefault(left.Name)?.PerHour??0;
+            e.Graphics.DrawString($"{left.Name}: {left.Count:N0} ({leftRate:N1}/h)",rowFont,textBrush,new PointF(10,y));
             if(i+1<snapshot.TrackedLoot.Count)
             {
                 var right=snapshot.TrackedLoot[i+1];
-                e.Graphics.DrawString($"{right.Name}: {right.Count:N0}",rowFont,textBrush,new PointF(170,y));
+                double rightRate=hourly.GetValueOrDefault(right.Name)?.PerHour??0;
+                e.Graphics.DrawString($"{right.Name}: {right.Count:N0} ({rightRate:N1}/h)",rowFont,textBrush,new PointF(205,y));
             }
             y+=17;
         }
@@ -111,6 +115,13 @@ internal sealed class LootTrackerOverlay : Form
         e.Graphics.DrawString($"Zone {snapshot.Zone}  ·  pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(10,ClientSize.Height-14));
     }
 
+    static string FormatDuration(TimeSpan duration)
+    {
+        duration=duration<TimeSpan.Zero?TimeSpan.Zero:duration;
+        int hours=(int)Math.Floor(duration.TotalHours);
+        return hours>0?$"{hours:00}:{duration.Minutes:00}:{duration.Seconds:00}":$"{duration.Minutes:00}:{duration.Seconds:00}";
+    }
+
     protected override void Dispose(bool disposing)
     {
         if(disposing){titleFont.Dispose();rowFont.Dispose();detailFont.Dispose();framePen.Dispose();}
@@ -122,4 +133,3 @@ internal sealed class LootTrackerOverlay : Form
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     static extern bool SetWindowPos(IntPtr window,IntPtr insertAfter,int x,int y,int width,int height,uint flags);
 }
-
