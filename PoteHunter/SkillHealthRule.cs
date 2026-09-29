@@ -66,13 +66,17 @@ public sealed partial class HunterForm
     void ResumeBasicAttackAfterSkill(Entity target,Options options,CancellationToken token,string mode)
     {
         // A failed re-check or the fallback release below must never leave the
-        // left button up.  The next combat pass can still decide to release it
-        // for movement, but a skill transition itself must return to the swing.
-        if(token.IsCancellationRequested || !Input.Allowed() || Input.BasicAttackHeld)return;
+        // left button up.  Re-issue the idempotent hold even when the input
+        // tracker already reports it held; this makes every skill exit an
+        // explicit hand-off back to the swing and avoids a stale held-state
+        // decision starving the next attack animation.
+        if(token.IsCancellationRequested || !Input.Allowed())return;
         try
         {
+            bool wasHeld=Input.BasicAttackHeld;
             Input.HoldMouse(false,true,token);
-            TraceLog.Record("basic attack rearmed after skill",new{target.Id,target.DisplayName,Mode=mode});
+            TraceLog.Record(wasHeld ? "basic attack preserved after skill" : "basic attack rearmed after skill",
+                new{target.Id,target.DisplayName,Mode=mode});
         }
         catch(InvalidOperationException ex)
         {

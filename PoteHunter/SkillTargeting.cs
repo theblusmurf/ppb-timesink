@@ -13,18 +13,30 @@ public static class SkillTargeting
         Vec player, double packRadius, bool centerArea, bool retargetSingle)
     {
         // The encounter roster has already passed monster/target protection checks.
+        // Keep skill target changes inside the same nearby-enemy boundary used
+        // by the five-target skill gate.  A target outside that boundary may
+        // remain the locked swing target, but it must not pull a skill toward a
+        // distant engaged enemy and make the character chase it.
+        var effectiveRange = double.IsFinite(packRadius) ? Math.Max(0, packRadius) : 0;
         var candidates = engaged.Where(e => e.Position.Finite)
+            .Where(e => player.Finite && (e.Position - player).Length <= effectiveRange)
             .Where(e => health.TryGetValue(e.Id, out var hp) && hp.Known && !hp.Dead).ToArray();
         if (candidates.Length == 0) return null;
         if (IsAreaOrLine(skill))
         {
             if (!centerArea) return current;
-            var clusterRadius=Math.Min(2.5,Math.Max(1.5,packRadius));
+            var clusterRadius=Math.Min(2.5,Math.Max(1.5,effectiveRange));
             return candidates.OrderByDescending(e => candidates.Count(other => (other.Position - e.Position).Length <= clusterRadius))
+                .ThenByDescending(e => health[e.Id].Current)
+                .ThenByDescending(e => (double)health[e.Id].Current / Math.Max(1, health[e.Id].Maximum))
                 .ThenByDescending(e => e.Id == current.Id).ThenBy(e => (e.Position - player).Length).ThenBy(e => e.Id).First();
         }
         if (!retargetSingle) return current;
-        return candidates.OrderBy(e => health[e.Id].Current / (double)Math.Max(1, health[e.Id].Maximum))
+        // Single-target skills should keep pressure on the toughest engaged
+        // enemy that is actually in range.  Prefer current health, then the
+        // health percentage when two targets have the same current amount.
+        return candidates.OrderByDescending(e => health[e.Id].Current)
+            .ThenByDescending(e => (double)health[e.Id].Current / Math.Max(1, health[e.Id].Maximum))
             .ThenByDescending(e => e.Id == current.Id)
             .ThenBy(e => (e.Position - player).Length).ThenBy(e => e.Id).First();
     }
@@ -39,7 +51,7 @@ public static class SkillTargeting
         var chosen=Choose(area,c,[a,b,c],hp,new(),2,true,true);
         if (chosen?.Id != a.Id && chosen?.Id != b.Id) throw new Exception($"Area skill did not choose dense pack anchor ({chosen?.Id})");
         var single = area with { SkillTarget=SkillTargetKind.Enemy, Name="Strike", Description="" };
-        if (Choose(single,a,[a,b,c],hp,new(),2,false,true)?.Id != b.Id) throw new Exception("Single target did not prefer lowest health");
+        if (Choose(single,a,[a,b,c],hp,new(),2,false,true)?.Id != a.Id) throw new Exception("Single target did not prefer the highest-health target in range");
+        if (Choose(single,c,[a,b,c],hp,new(),2,false,true)?.Id == c.Id) throw new Exception("Single target selected an engaged target outside the configured range");
     }
 }
-

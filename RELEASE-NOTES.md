@@ -1,5 +1,17 @@
 # Release notes
 
+## Release1.36
+
+- Kept the basic swing explicitly held across skill selection, activation,
+  retargeting, cooldown checks, and declined health/mana rechecks so skill
+  transitions do not leave a stale attack state.
+- Smart skill targeting now considers only live engaged targets inside the
+  configured nearby-enemy radius and selects the highest-current-health target
+  for single-target skills. Area and line skills retain their dense-pack
+  anchor behavior while preferring the highest-health anchor on ties.
+- Added offline coverage for highest-health selection and out-of-range target
+  exclusion.
+
 ## Release1.35
 
 - Corrected the melee distance baseline to the client’s verified 1.5-unit

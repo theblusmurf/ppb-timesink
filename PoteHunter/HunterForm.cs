@@ -2198,15 +2198,20 @@ public sealed partial class HunterForm : Form
                             bool delayExempt=SkillHealthRule.Applies(slot,o);
                             if(o.SmartSkillTargeting)
                             {
-                                var skillTarget=SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,world.HealthSnapshot(),pos,
+                                var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
+                                if(hp.Known)skillHealth[current.Id]=hp;
+                                var skillTarget=SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,skillHealth,pos,
                                     (double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
                                 if(skillTarget!=null && skillTarget.Id!=current.Id)
                                 {
                                     TraceLog.Record("skill target retarget",new{Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot),Mode="stationary"});
-                                    Input.HoldMouse(false,false,token);
-                                    stationaryAttackHeldAt=0;
+                                    // Keep the left button held while changing
+                                    // the skill target.  The next loop will face
+                                    // the new target without dropping the swing.
+                                    Input.HoldMouse(false,true,token);
+                                    stationaryAttackHeldAt=stationaryNow;
                                     target=skillTarget;lockedTarget=skillTarget;
-                                    await Input.Delay(45,token);
+                                    await Input.Delay(20,token);
                                     continue;
                                 }
                             }
@@ -2216,6 +2221,11 @@ public sealed partial class HunterForm : Form
                                 await Input.Key((Keys)key,50,token);
                                 await Input.Delay(80,token);
                                 if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                                // Skills use the right button, but some client
+                                // builds clear the left-button state while the
+                                // animation starts. Reassert the swing before
+                                // waiting for cooldown telemetry.
+                                Input.HoldMouse(false,true,token);
                                 if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
                                 await Input.Delay(150,token);
                                 var after=CheckedHotbar().Slot(key);
@@ -2333,11 +2343,17 @@ public sealed partial class HunterForm : Form
                         bool delayExempt=SkillHealthRule.Applies(slot,o);
                         if (o.SmartSkillTargeting)
                         {
-                            var skillTarget = SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,world.HealthSnapshot(),pos,(double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
+                            var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
+                            if(hp.Known)skillHealth[current.Id]=hp;
+                            var skillTarget = SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,skillHealth,pos,(double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
                             if (skillTarget != null && skillTarget.Id != current.Id)
                             {
                                 TraceLog.Record("skill target retarget",new {Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot)});
-                                target=skillTarget; lockedTarget=skillTarget; Input.HoldMouse(false,false,token); await Input.Delay(45,token); continue;
+                                // Keep the swing active while the selected
+                                // engaged target changes.  Releasing here caused
+                                // intermittent attack gaps between skills.
+                                Input.HoldMouse(false,true,token);
+                                target=skillTarget; lockedTarget=skillTarget; await Input.Delay(20,token); continue;
                             }
                         }
                         try
@@ -2345,6 +2361,7 @@ public sealed partial class HunterForm : Form
                             TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, DelayExempt=delayExempt, NextSkillAt=nextCombatSkillAt });
                             // Keep the basic combo held while the skill is selected and right-clicked.
                             await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
+                            Input.HoldMouse(false,true,token);
                             if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
                             await Input.Delay(150, token);
                             var after = CheckedHotbar().Slot(key);
