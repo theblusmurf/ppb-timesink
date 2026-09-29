@@ -9,6 +9,7 @@ artifacts/
 *.log
 *.jsonl
 navigation-route.json
+navigation-routes.json
 self-test.txt
 launcher-error.txt
 startup-trace.txt

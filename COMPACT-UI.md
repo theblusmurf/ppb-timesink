@@ -23,6 +23,13 @@ administrator requirements remain unchanged.
   Advanced settings expander for item delays, follow limit, priorities, pickup,
   positioning and other tuning.
 
+Navigation stores three local route slots: Primary hunt route, Alternative
+route 1, and Alternative route 2. Save each location from the Navigation page.
+When the primary saved point is occupied by another recognized player, the
+first free alternative is selected automatically. The single-route
+`navigation-route.json` file from earlier releases is migrated to the primary
+slot; the new slots are stored in `navigation-routes.json`.
+
 Changes save automatically after a short pause. Text edits save after leaving
 the field; the Setup status shows Saved or Check settings. Invalid edits do
 not replace the last valid saved configuration. Separate Save buttons are gone.
@@ -47,4 +54,3 @@ were inspected, plus Group healer at minimum size and expanded settings.
 The elevated packaged EXE and live gameplay were not tested in this environment.
 The original extracted app was left in place; the updated build is delivered
 separately so you can switch back using the backup.
-

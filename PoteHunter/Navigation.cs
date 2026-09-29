@@ -10,9 +10,14 @@ public sealed class MovementBlockedException(Vec position,Vec direction) : Excep
 public sealed class RouteUnavailableException(string message) : Exception(message);
 public sealed record LearnedObstacle(Vec Center,double Radius,double Height,DateTime ExpiresUtc);
 public sealed record SavedNavigationRoute(int Zone,Vec Anchor,double Heading,Vec[] Points,DateTime SavedUtc);
+public sealed record SavedNavigationRouteSet(SavedNavigationRoute?[] Routes);
 
 public sealed class Navigation
 {
+    public const int SavedRouteSlotCount = 3;
+    public static string DefaultSavedRoutesPath => Path.Combine(AppContext.BaseDirectory,"navigation-routes.json");
+    // Release1.39 wrote a single route. Keep the old filename as a read-only
+    // migration source so existing death-recovery routes remain available.
     public static string DefaultSavedRoutePath => Path.Combine(AppContext.BaseDirectory,"navigation-route.json");
     readonly List<LearnedObstacle> blocked=new();
     readonly List<Vec> trail=new();
@@ -25,14 +30,15 @@ public sealed class Navigation
     bool recording;
     double height;
     int attempts;
-    SavedNavigationRoute? savedRoute;
+    readonly SavedNavigationRoute?[] savedRoutes = new SavedNavigationRoute?[SavedRouteSlotCount];
     public int RouteVersion {get;private set;}
     public string Status {get;private set;}="Recording observed movement";
     public IReadOnlyList<Vec> Trail=>trail;
     public IReadOnlyList<Vec> RecordingTrail=>recordingTrail;
     public IReadOnlyList<Vec> Route=>route;
     public IReadOnlyList<LearnedObstacle> Blocked=>blocked;
-    public SavedNavigationRoute? SavedRoute=>savedRoute;
+    public IReadOnlyList<SavedNavigationRoute?> SavedRoutes=>savedRoutes;
+    public SavedNavigationRoute? SavedRoute=>savedRoutes[0];
     public string Context=>context;
     public int RecoveryAttempts=>attempts;
 
@@ -64,50 +70,108 @@ public sealed class Navigation
 
     public void EndRecording()=>recording=false;
 
-    public bool SaveCurrentRoute(int zone,Vec anchor,double heading,string? path=null)
+    public SavedNavigationRoute? GetSavedRoute(int slot) => slot is >= 0 and < SavedRouteSlotCount ? savedRoutes[slot] : null;
+    public IEnumerable<(int Slot,SavedNavigationRoute Route)> SavedRoutesForZone(int zone) =>
+        savedRoutes.Select((route,slot)=>new {route,slot})
+            .Where(item=>item.route is not null && item.route.Zone==zone)
+            .Select(item=>(item.slot,item.route!));
+
+    public bool SaveCurrentRoute(int zone,Vec anchor,double heading,string? path=null) =>
+        SaveCurrentRoute(zone,anchor,heading,0,path);
+
+    public bool SaveCurrentRoute(int zone,Vec anchor,double heading,int slot,string? path=null)
     {
-        if(!anchor.Finite || !double.IsFinite(heading))return false;
-        var source=(recordingTrail.Count>1?recordingTrail:trail).Where(point=>point.Finite).ToList();
-        if(source.Count<2)return false;
+        if(slot is < 0 or >= SavedRouteSlotCount || !anchor.Finite || !double.IsFinite(heading))return false;
+        var source=(recordingTrail.Count>0?recordingTrail:trail).Where(point=>point.Finite).ToList();
+        // A route slot is also useful as a stationary anchor. Keep a single
+        // point when the user saves before walking; navigation can still
+        // travel directly to that anchor and occupancy detection can use it.
+        if(source.Count==0)source.Add(anchor);
         var points=NormalizeRoute(source,anchor);
-        if(points.Count<2)return false;
-        savedRoute=new SavedNavigationRoute(zone,anchor,heading,points.ToArray(),DateTime.UtcNow);
+        if(points.Count<1)return false;
+        var previous=savedRoutes[slot];
+        savedRoutes[slot]=new SavedNavigationRoute(zone,anchor,heading,points.ToArray(),DateTime.UtcNow);
         try
         {
-            string destination=path??DefaultSavedRoutePath;
-            File.WriteAllText(destination+".tmp",JsonSerializer.Serialize(savedRoute,new JsonSerializerOptions{WriteIndented=true}));
+            string destination=path??DefaultSavedRoutesPath;
+            File.WriteAllText(destination+".tmp",JsonSerializer.Serialize(new SavedNavigationRouteSet(savedRoutes),new JsonSerializerOptions{WriteIndented=true}));
             File.Move(destination+".tmp",destination,true);
+            if(path==null && slot==0 && File.Exists(DefaultSavedRoutePath))File.Delete(DefaultSavedRoutePath);
         }
-        catch(IOException){return false;}
-        catch(UnauthorizedAccessException){return false;}
+        catch(IOException){savedRoutes[slot]=previous;return false;}
+        catch(UnauthorizedAccessException){savedRoutes[slot]=previous;return false;}
         return true;
     }
 
-    public bool LoadSavedRoute(int zone,string? path=null)
+    public bool LoadSavedRoutes(string? path=null)
     {
+        Array.Clear(savedRoutes,0,savedRoutes.Length);
         try
         {
-            string source=path??DefaultSavedRoutePath;
+            string source=path??DefaultSavedRoutesPath;
+            if(path==null && !File.Exists(source))source=DefaultSavedRoutePath;
             if(!File.Exists(source))return false;
-            var loaded=JsonSerializer.Deserialize<SavedNavigationRoute>(File.ReadAllText(source));
-            if(loaded is null || loaded.Zone!=zone || !loaded.Anchor.Finite || !double.IsFinite(loaded.Heading) ||
-                loaded.Points is null || loaded.Points.Length<2 || loaded.Points.Any(point=>!point.Finite))return false;
-            savedRoute=loaded with {Points=NormalizeRoute(loaded.Points,loaded.Anchor).ToArray()};
-            return savedRoute.Points.Length>1;
+            string json=File.ReadAllText(source);
+            SavedNavigationRoute?[]? loadedRoutes=null;
+            try { loadedRoutes=JsonSerializer.Deserialize<SavedNavigationRouteSet>(json)?.Routes; }
+            catch(JsonException) { }
+            // Migrate the single-route Release1.39 shape into the primary slot.
+            if(loadedRoutes==null)
+            {
+                var legacy=JsonSerializer.Deserialize<SavedNavigationRoute>(json);
+                loadedRoutes=legacy==null ? Array.Empty<SavedNavigationRoute?>() : new SavedNavigationRoute?[]{legacy};
+            }
+            for(int slot=0;slot<Math.Min(SavedRouteSlotCount,loadedRoutes.Length);slot++)
+            {
+                var loaded=loadedRoutes[slot];
+                if(loaded is null || !loaded.Anchor.Finite || !double.IsFinite(loaded.Heading) ||
+                    loaded.Points is null || loaded.Points.Length<1 || loaded.Points.Any(point=>!point.Finite))continue;
+                var normalized=NormalizeRoute(loaded.Points,loaded.Anchor);
+                if(normalized.Count>1)savedRoutes[slot]=loaded with {Points=normalized.ToArray()};
+            }
+            return savedRoutes.Any(route=>route!=null);
         }
         catch(JsonException){return false;}
         catch(IOException){return false;}
         catch(UnauthorizedAccessException){return false;}
     }
 
-    public void ClearSavedRoute(string? path=null)
+    public bool LoadSavedRoute(int zone,string? path=null) =>
+        LoadSavedRoutes(path) && savedRoutes.Any(route=>route?.Zone==zone);
+
+    public void ClearSavedRoute(int slot,string? path=null)
     {
-        savedRoute=null;
+        if(slot is < 0 or >= SavedRouteSlotCount)return;
+        savedRoutes[slot]=null;
         try
         {
-            string source=path??DefaultSavedRoutePath;
+            string source=path??DefaultSavedRoutesPath;
+            if(savedRoutes.Any(route=>route!=null))
+            {
+                File.WriteAllText(source+".tmp",JsonSerializer.Serialize(new SavedNavigationRouteSet(savedRoutes),new JsonSerializerOptions{WriteIndented=true}));
+                File.Move(source+".tmp",source,true);
+            }
+            else
+            {
+                if(File.Exists(source))File.Delete(source);
+                if(path==null && File.Exists(DefaultSavedRoutePath))File.Delete(DefaultSavedRoutePath);
+            }
+            if(path==null && File.Exists(DefaultSavedRoutePath))File.Delete(DefaultSavedRoutePath);
+        }
+        catch(IOException){ }
+        catch(UnauthorizedAccessException){ }
+    }
+
+    public void ClearSavedRoute(string? path=null)
+    {
+        Array.Clear(savedRoutes,0,savedRoutes.Length);
+        try
+        {
+            string source=path??DefaultSavedRoutesPath;
             if(File.Exists(source))File.Delete(source);
             if(File.Exists(source+".tmp"))File.Delete(source+".tmp");
+            if(path==null && File.Exists(DefaultSavedRoutePath))File.Delete(DefaultSavedRoutePath);
+            if(path==null && File.Exists(DefaultSavedRoutePath+".tmp"))File.Delete(DefaultSavedRoutePath+".tmp");
         }
         catch(IOException){ }
         catch(UnauthorizedAccessException){ }
@@ -116,9 +180,26 @@ public sealed class Navigation
     public bool TryGetRecoveryRoute(int zone,Vec current,Vec anchor,out IReadOnlyList<Vec> waypoints)
     {
         waypoints=[];
-        var saved=savedRoute;
-        if(saved is null || saved.Zone!=zone || !current.Finite || !anchor.Finite ||
-            (saved.Anchor-anchor).Length>2.5 || saved.Points.Length<2)return false;
+        var candidates=savedRoutes.Where(saved=>saved is not null && saved.Zone==zone && saved.Points.Length>=2 &&
+            (saved.Anchor-anchor).Length<=2.5).Cast<SavedNavigationRoute>();
+        foreach(var saved in candidates)
+        {
+            if(TryBuildRoute(saved,current,out waypoints))return true;
+        }
+        return false;
+    }
+
+    public bool TryGetRouteToSavedAnchor(int zone,Vec current,int slot,out IReadOnlyList<Vec> waypoints)
+    {
+        waypoints=[];
+        var saved=GetSavedRoute(slot);
+        return saved is not null && saved.Zone==zone && TryBuildRoute(saved,current,out waypoints);
+    }
+
+    static bool TryBuildRoute(SavedNavigationRoute saved,Vec current,out IReadOnlyList<Vec> waypoints)
+    {
+        waypoints=[];
+        if(!current.Finite || !saved.Anchor.Finite || saved.Points.Length<1)return false;
         int nearest=0;double nearestDistance=double.PositiveInfinity;
         for(int index=0;index<saved.Points.Length;index++)
         {
@@ -128,12 +209,17 @@ public sealed class Navigation
         // A saved route is only useful when the respawn position is near the
         // recorded path. Otherwise the normal bounded planner is safer.
         if(!double.IsFinite(nearestDistance) || nearestDistance>20)return false;
-        waypoints=saved.Points.Take(nearest+1).Reverse().Where(point=>(point-anchor).Length>.35).ToArray();
+        waypoints=saved.Points.Take(nearest+1).Reverse().Where(point=>(point-saved.Anchor).Length>.35).ToArray();
         return waypoints.Count>0;
     }
 
-    public double SavedRouteRadius(Vec anchor)=>savedRoute is null || !anchor.Finite ? 0 :
-        savedRoute.Points.Where(point=>point.Finite).Select(point=>(point-anchor).Length).DefaultIfEmpty(0).Max();
+    public double SavedRouteRadius(Vec anchor)=>SavedRouteRadius(0,anchor);
+    public double SavedRouteRadius(int slot,Vec anchor)
+    {
+        var saved=GetSavedRoute(slot);
+        return saved is null || !anchor.Finite ? 0 :
+            saved.Points.Where(point=>point.Finite).Select(point=>(point-anchor).Length).DefaultIfEmpty(0).Max();
+    }
 
     static List<Vec> NormalizeRoute(IEnumerable<Vec> raw,Vec anchor)
     {
@@ -222,7 +308,7 @@ public sealed class Navigation
     }
 
     public object Snapshot() => new {Context,Status,RecoveryAttempts=attempts,BlockedAreas=blocked.ToArray(),Route=route.ToArray(),RecentTrail=trail.TakeLast(250).ToArray(),
-        Recording=recording,RecordedPoints=recordingTrail.Count,SavedRoute=savedRoute is null?null:new {savedRoute.Zone,savedRoute.Anchor,savedRoute.Heading,savedRoute.SavedUtc,PointCount=savedRoute.Points.Length,Radius=SavedRouteRadius(savedRoute.Anchor)},
+        Recording=recording,RecordedPoints=recordingTrail.Count,SavedRoutes=savedRoutes.Select((saved,slot)=>saved is null?null:new {Slot=slot,saved.Zone,saved.Anchor,saved.Heading,saved.SavedUtc,PointCount=saved.Points.Length,Radius=SavedRouteRadius(slot,saved.Anchor)}).ToArray(),
         Coverage="Observed local movement only; unknown ground is not verified walkable"};
 
     public static void SelfTest()
@@ -259,10 +345,13 @@ public sealed class Navigation
 
         string selfTestRoute=Path.Combine(Path.GetTempPath(),"PoteHunter-navigation-self-test-route.json");
         var recorded=new Navigation();recorded.Observe("route",anchor,10);recorded.BeginRecording(anchor);recorded.Observe("route",anchor,10);recorded.Observe("route",new Vec(2,0),10);recorded.Observe("route",new Vec(4,0),10);
-        if(!recorded.SaveCurrentRoute(7,anchor,1.25,selfTestRoute) || recorded.SavedRoute?.Points[0]!=anchor)
+        if(!recorded.SaveCurrentRoute(7,anchor,1.25,0,selfTestRoute) || recorded.SavedRoute?.Points[0]!=anchor)
             throw new Exception("Navigation recording did not save an anchor-first route.");
         if(!recorded.TryGetRecoveryRoute(7,new Vec(4,0),anchor,out var recovery) || recovery.Count==0 || recovery[^1]!=new Vec(2,0))
             throw new Exception("Saved navigation route did not reverse toward the anchor.");
+        if(!recorded.SaveCurrentRoute(7,new Vec(4,0),1.5,1,selfTestRoute) ||
+            !recorded.TryGetRouteToSavedAnchor(7,new Vec(0,0),1,out var alternate) || alternate.Count==0 || alternate[^1]!=new Vec(2,0))
+            throw new Exception("Alternative navigation route did not reverse toward its saved anchor.");
         recorded.ClearSavedRoute(selfTestRoute);
     }
 }

@@ -768,6 +768,19 @@ public sealed partial class HunterForm : Form
         var trail=navigation.Trail.Where(p=>(p-navigationPosition).Length<span*2).Select(Project).ToArray();if(trail.Length>1)g.DrawLines(trailPen,trail);
         foreach(var obstacle in navigation.Blocked) {var p=Project(obstacle.Center);float r=(float)obstacle.Radius*scale;g.DrawEllipse(obstaclePen,p.X-r,p.Y-r,r*2,r*2);}
         foreach(var zone in avoidZones) {var p=Project(zone.Center);float r=(float)(zone.Radius+1)*scale;g.DrawEllipse(avoidPen,p.X-r,p.Y-r,r*2,r*2);}
+        var savedPens=new[]{new Pen(Color.MediumPurple,2),new Pen(Color.Gold,2),new Pen(Color.Coral,2)};
+        var savedBrushes=new[]{new SolidBrush(Color.MediumPurple),new SolidBrush(Color.Gold),new SolidBrush(Color.Coral)};
+        try
+        {
+            foreach(var (slot,saved) in navigation.SavedRoutesForZone(navigationZone))
+            {
+                var savedPoints=saved.Points.Where(point=>(point-navigationPosition).Length<span*2).Select(Project).ToArray();
+                if(savedPoints.Length>1)g.DrawLines(savedPens[slot],savedPoints);
+                var marker=Project(saved.Anchor);
+                g.FillEllipse(savedBrushes[slot],marker.X-4,marker.Y-4,8,8);
+            }
+        }
+        finally { foreach(var pen in savedPens)pen.Dispose(); foreach(var brush in savedBrushes)brush.Dispose(); }
         var route=new[]{navigationPosition}.Concat(navigation.Route).Select(Project).ToArray();if(route.Length>1)g.DrawLines(routePen,route);
 
         DrawDirectionCone(g,canvasSize);
@@ -1501,11 +1514,52 @@ public sealed partial class HunterForm : Form
             Vec activationLocation = world.PlayerPosition();
             Vec anchor = activationLocation;
             double savedHuntHeading=runCharacter.Heading;
-            activeHuntAnchor=activationLocation;
+            Vec originalActivationLocation=activationLocation;
+            double originalHuntHeading=savedHuntHeading;
+            SavedNavigationRoute? selectedSavedRoute=null;
+            int selectedSavedRouteSlot=-1;
+            int activeSavedRouteSlot=0;
             drive.TargetHeightOffset=(double)o.RangedVerticalAimOffset;
-            activeExcursion=o.GroupMode ? null : new HuntExcursion(anchor,(double)o.HuntRadius);
             runZone=world.ActiveZone();unreachableTargets.Clear();
-            navigation.LoadSavedRoute(runZone.Value);
+            navigation.LoadSavedRoutes();
+            // If the primary saved farming point is occupied when the hunt is
+            // activated, choose the first free alternative instead of entering
+            // another player's spot. The activation point is otherwise kept as
+            // the normal anchor so existing profiles behave unchanged.
+            entities=world.Poll();
+            guardSelfId=runCharacter.Id;
+            var primarySavedRoute=navigation.GetSavedRoute(0);
+            // A saved anchor is a standing location, so use a small floor
+            // radius even when anti-kill-steal is configured narrowly. This
+            // catches a player standing beside the exact recorded point.
+            double savedRouteOccupancyRadius=Math.Max(3,(double)o.OtherPlayerRadius);
+            if(!o.GroupMode && o.UseAlternativeHuntRoutes && primarySavedRoute is {Zone:var primaryZone} &&
+                primaryZone==runZone.Value && (activationLocation-primarySavedRoute.Anchor).Length<=20 &&
+                CombatCourtesy.PlayerNear(primarySavedRoute.Anchor,entities,runCharacter.Id,savedRouteOccupancyRadius)!=null)
+            {
+                foreach(var (slot,routeCandidate) in navigation.SavedRoutesForZone(runZone.Value).Where(item=>item.Slot>0))
+                {
+                    if((routeCandidate.Anchor-primarySavedRoute.Anchor).Length<=.5)continue;
+                    if(CombatCourtesy.PlayerNear(routeCandidate.Anchor,entities,runCharacter.Id,savedRouteOccupancyRadius)!=null)continue;
+                    selectedSavedRoute=routeCandidate;selectedSavedRouteSlot=slot;break;
+                }
+                if(selectedSavedRoute!=null)
+                {
+                    activationLocation=selectedSavedRoute.Anchor;
+                    anchor=activationLocation;
+                    savedHuntHeading=selectedSavedRoute.Heading;
+                    activeSavedRouteSlot=selectedSavedRouteSlot;
+                    message=$"Primary hunt spot is occupied; using alternative route {selectedSavedRouteSlot}.";
+                    TraceLog.Record("alternative hunt route selected",new{Slot=selectedSavedRouteSlot,Location=selectedSavedRoute.Anchor,Heading=selectedSavedRoute.Heading,Primary=primarySavedRoute.Anchor,PlayerNearPrimary=true,OccupancyRadius=savedRouteOccupancyRadius,Zone=runZone});
+                }
+                else
+                {
+                    message="Primary hunt spot is occupied; no free alternative route is available.";
+                    TraceLog.Record("all alternative hunt routes occupied",new{Primary=primarySavedRoute.Anchor,OccupancyRadius=savedRouteOccupancyRadius,Zone=runZone});
+                }
+            }
+            activeHuntAnchor=activationLocation;
+            activeExcursion=o.GroupMode ? null : new HuntExcursion(anchor,(double)o.HuntRadius);
             navigation.Observe(world.NavigationContext(runCharacter),runCharacter.Position,runCharacter.Height);
             navigation.BeginRecording(anchor);
             pendingPriorityGamekeeper=null;gamekeeperTransition=false;priorityInterruptibleActivity=false;returningFromPriority=false;deathRecoveryActive=false;
@@ -1520,6 +1574,7 @@ public sealed partial class HunterForm : Form
             activeMovementBoundary=(double)o.HuntRadius;healingWarning=null;healingRestPending=false;healingRest=null;
             drive.CanAdvance=(from,to)=>Targeting.BoundaryStepAllowed(from,to,anchor,activeMovementBoundary) &&
                 (o.AutomaticRouting ? navigation.CanAdvance(from,to,avoidZones) : Avoidance.BlockedSegment(from,to,avoidZones)==null);
+            if(selectedSavedRoute!=null)await MoveToSelectedHuntAnchor(token);
             nextHealAt = 0;
             recoveryCursor = 0;
             var startingBar = world.Hotbar(); runHotbarPage = startingBar.PageBase;
@@ -1556,6 +1611,49 @@ public sealed partial class HunterForm : Form
                     }
                 }
                 throw new TurnUnresponsiveException(world.PlayerPosition(),desiredForward);
+            }
+            async Task MoveToSelectedHuntAnchor(CancellationToken routeToken)
+            {
+                if(selectedSavedRoute is null || selectedSavedRouteSlot<1)return;
+                Vec current=world.PlayerPosition();
+                if((current-anchor).Length<=2.5)return;
+                ReleaseCombatPickup();Input.HoldMouse(false,false,routeToken);Input.PickupHoldProvider=null;drive.StopApproach();
+                double routeBoundary=Math.Max((double)o.HuntRadius,
+                    Math.Max((current-anchor).Length+2,navigation.SavedRouteRadius(selectedSavedRouteSlot,anchor)+2));
+                double previousBoundary=activeMovementBoundary;
+                activeMovementBoundary=routeBoundary;
+                navigation.BeginGoal($"alternative hunt route {selectedSavedRouteSlot}");
+                message=$"Moving to alternative hunt route {selectedSavedRouteSlot}";
+                try
+                {
+                    bool usedSavedRoute=false;
+                    if(o.UseSavedRecoveryRoute && navigation.TryGetRouteToSavedAnchor(runZone!.Value,current,selectedSavedRouteSlot,out var waypoints))
+                    {
+                        usedSavedRoute=true;
+                        foreach(var waypoint in waypoints)
+                        {
+                            if((world.PlayerPosition()-waypoint).Length<=.6)continue;
+                            await NavigateTo(drive,waypoint,anchor,o,routeToken,boundaryRadius:routeBoundary);
+                        }
+                    }
+                    await NavigateTo(drive,anchor,anchor,o,routeToken,boundaryRadius:routeBoundary);
+                    drive.StopApproach();
+                    await RestoreSavedHuntFacing(routeToken);
+                    TraceLog.Record("alternative hunt route reached",new{Slot=selectedSavedRouteSlot,Location=anchor,Heading=savedHuntHeading,UsedSavedRoute=usedSavedRoute,RouteBoundary=routeBoundary,Zone=runZone});
+                }
+                catch(RouteUnavailableException ex)
+                {
+                    drive.StopApproach();
+                    TraceLog.Record("alternative hunt route unavailable",new{Slot=selectedSavedRouteSlot,Reason=ex.Message,Location=anchor,Zone=runZone});
+                    activationLocation=originalActivationLocation;anchor=originalActivationLocation;savedHuntHeading=originalHuntHeading;
+                    activeHuntAnchor=anchor;activeExcursion=o.GroupMode?null:new HuntExcursion(anchor,(double)o.HuntRadius);
+                    selectedSavedRoute=null;selectedSavedRouteSlot=-1;activeSavedRouteSlot=0;
+                    message="Alternative route was blocked; using the activation point.";
+                }
+                finally
+                {
+                    activeMovementBoundary=previousBoundary;StartNearbyPickup(o);
+                }
             }
             async Task<bool> ReturnAfterGamekeeper(CancellationToken returnToken)
             {
@@ -1713,7 +1811,7 @@ public sealed partial class HunterForm : Form
             {
                 Vec current=world.PlayerPosition();
                 double routeBoundary=Math.Max((double)o.HuntRadius,
-                    Math.Max((current-anchor).Length+2,navigation.SavedRouteRadius(anchor)+2));
+                    Math.Max((current-anchor).Length+2,navigation.SavedRouteRadius(activeSavedRouteSlot,anchor)+2));
                 double previousBoundary=activeMovementBoundary;
                 activeMovementBoundary=routeBoundary;
                 returningFromPriority=true;
@@ -1775,7 +1873,7 @@ public sealed partial class HunterForm : Form
                 if(deathObservedAt==0)
                 {
                     deathObservedAt=now;
-                    bool routeSaved=navigation.SaveCurrentRoute(navigationZone,recoverAnchor,gamekeeperReturnHeading);
+                    bool routeSaved=navigation.SaveCurrentRoute(navigationZone,recoverAnchor,gamekeeperReturnHeading,activeSavedRouteSlot);
                     message=routeSaved?"Death detected. Saved the current navigation route; preparing revive":"Death detected. Preparing revive at the saved anchor";
                     TraceLog.Record("character death detected",new{Position=world.PlayerPosition(),Anchor=recoverAnchor,Zone=runZone,RouteSaved=routeSaved});
                     await Input.Delay(100,recoveryToken);

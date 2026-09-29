@@ -76,6 +76,7 @@ public sealed class Options
     public decimal NearbyEnemyRadius { get; set; } = 6;
     public bool AutomaticRouting { get; set; } = true;
     public bool GuideTreasureChests { get; set; } = true;
+    public bool UseAlternativeHuntRoutes { get; set; } = true;
     public bool AutoReviveAfterDeath { get; set; } = true;
     // The death screen is client/UI specific. Keep the key configurable instead
     // of assuming that every client uses the same revive prompt.

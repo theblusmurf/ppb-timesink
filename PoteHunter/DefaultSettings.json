@@ -24,6 +24,7 @@
   "AutoReviveAfterDeath": true,
   "ReviveKey": "R",
   "UseSavedRecoveryRoute": true,
+  "UseAlternativeHuntRoutes": true,
   "HealBelowPercent": 75,
   "HealDelaySeconds": 5,
   "AntiKillSteal": true,

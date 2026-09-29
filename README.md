@@ -38,7 +38,7 @@ The pack policy, input lifecycle, 3D projection/controller geometry, settings sa
 
 Hunt setup includes **Use MP items**, a threshold (default 30%), and an item delay (default 5 seconds). Current/maximum MP are read from code-signature-validated live fields and displayed beside HP. Recovery uses only ready Food/Potion hotbar items with explicit mana restoration, including combined HP/MP items, and respects both item cooldowns and the configured delay. Unknown mana or dead/unreadable character health does not trigger an item. Firing is released before recovery input.
 
-The Navigation page offers **Show radar overlay**, a 200–900 pixel size control (450 by default), independent view radius from 10–2000 game units, and **Fit loaded**. The radar is a passive, click-through, nonactivating window positioned inside the game's top-right corner. It shows loaded monsters, engaged-target rings, chest markers, avoidance areas, observed trail, and route. Zoom does not extend client object-loading range. Read-only 30-second surveys observed living monsters out to 134.6 units and chests out to 105.9 units; these are observations, not a proven server ceiling. The overlay hides when disconnected, minimized, or another application is foreground; windowed/borderless game presentation is the intended mode.
+The Navigation page offers **Show radar overlay**, a 200–900 pixel size control (450 by default), independent view radius from 10–2000 game units, and **Fit loaded**. It also stores a primary hunt route plus two alternative routes. If another recognized player is inside the primary saved location when a hunt starts, the first free alternative is selected; the fallback can be disabled. The radar is a passive, click-through, nonactivating window positioned inside the game's top-right corner. It shows loaded monsters, engaged-target rings, chest markers, avoidance areas, observed trail, and the three saved routes. Zoom does not extend client object-loading range. Read-only 30-second surveys observed living monsters out to 134.6 units and chests out to 105.9 units; these are observations, not a proven server ceiling. The overlay hides when disconnected, minimized, or another application is foreground; windowed/borderless game presentation is the intended mode.
 
 ## Build and verify
 
@@ -85,4 +85,3 @@ The desktop UI uses sidebar navigation, persistent Start/Stop controls, a connec
 - `PoteMemoryProbe`: shared reader and standalone diagnostics.
 
 Keep the three project folders together: PoteHunter links `Program.cs` and `WindowsClientRead.cs` from PoteMemoryProbe. Build signatures and default settings are embedded resources. The game client, personal settings, recordings, logs, generated builds, and source backups are excluded from Git.
-

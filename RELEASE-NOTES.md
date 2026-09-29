@@ -1,5 +1,21 @@
 # Release notes
 
+## Release1.40
+
+- Navigation now stores one **Primary hunt route** plus **Alternative route 1**
+  and **Alternative route 2**. Each slot keeps its own location, facing, and
+  recorded path in the local ignored `navigation-routes.json` file.
+- When the primary saved location is occupied by another recognized player at
+  activation, the hunter selects the first free alternative and routes there
+  before target selection. Existing single-route `navigation-route.json` files
+  migrate into the primary slot automatically.
+- The Navigation page adds route-slot save/clear controls, an occupancy-fallback
+  toggle, route status, and map colors for the three saved routes. Death return
+  uses the active slot's route and facing.
+- Validation: offline navigation slot migration, alternate-route reversal, and
+  bounded route selection checks. The Windows package is validated by GitHub
+  Actions.
+
 ## Release1.39
 
 - Added optional automatic death recovery. When the local character reaches
