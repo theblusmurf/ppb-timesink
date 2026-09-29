@@ -9,6 +9,9 @@ client-specific recognition layer before they can be automated safely.
 - Three local route slots hold the destination, facing, observed waypoints, and
   route profile. A profile records the character name, floor/height, farming
   radius, revival delay, and whether farming resumes on arrival.
+- The Navigation overlay now has an explicit start/finish workflow: start
+  recording at the route origin, walk to the farming destination, then finish
+  and save. A separate spot-save action creates a stationary anchor.
 - Recording samples movement at roughly one-third map-unit changes. A movement
   gap over 8 map units cancels the recording so a teleport or missing sample
   cannot become a false return route.

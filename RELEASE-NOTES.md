@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.43
+
+- Added explicit Navigation overlay controls to start a route recording and
+  finish/save it at the destination. Unsafe recordings remain visible as
+  cancelled and must be restarted instead of silently becoming anchor-only
+  routes.
+
 ## Release1.42
 
 - Saved route profiles now honor an explicit zero-second revival delay instead

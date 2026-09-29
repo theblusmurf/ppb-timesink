@@ -25,6 +25,8 @@ administrator requirements remain unchanged.
 
 Navigation stores three local route slots: Primary hunt route, Alternative
 route 1, and Alternative route 2. Save each location from the Navigation page.
+Use **Start route recording** at the start point and **Finish route & save
+spot** at the destination; use **Save current spot** for a stationary anchor.
 Each slot stores its character, floor/height, farming radius, revival delay,
 farm-on-arrival policy, facing, and observed waypoints. A movement gap over 8
 map units cancels recording. When the primary saved point is occupied by

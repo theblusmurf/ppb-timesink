@@ -23,6 +23,8 @@ public sealed partial class HunterForm
     readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when a player occupies the primary spot", AutoSize = true, Checked = true };
     readonly ComboBox savedNavigationSlot = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly Label savedNavigationRoutesStatus = new() { AutoSize = true, ForeColor = Color.Silver };
+    readonly Button startNavigationRecording = new() { Text = "Start route recording", AutoSize = true };
+    readonly Label navigationRecordingStatus = new() { AutoSize = true, ForeColor = Color.Silver };
     readonly Button saveNavigationSpot = new() { Text = "Save current spot", AutoSize = true };
     readonly Button saveNavigationRoute = new() { Text = "Finish route & save spot", AutoSize = true };
     readonly Button clearSavedNavigationRoute = new() { Text = "Clear selected", AutoSize = true };
@@ -86,6 +88,8 @@ public sealed partial class HunterForm
         navControls.Controls.Add(useAlternativeHuntRoutes);
         navControls.Controls.Add(new Label { Text = "Save slot:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
         navControls.Controls.Add(savedNavigationSlot);
+        navControls.Controls.Add(startNavigationRecording);
+        navControls.Controls.Add(navigationRecordingStatus);
         navControls.Controls.Add(saveNavigationSpot);
         navControls.Controls.Add(saveNavigationRoute);
         navControls.Controls.Add(clearSavedNavigationRoute);
@@ -104,8 +108,9 @@ public sealed partial class HunterForm
         useSavedRecoveryRoute.CheckedChanged += (_, _) => OverlaySettingsChanged();
         useAlternativeHuntRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
         savedNavigationSlot.SelectedIndexChanged += (_, _) => RefreshSavedNavigationRouteStatus();
+        startNavigationRecording.Click += (_, _) => StartNavigationRouteRecording();
         saveNavigationSpot.Click += (_, _) => SaveNavigationRouteFromNavigationTab(true);
-        saveNavigationRoute.Click += (_, _) => SaveNavigationRouteFromNavigationTab(false);
+        saveNavigationRoute.Click += (_, _) => SaveNavigationRouteFromNavigationTab(false,true);
         clearSavedNavigationRoute.Click += (_, _) =>
         {
             int slot=SelectedSavedNavigationSlot();
@@ -121,6 +126,32 @@ public sealed partial class HunterForm
         };
         resetLootTracker.Click += (_, _) => { bool saved = SaveLootLog("Reset loot"); lootTracker.Reset(); if (saved) message = "Loot totals reset."; UpdateNavigationOverlay(); };
         resetLootTimer.Click += (_, _) => { bool saved = SaveLootLog("Reset timer"); lootTracker.ResetTimer(); if (saved) message = "Loot earning timer reset."; UpdateNavigationOverlay(); };
+        RefreshNavigationRecordingControls();
+    }
+
+    void StartNavigationRouteRecording()
+    {
+        if (busy || working) { message="Stop the hunt before recording a route manually."; return; }
+        if (!connected || !navigationPosition.Finite) { message="Connect to the game before starting route recording."; return; }
+        navigation.BeginRecording(navigationPosition);
+        message=$"Route recording started at zone {navigationZone}. Walk to the destination, then finish and save the route.";
+        TraceLog.Record("manual navigation route recording started",new {Zone=navigationZone,Anchor=navigationPosition,Heading=connected?world.PlayerHeading():0});
+        RefreshNavigationRecordingControls();navigationCanvas.Invalidate();
+    }
+
+    void RefreshNavigationRecordingControls()
+    {
+        if (startNavigationRecording.IsDisposed) return;
+        bool manualAvailable=connected && !busy && !working;
+        startNavigationRecording.Enabled=manualAvailable && !navigation.Recording;
+        saveNavigationRoute.Enabled=manualAvailable && navigation.Recording;
+        saveNavigationSpot.Enabled=manualAvailable;
+        navigationRecordingStatus.Text=navigation.Recording
+            ? $"Recording {navigation.RecordingTrail.Count} point(s)"
+            : navigation.RecordingCancelled
+                ? "Recording cancelled; start again"
+                : "Ready to record";
+        navigationRecordingStatus.ForeColor=navigation.RecordingCancelled ? Color.Orange : Color.Silver;
     }
 
     void OverlaySettingsChanged()
@@ -157,10 +188,21 @@ public sealed partial class HunterForm
         return options;
     }
 
-    void SaveNavigationRouteFromNavigationTab(bool spotOnly)
+    void SaveNavigationRouteFromNavigationTab(bool spotOnly,bool finishRecording=false)
     {
         try
         {
+            if(finishRecording && !navigation.Recording)
+            {
+                message=navigation.RecordingCancelled ? "Route recording was cancelled after an unsafe movement gap; start again." : "Start route recording before finishing a route.";
+                RefreshNavigationRecordingControls();
+                return;
+            }
+            if(finishRecording && navigation.RecordingCancelled)
+            {
+                message="Route recording was cancelled after an unsafe movement gap; start again.";
+                navigation.EndRecording();RefreshNavigationRecordingControls();return;
+            }
             int slot=SelectedSavedNavigationSlot();
             // The primary slot follows the immutable hunt anchor while a run
             // is active. Alternative slots intentionally capture the current
@@ -181,12 +223,19 @@ public sealed partial class HunterForm
                 ? navigation.SaveCurrentSpot(navigationZone,anchor,heading,slot,profile:profile)
                 : navigation.SaveCurrentRoute(navigationZone,anchor,heading,slot,profile:profile);
             if(saved)
+            {
+                if(finishRecording)
+                {
+                    navigation.EndRecording();
+                    TraceLog.Record("manual navigation route recording finished",new {Slot=slot,Zone=navigationZone,Anchor=anchor,PointCount=navigation.GetSavedRoute(slot)?.Points.Length ?? 0});
+                }
                 message=$"Saved {SavedNavigationSlotName(slot)} {(spotOnly?"spot":"route")} ({navigation.GetSavedRoute(slot)?.Points.Length ?? 0} points, {profile.Character} / radius {profile.HuntRadius:0.#}).";
+            }
             else message="Save the current position or walk a route first; no valid navigation point was found.";
             RefreshSavedNavigationRouteStatus();
             navigationCanvas.Invalidate();
         }
-        catch(Exception ex){message="Could not save navigation route: "+ex.Message;}
+        catch(Exception ex){message="Could not save navigation route: "+ex.Message;RefreshNavigationRecordingControls();}
     }
 
     int SelectedSavedNavigationSlot() => Math.Clamp(savedNavigationSlot.SelectedIndex,0,Navigation.SavedRouteSlotCount-1);

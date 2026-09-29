@@ -547,6 +547,7 @@ public sealed partial class HunterForm : Form
             navigation.Observe(world.NavigationContext(self),pos,self.Height);
             if(working && runZone.HasValue && navigationZone!=runZone) Stop("Map zone changed; stopped.");
             navigationLabel.Text=$"Zone {navigationZone} · {navigation.Status}\nGreen: observed movement · Orange: temporary blocked · Blue: route · Gold: treasure boxes (live) · Amber: remembered";
+            RefreshNavigationRecordingControls();
             navigationCanvas.Invalidate();
             guardSelfId=self.Id;
             UpdateParty(self);

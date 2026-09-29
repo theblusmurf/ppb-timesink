@@ -44,6 +44,7 @@ public sealed class Navigation
     public string Status {get;private set;}="Recording observed movement";
     public IReadOnlyList<Vec> Trail=>trail;
     public IReadOnlyList<Vec> RecordingTrail=>recordingTrail;
+    public bool Recording=>recording;
     public bool RecordingCancelled=>recordingCancelled;
     public IReadOnlyList<Vec> Route=>route;
     public IReadOnlyList<LearnedObstacle> Blocked=>blocked;
