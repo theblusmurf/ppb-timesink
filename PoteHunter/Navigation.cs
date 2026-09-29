@@ -127,7 +127,7 @@ public sealed class Navigation
                 if(loaded is null || !loaded.Anchor.Finite || !double.IsFinite(loaded.Heading) ||
                     loaded.Points is null || loaded.Points.Length<1 || loaded.Points.Any(point=>!point.Finite))continue;
                 var normalized=NormalizeRoute(loaded.Points,loaded.Anchor);
-                if(normalized.Count>1)savedRoutes[slot]=loaded with {Points=normalized.ToArray()};
+                if(normalized.Count>0)savedRoutes[slot]=loaded with {Points=normalized.ToArray()};
             }
             return savedRoutes.Any(route=>route!=null);
         }
@@ -352,6 +352,10 @@ public sealed class Navigation
         if(!recorded.SaveCurrentRoute(7,new Vec(4,0),1.5,1,selfTestRoute) ||
             !recorded.TryGetRouteToSavedAnchor(7,new Vec(0,0),1,out var alternate) || alternate.Count==0 || alternate[^1]!=new Vec(2,0))
             throw new Exception("Alternative navigation route did not reverse toward its saved anchor.");
+        var stationary=new Navigation();
+        if(!stationary.SaveCurrentRoute(7,new Vec(8,0),2,2,selfTestRoute) || stationary.GetSavedRoute(2)?.Points.Length!=1 ||
+            !stationary.LoadSavedRoutes(selfTestRoute) || stationary.GetSavedRoute(2)?.Anchor!=new Vec(8,0))
+            throw new Exception("A stationary route slot did not persist its anchor.");
         recorded.ClearSavedRoute(selfTestRoute);
     }
 }

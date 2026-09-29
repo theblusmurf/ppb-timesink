@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.41
+
+- Fixed the route-selection startup ordering so alternative-route navigation
+  builds cleanly and does not capture an uninitialized return heading.
+- Stationary saved anchors now survive reloads, so a route can be saved before
+  walking and still be used for occupancy fallback and direct travel.
+
 ## Release1.40
 
 - Navigation now stores one **Primary hunt route** plus **Alternative route 1**

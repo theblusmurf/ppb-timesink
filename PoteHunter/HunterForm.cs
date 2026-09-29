@@ -1574,7 +1574,6 @@ public sealed partial class HunterForm : Form
             activeMovementBoundary=(double)o.HuntRadius;healingWarning=null;healingRestPending=false;healingRest=null;
             drive.CanAdvance=(from,to)=>Targeting.BoundaryStepAllowed(from,to,anchor,activeMovementBoundary) &&
                 (o.AutomaticRouting ? navigation.CanAdvance(from,to,avoidZones) : Avoidance.BlockedSegment(from,to,avoidZones)==null);
-            if(selectedSavedRoute!=null)await MoveToSelectedHuntAnchor(token);
             nextHealAt = 0;
             recoveryCursor = 0;
             var startingBar = world.Hotbar(); runHotbarPage = startingBar.PageBase;
@@ -1655,6 +1654,7 @@ public sealed partial class HunterForm : Form
                     activeMovementBoundary=previousBoundary;StartNearbyPickup(o);
                 }
             }
+            if(selectedSavedRoute!=null)await MoveToSelectedHuntAnchor(token);
             async Task<bool> ReturnAfterGamekeeper(CancellationToken returnToken)
             {
                 // This transition must run before healing, pickup, or target
