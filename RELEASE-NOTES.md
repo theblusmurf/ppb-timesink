@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.30
+
+- Self-healing skills now bypass the shared five-second offensive skill timer,
+  so a configured health condition can be answered immediately when the
+  character is low on health.
+- Offensive combat skills still require the five-target pack and highest-health
+  below 80 percent gate, and successful offensive casts remain five seconds
+  apart.
+- Validation: Release build, offline self-test, and Windows package workflow.
+
 ## Release1.29
 
 - Kept the basic attack armed through every offensive skill exit, including a

@@ -2167,15 +2167,19 @@ public sealed partial class HunterForm : Form
                             }
                         }
                         var stationarySkillGroup=CombatSkillGroup(current,hp,pos,o);
-                        bool stationarySkillGate=stationarySkillGroup.Ready && stationaryNow>=nextCombatSkillAt;
+                        // The five-target gate applies to the combat pack, while
+                        // self-heals may bypass only the shared five-second timer.
+                        bool stationarySkillGate=stationarySkillGroup.Ready;
                         int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 && stationarySkillGate ?
                             SkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
-                                slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o)) : -1;
+                                slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o) &&
+                                    (stationaryNow>=nextCombatSkillAt || SkillHealthRule.Applies(slot,o))) : -1;
                         if(stationaryReadyIndex>=0)
                         {
                             ReleaseCombatPickup();
                             char key=o.SkillKeys[stationaryReadyIndex];
                             var slot=stationaryBar.Slot(key);
+                            bool delayExempt=SkillHealthRule.Applies(slot,o);
                             if(o.SmartSkillTargeting)
                             {
                                 var skillTarget=SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,world.HealthSnapshot(),pos,
@@ -2192,11 +2196,11 @@ public sealed partial class HunterForm : Form
                             }
                             try
                             {
-                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,NextSkillAt=nextCombatSkillAt});
+                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,DelayExempt=delayExempt,NextSkillAt=nextCombatSkillAt});
                                 await Input.Key((Keys)key,50,token);
                                 await Input.Delay(80,token);
                                 if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                                if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
                                 await Input.Delay(150,token);
                                 var after=CheckedHotbar().Slot(key);
                                 bool fallbackRelease=false;
@@ -2209,14 +2213,14 @@ public sealed partial class HunterForm : Form
                                     Input.HoldMouse(false,false,token);
                                     await Input.Delay(35,token);
                                     if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                    nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                                    if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
                                     Input.HoldMouse(false,true,token);
                                     stationaryAttackHeldAt=Environment.TickCount64;
                                     await Input.Delay(100,token);
                                     after=CheckedHotbar().Slot(key);
                                 }
                                 bool cooldownStarted=after.RemainingCooldown>0 || after.Locked;
-                                TraceLog.Record("skill cooldown observed",new{Key=key.ToString(),after.Name,Remaining=after.RemainingCooldown,after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,Mode="stationary"});
+                                TraceLog.Record("skill cooldown observed",new{Key=key.ToString(),after.Name,Remaining=after.RemainingCooldown,after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,DelayExempt=delayExempt,Mode="stationary"});
                                 skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
                                 skillCursor=(stationaryReadyIndex+1)%Math.Max(1,o.SkillKeys.Length);
                             }
@@ -2299,14 +2303,18 @@ public sealed partial class HunterForm : Form
                         }
                     }
                     var combatSkillGroup=CombatSkillGroup(current,hp,pos,o);
-                    bool combatSkillGate=combatSkillGroup.Ready && now>=nextCombatSkillAt;
+                    // The five-target gate applies to the combat pack, while
+                    // self-heals may bypass only the shared five-second timer.
+                    bool combatSkillGate=combatSkillGroup.Ready;
                     int readyIndex = !current.PriorityLootObject && now - combatStart >= 1200 && combatSkillGate ? SkillRotation.Choose(o.SkillKeys,
-                        skillCursor,bar,skillDue,now,slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o)) : -1;
+                        skillCursor,bar,skillDue,now,slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o) &&
+                            (now>=nextCombatSkillAt || SkillHealthRule.Applies(slot,o))) : -1;
                     if (readyIndex >= 0)
                     {
                         ReleaseCombatPickup();
                         char key = o.SkillKeys[readyIndex];
                         var slot = bar.Slot(key);
+                        bool delayExempt=SkillHealthRule.Applies(slot,o);
                         if (o.SmartSkillTargeting)
                         {
                             var skillTarget = SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,world.HealthSnapshot(),pos,(double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
@@ -2318,10 +2326,10 @@ public sealed partial class HunterForm : Form
                         }
                         try
                         {
-                            TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, NextSkillAt=nextCombatSkillAt });
+                            TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, DelayExempt=delayExempt, NextSkillAt=nextCombatSkillAt });
                             // Keep the basic combo held while the skill is selected and right-clicked.
                             await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                            nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                            if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
                             await Input.Delay(150, token);
                             var after = CheckedHotbar().Slot(key);
                             bool fallbackRelease = false;
@@ -2330,12 +2338,12 @@ public sealed partial class HunterForm : Form
                                 // Some skills cannot start during a held basic attack. Retry once with a short release.
                                 fallbackRelease = true;
                                 Input.HoldMouse(false, false, token); await Input.Delay(35, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                                if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
                                 Input.HoldMouse(false, true, token); await Input.Delay(100, token);
                                 after = CheckedHotbar().Slot(key);
                             }
                             bool cooldownStarted = after.RemainingCooldown > 0 || after.Locked;
-                            TraceLog.Record("skill cooldown observed", new { Key = key.ToString(), after.Name, Remaining = after.RemainingCooldown, after.Locked, FallbackRelease = fallbackRelease, CooldownStarted = cooldownStarted });
+                            TraceLog.Record("skill cooldown observed", new { Key = key.ToString(), after.Name, Remaining = after.RemainingCooldown, after.Locked, FallbackRelease = fallbackRelease, CooldownStarted = cooldownStarted, DelayExempt = delayExempt });
                             skillDue[key] = Environment.TickCount64 + SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
                             skillCursor = (readyIndex + 1) % o.SkillKeys.Length;
                         }
