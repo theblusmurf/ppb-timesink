@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.28
+
+- Changed the Gold total from a drop count to the actual currency amount.
+  The client's negative-id `Special drop (N)` records now contribute `N` gold
+  to the session total, with numeric gold labels handled as a fallback.
+- Added thousands separators and an explicit overlay label so Gold is clearly
+  shown as an amount while the other tracked valuables remain item counts.
+- Validation: Release build, offline self-test, and Windows package workflow.
+
 ## Release1.27
 
 - Fixed the loot tracker to count the client's negative-id `Special drop (...)`

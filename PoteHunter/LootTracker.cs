@@ -1,6 +1,9 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 namespace PoteHunter;
 
-public sealed record LootTrackerItemSummary(string Name,int Count);
+public sealed record LootTrackerItemSummary(string Name,long Count);
 public sealed record LootTrackerSourceSummary(string Source,int Kills,int Drops,IReadOnlyList<LootTrackerItemSummary> Items);
 public sealed record LootTrackerDropSummary(string Source,string Name,Vec Position,DateTime SeenUtc);
 public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList<LootTrackerSourceSummary> Sources,IReadOnlyList<LootTrackerDropSummary> RecentDrops,IReadOnlyList<LootTrackerItemSummary> TrackedLoot);
@@ -18,9 +21,11 @@ public sealed class LootTracker
     // the labels that are present in the live loot list.
     static readonly string[] GoldTokens=["gold","coin","currency","money"];
     static readonly string[] GemTokens=["gem","emerald","blackmoon","black moon","diamond","sapphire","ruby","topaz","amethyst","opal","pearl","onyx","moonstone"];
+    static readonly Regex SpecialDropAmountPattern=new(@"\bspecial\s+drop\s*\(\s*(?<amount>[\d,]+)\s*\)",RegexOptions.IgnoreCase|RegexOptions.CultureInvariant|RegexOptions.Compiled);
+    static readonly Regex GoldAmountPattern=new(@"(?:(?<before>[\d,]+)\s*(?:gold|coins?|currency|money)\b|(?:gold|coins?|currency|money)\D{0,8}(?<after>[\d,]+))",RegexOptions.IgnoreCase|RegexOptions.CultureInvariant|RegexOptions.Compiled);
     readonly object gate=new();
     readonly Dictionary<string,SourceState> sources=SourceOrder.ToDictionary(name=>name,_=>new SourceState());
-    readonly Dictionary<string,int> trackedLoot=TrackedLootOrder.ToDictionary(name=>name,_=>0,StringComparer.OrdinalIgnoreCase);
+    readonly Dictionary<string,long> trackedLoot=TrackedLootOrder.ToDictionary(name=>name,_=>0L,StringComparer.OrdinalIgnoreCase);
     readonly List<PendingKill> pending=[];
     readonly List<LootTrackerDropSummary> recent=[];
     readonly HashSet<(uint,uint)> seen=[];
@@ -53,8 +58,24 @@ public sealed class LootTracker
         if(text.Contains("iternium",StringComparison.OrdinalIgnoreCase))return "Iternium";
         if(text.Contains("fehu",StringComparison.OrdinalIgnoreCase))return "Fehu";
         if(GemTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gems";
-        if(item.TypeId<0 || GoldTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gold";
+        if(text.Contains("special drop",StringComparison.OrdinalIgnoreCase) || GoldTokens.Any(token=>text.Contains(token,StringComparison.OrdinalIgnoreCase)))return "Gold";
         return null;
+    }
+
+    /// <summary>Returns the currency represented by a drop. Special-drop ids encode the amount in their low 31 bits.</summary>
+    public static long GoldAmountFor(GroundItem item)
+    {
+        string text=$"{item.Name} {item.Description}";
+        if(item.TypeId<0 && text.Contains("special drop",StringComparison.OrdinalIgnoreCase))
+        {
+            uint encoded=unchecked((uint)item.TypeId)&0x7fffffffu;
+            if(encoded>0)return encoded;
+        }
+        Match special=SpecialDropAmountPattern.Match(text);
+        Match named=GoldAmountPattern.Match(text);
+        string raw=special.Success?special.Groups["amount"].Value:
+            named.Success?(named.Groups["before"].Success?named.Groups["before"].Value:named.Groups["after"].Value):"";
+        return long.TryParse(raw.Replace(",",""),NumberStyles.None,CultureInfo.InvariantCulture,out long amount) && amount>0?amount:1;
     }
 
     public void Reset()
@@ -116,7 +137,11 @@ public sealed class LootTracker
                 SourceState state=sources[match.Source];state.Drops++;
                 state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+1;
                 string? trackedName=TrackedLootFor(item);
-                if(trackedName!=null)trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+1;
+                if(trackedName!=null)
+                {
+                    long amount=trackedName=="Gold"?GoldAmountFor(item):1;
+                    trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+amount;
+                }
                 recent.Insert(0,new LootTrackerDropSummary(match.Source,itemName,item.Position,now));
                 if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
             }
@@ -172,11 +197,17 @@ public sealed class LootTracker
         if(snap.TrackedLoot.Any(item=>item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
         if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0))!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0))!="Mithril")
             throw new Exception("Legacy valuable aliases did not normalize to the corrected labels.");
-        if(TrackedLootFor(new GroundItem(12,12,-115,"Special drop (115)",new(.5,.5),0))!="Gold" ||
+        var encodedGold=new GroundItem(12,12,unchecked((int)(0x80000000u|115u)),"Special drop (115)",new(.5,.5),0);
+        if(TrackedLootFor(encodedGold)!="Gold" || GoldAmountFor(encodedGold)!=115 ||
             TrackedLootFor(new GroundItem(13,13,13,"Gold coin",new(.5,.5),0))!="Gold" ||
+            GoldAmountFor(new GroundItem(16,16,16,"Gold 1,250",new(.5,.5),0))!=1250 ||
+            GoldAmountFor(new GroundItem(17,17,17,"8 gold",new(.5,.5),0))!=8 ||
             TrackedLootFor(new GroundItem(14,14,14,"Emerald",new(.5,.5),0))!="Gems" ||
             TrackedLootFor(new GroundItem(15,15,15,"BlackMoon",new(.5,.5),0))!="Gems")
             throw new Exception("Client currency and gem labels did not normalize to the requested counters.");
+        var amountTracker=new LootTracker();amountTracker.ObserveDrops([existing],8);amountTracker.RecordKill(mimic,new(0,0),8);amountTracker.ObserveDrops([existing,encodedGold],8);
+        if(amountTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
+            throw new Exception("Gold amount was not accumulated from the special-drop id.");
         tracker.ObserveDrops([existing,new GroundItem(9,9,9,"Distant",new(100,100),0)],8);
         if(tracker.Snapshot().Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Distant loot was attributed to a tracked target.");
         tracker.ObserveZone(9);

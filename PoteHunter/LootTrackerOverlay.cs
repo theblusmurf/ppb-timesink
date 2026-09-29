@@ -78,15 +78,15 @@ internal sealed class LootTrackerOverlay : Form
         using var mutedBrush=new SolidBrush(Color.FromArgb(175,196,203,210));
         using var accentBrush=new SolidBrush(Color.FromArgb(255,215,120));
         float y=HeaderHeight+7;
-        e.Graphics.DrawString("Tracked loot",detailFont,mutedBrush,new PointF(10,y));y+=16;
+        e.Graphics.DrawString("Tracked loot  ·  Gold is amount",detailFont,mutedBrush,new PointF(10,y));y+=16;
         for(int i=0;i<snapshot.TrackedLoot.Count;i+=2)
         {
             var left=snapshot.TrackedLoot[i];
-            e.Graphics.DrawString($"{left.Name}: {left.Count}",rowFont,textBrush,new PointF(10,y));
+            e.Graphics.DrawString($"{left.Name}: {left.Count:N0}",rowFont,textBrush,new PointF(10,y));
             if(i+1<snapshot.TrackedLoot.Count)
             {
                 var right=snapshot.TrackedLoot[i+1];
-                e.Graphics.DrawString($"{right.Name}: {right.Count}",rowFont,textBrush,new PointF(170,y));
+                e.Graphics.DrawString($"{right.Name}: {right.Count:N0}",rowFont,textBrush,new PointF(170,y));
             }
             y+=17;
         }
@@ -122,3 +122,4 @@ internal sealed class LootTrackerOverlay : Form
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     static extern bool SetWindowPos(IntPtr window,IntPtr insertAfter,int x,int y,int width,int height,uint flags);
 }
+
