@@ -56,7 +56,7 @@ public static class SkillGroupGate
         var atThreshold = health.ToDictionary(pair => pair.Key, _ => new Health(80, 100));
         if (Evaluate(targets, targets[0], atThreshold, player).Ready)
             throw new Exception("The skill group gate opened at the 80 percent threshold.");
-        var outOfRange = targets.ToDictionary(entity => entity.Id, _ => entity with { Position = new(20, 0) });
+        var outOfRange = targets.ToDictionary(entity => entity.Id, entity => entity with { Position = new(20, 0) });
         if (Evaluate(outOfRange.Values, outOfRange.Values.First(), outOfRange.ToDictionary(pair => pair.Key, _ => new Health(70, 100)), player).Ready)
             throw new Exception("The skill group gate counted targets outside the configured range.");
     }
