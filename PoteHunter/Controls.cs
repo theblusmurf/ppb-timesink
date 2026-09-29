@@ -477,12 +477,20 @@ public sealed partial class Movement
             throw new InvalidOperationException("Invalid aim calibration. Restart with F8.");
         double error = Math.Atan2(Math.Sin(errorRadians), Math.Cos(errorRadians));
         if (Math.Abs(error) < .035) return 0;
-        // Fast when far off target, then reduce the correction to settle without oscillation.
-        double correction = error * (Math.Abs(error) < .20 ? .50 : .80);
-        double angularLimit = walking ? .22 : .40;
-        int pixelLimit = walking ? 48 : 96;
+        // Turn decisively while the error is large, then use a smaller gain in
+        // the final degrees so the faster feedback loop does not chatter around
+        // the target. The previous .50/.80 gains and 25 ms cadence made a
+        // character visibly lag behind a side target before the next swing.
+        double correction = error * (Math.Abs(error) < .20 ? .70 : .88);
+        double angularLimit = walking ? .28 : .50;
+        int pixelLimit = walking ? 64 : 112;
         int pixels = Math.Clamp((int)Math.Round(Math.Clamp(correction, -angularLimit, angularLimit) / radiansPerPixel), -pixelLimit, pixelLimit);
         return pixels != 0 ? pixels : Math.Sign(error / radiansPerPixel);
+    }
+    internal static int TurnFeedbackDelay(int pixels)
+    {
+        int magnitude=Math.Abs(pixels);
+        return magnitude>=64?12:magnitude>=24?16:20;
     }
     public static async Task<Movement> Calibrate(World world, CancellationToken token, Action<string, object>? trace = null)
     {
@@ -525,7 +533,7 @@ public sealed partial class Movement
         if(turnResponse.Observe(position,heading,pixels,Environment.TickCount64))throw new TurnUnresponsiveException(position,Forward);
         if (pixels == 0) return true;
         Input.Turn(pixels, token);
-        await Input.Delay(25, token);
+        await Input.Delay(TurnFeedbackDelay(pixels), token);
         return false;
     }
     public bool StopApproach()
@@ -566,6 +574,6 @@ public sealed partial class Movement
             lastMotionTrace = now;
             TraceLog.Record("approach feedback", new { Position = position, TargetDelta = delta, Forward, ErrorDegrees = angle * 180 / Math.PI, HoldingW = advancing, TurnPixels = pixels });
         }
-        await Input.Delay(25, token);
+        await Input.Delay(TurnFeedbackDelay(pixels), token);
     }
 }

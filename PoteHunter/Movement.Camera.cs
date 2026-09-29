@@ -118,7 +118,7 @@ public sealed partial class Movement
         Input.Aim(x,y,token);
         TraceCamera("face target 3D",camera,target,opticalError,controlError,pivotValidated,pivotRayMiss,parallaxMultiplier,x,y,precision,
             stabilizedError.Yaw!=opticalError.Yaw||stabilizedError.Pitch!=opticalError.Pitch);
-        await Input.Delay(25,token);
+        await Input.Delay(TurnFeedbackDelay(Math.Max(Math.Abs(x),Math.Abs(y))),token);
         return false;
     }
 
@@ -136,7 +136,7 @@ public sealed partial class Movement
         int y=Pixels(controlError.Pitch,cameraPitchRadiansPerPixel,96,VerticalControlGain(controlError.Pitch));
         Input.Aim(0,y,token);
         TraceCamera("vertical target 3D",camera,target,error,controlError,pivotValidated,pivotRayMiss,parallaxMultiplier,0,y);
-        await Input.Delay(25,token);
+        await Input.Delay(TurnFeedbackDelay(Math.Abs(y)),token);
         return false;
     }
 

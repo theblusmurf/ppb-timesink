@@ -1,5 +1,16 @@
 # Release notes
 
+## Release1.47
+
+- Increased the bounded turn correction for large and medium heading errors so
+  side targets are reached sooner without allowing an uncontrolled snap.
+- Replaced the fixed 25 ms turn/camera feedback wait with an adaptive 12/16/20
+  ms cadence. Large corrections receive faster feedback, while the smaller
+  final corrections retain enough settling time to avoid visible jitter.
+- Applied the same adaptive feedback to 3D target yaw and vertical aim so body
+  and camera movement stay synchronized.
+- Validation: .NET 10 Release build and the offline PoteHunter self-test pass.
+
 ## Release1.46
 
 - Sampled ground loot from the 100 ms pickup loop and the active hunt loop,
