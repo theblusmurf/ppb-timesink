@@ -1,5 +1,17 @@
 # Release notes
 
+## Release1.44
+
+- Preserved a confirmed engaged swing across transient target-node and target-HP
+  reads instead of releasing the basic attack on the first stale snapshot.
+- Reused the last engaged target when selection briefly returned no target, so a
+  refresh cannot silently drop the active combat lock.
+- Stationary swing recovery now sends a real 35 ms key-up interval before
+  re-arming, preventing the client from coalescing an immediate up/down pair.
+- Added `Combat.BasicAttackHeld` to live status and recording snapshots so a
+  future stop can be separated into bot release, target loss, or client input
+  loss.
+
 ## Release1.43
 
 - Added explicit Navigation overlay controls to start a route recording and
