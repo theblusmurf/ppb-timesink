@@ -87,6 +87,15 @@ public static class Targeting
         (id & 0xffff) is 5971 or 5972 or 5973 or 5974;
     public static bool IsStationaryHuntTarget(Entity entity) =>
         IsStationaryHuntTargetId(entity.Id) && IsKnownUnprefixedMonster(entity.Id,entity.Model);
+    public const double StationaryAssistMaximumStep=1.5;
+    public static bool TryStationaryAssistStep(double targetDistance,double swingWindow,out double step)
+    {
+        step=0;
+        if(!double.IsFinite(targetDistance) || !double.IsFinite(swingWindow) || swingWindow<0 ||
+            targetDistance<=swingWindow || targetDistance>swingWindow+StationaryAssistMaximumStep)return false;
+        step=Math.Clamp(targetDistance-swingWindow+.05,.1,StationaryAssistMaximumStep);
+        return true;
+    }
     public static bool ShouldHoldStationaryAnchor(Entity? lockedTarget, Options options, Vec position, Vec anchor, Health targetHealth)
     {
         // Fixed Mimic/Tribal/Pulkhan/Tower assignments must not trigger the
@@ -227,6 +236,9 @@ public static class Targeting
             throw new Exception("Fixed-target damage response did not honor the saved anchor guard.");
         if(ShouldHoldStationaryAnchor(fixedTarget,new Options { GroupMode=true },new Vec(1,0),anchor,new(40,100)))
             throw new Exception("Group mode incorrectly inherited the stationary anchor damage guard.");
+        if(!TryStationaryAssistStep(3.5,2.5,out var assistStep) || assistStep>StationaryAssistMaximumStep || assistStep<1.0 ||
+            TryStationaryAssistStep(4.01,2.5,out _) || TryStationaryAssistStep(2.5,2.5,out _))
+            throw new Exception("Stationary melee assist exceeded its bounded step or admitted an out-of-range target.");
 
         // Incidental enemies in an authorized Gamekeeper fight share that fight's
         // completion area; it must not become a wider fresh-monster search.

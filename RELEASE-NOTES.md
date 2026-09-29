@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.38
+
+- Added a single bounded melee-assist step for engaged Mimic, Tribal, Pulkhan,
+  and Tower targets that are just outside the swing window. The step is capped
+  at 1.5 map units and never chains into a chase.
+- After an assisted target dies, the character returns to the original saved
+  activation point and restores its saved facing before selecting the next
+  target.
+- Added offline checks for the 1.5-unit assist cap and stationary return flow.
+
 ## Release1.37
 
 - Prevented incoming-damage recovery from sidestepping fixed Mimic, Tribal,

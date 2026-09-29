@@ -723,36 +723,11 @@ public sealed partial class HunterForm : Form
         lootTracker.ObserveActivity(false);
         startVersion++;
         rangedPull.Reset(); rangedTagging = false;
-        Input.PickupHoldProvider=null;nearbyPickupSnapshot.Clear();nearbyPickupCount=0;
-        cancel?.Cancel(); ReleaseCombatPickup(); Input.Release(); movement = null; lockedTarget = null; message = reason;
-    }
-    bool SaveLootLog(string reason)
-    {
-        bool saved = lootTrackerLog.TrySave(lootTracker.Snapshot(), reason);
-        if (!saved) message = $"Loot event could not be saved ({reason}).";
-        return saved;
-    }
-    void PaintNavigation(object? sender,PaintEventArgs e)
-    {
-        DrawNavigation(e.Graphics,navigationCanvas.ClientSize);
-    }
-    void DrawNavigation(Graphics g,Size canvasSize)
-    {
-        g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        float span=(float)NavigationViewRadius(),scale=Math.Min(canvasSize.Width,canvasSize.Height)/(span*2);
-        float cx=canvasSize.Width/2f, cy=canvasSize.Height/2f;
-        PointF Project(Vec v)=>new(cx+(float)(v.X-navigationPosition.X)*scale,cy-(float)(v.Y-navigationPosition.Y)*scale);
-        if(zoneMapBackground.TryGet(navigationZone,out var mapImage,out var mapBounds))
-        {
-            float left=cx+(float)(mapBounds.MinX-navigationPosition.X)*scale;
-            float right=cx+(float)(mapBounds.MaxX-navigationPosition.X)*scale;
-            float top=cy-(float)(mapBounds.MaxY-navigationPosition.Y)*scale;
-            float bottom=cy-(float)(mapBounds.MinY-navigationPosition.Y)*scale;
+        Input.PickupHoldProvider=(float)(mapBounds.MinY-navigationPosition.Y)*scale;
             g.DrawImage(mapImage,RectangleF.FromLTRB(left,top,right,bottom));
         }
         using var trailPen=new Pen(Color.SeaGreen,1.5f);using var routePen=new Pen(Color.DeepSkyBlue,2);using var obstaclePen=new Pen(Color.Orange,2);using var avoidPen=new Pen(Color.IndianRed,1.5f);
-        var trail=navigation.Trail.Where(p=>(p-navigationPosition).Length<span*2).Select(Project).ToArray();if(trail.Length>1)g.DrawLines(trailPen,trail);
-        foreach(var obstacle in navigation.Blocked) {var p=Project(obstacle.Center);float r=(float)obstacle.Radius*scale;g.DrawEllipse(obstaclePen,p.X-r,p.Y-r,r*2,r*2);}
+        var trail=navigation.Trail.WhereCenter);float r=(float)obstacle.Radius*scale;g.DrawEllipse(obstaclePen,p.X-r,p.Y-r,r*2,r*2);}
         foreach(var zone in avoidZones) {var p=Project(zone.Center);float r=(float)(zone.Radius+1)*scale;g.DrawEllipse(avoidPen,p.X-r,p.Y-r,r*2,r*2);}
         var route=new[]{navigationPosition}.Concat(navigation.Route).Select(Project).ToArray();if(route.Length>1)g.DrawLines(routePen,route);
 
@@ -770,12 +745,7 @@ public sealed partial class HunterForm : Form
         if(chests.Count>0)
         {
             using var chestFill=new SolidBrush(Color.FromArgb(255,215,0));
-            using var rememberedFill=new SolidBrush(Color.FromArgb(155,215,165,32));
-            using var chestOutline=new Pen(Color.FromArgb(140,90,0),1.4f);
-            using var claspBrush=new SolidBrush(Color.WhiteSmoke);
-            using var font=new Font("Segoe UI",7.5f,FontStyle.Bold);
-            using var textBrush=new SolidBrush(Color.FromArgb(255,238,130));
-            using var tagBgBrush=new SolidBrush(Color.FromArgb(210,16,22,32));
+            using var rememberedFill=new SColor.FromArgb(210,16,22,32));
             using var tagBorderPen=new Pen(Color.FromArgb(180,218,165,32),1f);
             using var offscreenBrush=new SolidBrush(Color.FromArgb(255,215,0));
 
@@ -806,64 +776,18 @@ public sealed partial class HunterForm : Form
                 }
                 else
                 {
-                    float dx=p.X-cx, dy=p.Y-cy;
-                    float len=MathF.Sqrt(dx*dx+dy*dy);
-                    if(len>1e-3f)
-                    {
-                        float margin=16f;
-                        float maxX=cx-margin, maxY=cy-margin;
-                        float sx=Math.Abs(dx)>1e-4f?maxX/Math.Abs(dx):float.MaxValue;
-                        float sy=Math.Abs(dy)>1e-4f?maxY/Math.Abs(dy):float.MaxValue;
-                        float s=Math.Min(sx,sy);
-                        float edgeX=cx+dx*s, edgeY=cy+dy*s;
-
-                        float nx=dx/len, ny=dy/len;
-                        float px=-ny, py=nx;
-                        PointF tip=new(edgeX,edgeY);
-                        PointF b1=new(edgeX-nx*9+px*4.5f,edgeY-ny*9+py*4.5f);
-                        PointF b2=new(edgeX-nx*9-px*4.5f,edgeY-ny*9-py*4.5f);
-                        g.FillPolygon(offscreenBrush,new[]{tip,b1,b2});
-                        g.DrawPolygon(chestOutline,new[]{tip,b1,b2});
-
-                        string tag=$"{dist:F0}m";
-                        var tsz=g.MeasureString(tag,font);
-                        float tx=Math.Clamp(edgeX-nx*16-tsz.Width/2f,2,w-tsz.Width-2);
-                        float ty=Math.Clamp(edgeY-ny*16-tsz.Height/2f,2,h-tsz.Height-2);
-                        g.FillRectangle(tagBgBrush,tx-2,ty-1,tsz.Width+4,tsz.Height+2);
-                        g.DrawRectangle(tagBorderPen,tx-2,ty-1,tsz.Width+4,tsz.Height+2);
-                        g.DrawString(tag,font,textBrush,tx,ty);
-                    }
-                }
-            }
-        }
-
-        var self=Project(navigationPosition);g.FillEllipse(Brushes.White,self.X-4,self.Y-4,8,8);
-    }
-    bool RoutingEnabled => activeGuardOptions?.AutomaticRouting ?? automaticRouting.Checked;
+                    float dx=p.X-cx, dy=pAutomaticRouting ?? automaticRouting.Checked;
     static (uint,uint,long) TargetIdentity(Entity e)=>(e.Id,e.Generation,e.Address);
     async Task<bool> NavigateTo(Movement drive,Vec goal,Vec anchor,Options options,CancellationToken token,double bodyReach=0,double? boundaryRadius=null,bool watchTurns=false)
     {
-        activeMovementBoundary=boundaryRadius ?? (double)options.HuntRadius;
-        if(!goal.Finite || (goal-anchor).Length>activeMovementBoundary)throw new RouteUnavailableException("Destination is beyond the current movement boundary.");
-        var self=world.LocalPlayer();navigationPosition=self.Position;
-        navigation.Observe(world.NavigationContext(self),self.Position,self.Height);
-        if(!options.AutomaticRouting) {await drive.Approach(world,self.Position,goal-self.Position,token,watchTurns);return false;}
+        activeMovementBoundary=boundaryRadius ?? (double)options.He.Approach(world,self.Position,goal-self.Position,token,watchTurns);return false;}
         int version=navigation.RouteVersion;
         Vec waypoint;
-        try {waypoint=navigation.Waypoint(self.Position,goal,anchor,boundaryRadius ?? (double)options.HuntRadius,avoidZones);}
-        catch(RouteUnavailableException) when(bodyReach>0 && (goal-self.Position).Length<=bodyReach) {drive.StopApproach();return true;}
-        if(version!=navigation.RouteVersion) drive.StopApproach();
-        try {await drive.Approach(world,self.Position,waypoint-self.Position,token,watchTurns);}
+        try {waypoint=navigation.Waypoiurns);}
         catch(MovementBlockedException blocked)
         {
             drive.StopApproach();Input.HoldMouse(false,false,token);
-            if(bodyReach>0 && (goal-blocked.Position).Length<=bodyReach)
-            {
-                TraceLog.Record("close body collision; checking attack reach",new {blocked.Position,Goal=goal,Distance=(goal-blocked.Position).Length});
-                return true;
-            }
-            navigation.RecordBlock(blocked.Position,blocked.Direction,self.Height);
-            TraceLog.Record("navigation blocked direction",new {Zone=navigationZone,blocked.Position,blocked.Direction,navigation.RecoveryAttempts,Goal=goal});
+            if(bodyReach>0 && (goal-blocked.Position)Zone=navigationZone,blocked.Position,blocked.Direction,navigation.RecoveryAttempts,Goal=goal});
             await Input.Delay(100,token);
         }
         return false;
@@ -879,96 +803,37 @@ public sealed partial class HunterForm : Form
         var requested=CurrentOptions();
         if(requested.HealerMode && requested.GroupMode)
         {
-            var party=world.Party();var self=world.LocalPlayer();
-            if(!party.Available || party.Members.Count(m=>m.Id!=self.Id && m.Name.Equals(requested.GroupTankName,StringComparison.OrdinalIgnoreCase))!=1)
-            {message="Select another current party member as tank on the Group page before starting the healbot.";return;}
-        }
-        if(requested.HealerMode && !requested.GroupMode)
-        {
-            message="Healer mode ready. Press F8 again to stop.";
+            var party=world.Party();var self=world.LocalPlayerler mode ready. Press F8 again to stop.";
             await Hunt();
             return;
         }
-        if(movement==null && requested.Ranged && !requested.HealerMode && RangedAimPersistence.TryRestore(Path.Combine(AppContext.BaseDirectory,"calibration.json"),world,out var restored,out var restoreStatus))
-        {
-            movement=restored;
-            message="Live facing ready. "+restoreStatus;
+        if(movement==null && requested.Ranged && !requested.HealerMode && RangedAimPersistacing ready. "+restoreStatus;
             TraceLog.Record("3D aim sensitivity restored",new{world.ClientHash,Character=world.LocalPlayer().Name,restoreStatus});
         }
-        if(movement==null) await Calibrate();
-        if(version!=startVersion || movement==null || !Input.Allowed()) return;
-        message="Calibration ready. Starting huntâ€¦";
-        await Hunt();
-    }
-    string? TargetGuardReason(Entity target, Health hp, Vec position, Options? options=null)
-    {
-        var active=options ?? activeGuardOptions;
-        if(active?.GroupMode==true)
+        if(movemenue)
         {
             if(hp.Dead)return null;
             if(active.PrioritizeGamekeeper && Targeting.IsGamekeeper(target))return GroupCandidateReason(target,hp,position,active);
-            if(groupDecision.Action!=GroupAction.Attack || groupDecision.Target is not Entity selected || TargetIdentity(selected)!=TargetIdentity(target))
-                return "Group: "+groupDecision.Status;
+     cision.Status;
             var tank=groupDecision.Tank;
             var liveTank=tank==null?null:world.Find(tank.Id);
             var liveTarget=world.Find(target.Id);
             if(liveTank==null || tank==null || TargetIdentity(liveTank)!=TargetIdentity(tank) || liveTarget==null || TargetIdentity(liveTarget)!=TargetIdentity(target))
                 return "Group tank or target changed";
             if((liveTarget.Position-liveTank.Position).Length>(double)active.GroupAttackRadius)return "Target moved outside the tank attack radius";
-            return GroupCandidateReason(target,hp,position,active);
-        }
-        return (unreachableTargets.TryGetValue(TargetIdentity(target),out long until) && Environment.TickCount64<until ? "Temporarily unreachable" : null) ??
-        ((options?.AutomaticRouting ?? RoutingEnabled) ? Avoidance.BlockedPoint(target.Position,avoidZones) : Avoidance.BlockedSegment(position,target.Position,avoidZones)) ??
-        courtesy.Blocked(target,hp,entities,guardSelfId,options?.AntiKillSteal ?? activeGuardOptions?.AntiKillSteal ?? antiKillSteal.Checked,
-            (double)(options?.OtherPlayerRadius ?? activeGuardOptions?.OtherPlayerRadius ?? playerBuffer.Value),
-            encounter.MayHaveReceivedOurDamage(target) && CombatCourtesy.PlayerNear(target.Position,entities,guardSelfId,
-                Math.Max((double)(options?.OtherPlayerRadius ?? activeGuardOptions?.OtherPlayerRadius ?? playerBuffer.Value),6))==null);
-    }
-
-    double BaseTargetRadius(Entity entity,Options options) => options.PrioritizeGamekeeper && Targeting.IsGamekeeper(entity) ?
-        Targeting.ResponseRadius((double)options.HuntRadius,(double)options.GamekeeperResponseRadius) : options.LeaveAreaWhenEmpty && !options.GroupMode ?
-        activeExcursion is {OutsideTrip:true} trip ? trip.OutsideSearchRadius : (double)options.HuntRadius :
-        Targeting.TargetRadius(entity,options.PrioritizeGamekeeper,(double)options.HuntRadius,(double)options.GamekeeperResponseRadius);
-
-    Entity? PriorityGamekeeper(Options options)
-    {
-        if(!options.PrioritizeGamekeeper || activeHuntAnchor is not Vec anchor)return null;
-        if(Environment.TickCount64-guardRefreshedAt>=100)RefreshGuardScene();
-        var health=world.HealthSnapshot();var position=world.PlayerPosition();
-        var retained=lockedTarget is Entity locked && Targeting.IsGamekeeper(locked) ? locked : pendingPriorityGamekeeper;
-        double? retainedRadius=retained!=null && (encounter.IsEngaged(retained) || courtesy.StartedHere(retained)) ? activeCompletionBoundary : null;
-        var candidates=entities.Where(e=>Targeting.IsGamekeeper(e)).ToArray();
-        var selected=GamekeeperPriority.Choose(candidates.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)==null),
-            health,position,anchor,(double)options.HuntRadius,(double)options.GamekeeperResponseRadius,true,retained,retainedRadius);
-        if(selected!=null)return selected;
-
-        // A failed route used to place the Gamekeeper in the generic
-        // unreachable cache for 30 seconds. That cache is useful for ordinary
+            return GroupCand        // unreachable cache for 30 seconds. That cache is useful for ordinary
         // pulls, but it also made a live priority target silently disappear.
-        // Retry only that transient guard when no protected candidate was
-        // found, preserving avoidance, courtesy, HP, and response boundaries.
-        var retry=candidates.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)=="Temporarily unreachable").ToArray();
-        selected=GamekeeperPriority.Choose(retry,health,position,anchor,(double)options.HuntRadius,(double)options.GamekeeperResponseRadius,true,retained,retainedRadius);
-        if(selected!=null)
-        {
-            unreachableTargets.Remove(TargetIdentity(selected));
-            TraceLog.Record("Gamekeeper priority recovered from transient route guard",new {selected.Id,selected.DisplayName,Position=selected.Position});
+        // Retry only that transienr priority recovered from transient route guard",new {selected.Id,selected.DisplayName,Position=selected.Position});
         }
         return selected;
     }
 
-    async Task StandForGamekeeper(CancellationToken token)
-    {
-        ReleaseCombatPickup();movement?.StopApproach();Input.Release(preserveNearbyPickup:true);
-        gamekeeperTransition=true;
-        try {if(world.RestSupported)await EnsurePosture(false,token);}
+    async Task StandForGamekeepeestSupported)await EnsurePosture(false,token);}
         finally {gamekeeperTransition=false;}
     }
 
     bool MatchesRequestedTarget(Entity entity,Options options,int level) =>
-        Targeting.Eligible(entity,new Health(1,1),world.Difficulty(entity,level),options.Target,options.AllowedDifficulties,options.PrioritizeGamekeeper);
-
-    void ObserveEncounter(Options options,IReadOnlyDictionary<uint,Health> health,Vec position,int level)
+        TaeadOnlyDictionary<uint,Health> health,Vec position,int level)
     {
         if(options.GroupMode || !encounter.Active) return;
         bool WithinBoundary(Entity entity,bool finishing=false)
@@ -982,74 +847,27 @@ public sealed partial class HunterForm : Form
             WithinBoundary(entity) && TargetGuardReason(entity,hp,position,options)==null,
             mayRemainEngaged:(entity,hp)=>WithinBoundary(entity,true) && TargetGuardReason(entity,hp,position,options)==null,
             clearNearby:options.ClearNearbyEnemies && !healingRestPending && !(options.LeaveAreaWhenEmpty && completionReturnPending),
-            mayClaimCollateral:entity=>(!RangedPullEnabled(options) || !rangedTagging) && CombatCourtesy.PlayerNear(entity.Position,entities,guardSelfId,Math.Max(6,(double)options.OtherPlayerRadius))==null,
-            attackHeld:Input.BasicAttackHeld,attackReach:Encounter.CollateralReach(RangedPullEnabled(options) ? (double)options.RangedMeleeAttackRange : (double)options.MeleeRange));
-        string state=$"{encounter.EngagedCount}:{encounter.HasUnresolvedEngaged}:"+string.Join(",",encounter.EngagedCandidates.OrderBy(e=>e.Id).Select(e=>$"{e.Id}:{e.Generation}:{e.Address}"));
-        if(state!=lastEngagementState)
-        {
-            lastEngagementState=state;
-            TraceLog.Record("engaged enemies updated",new {Count=encounter.EngagedCount,encounter.HasUnresolvedEngaged,Enemies=encounter.EngagedCandidates.Select(e=>new {e.Id,e.DisplayName,e.Generation}).ToArray()});
-        }
-    }
-
-    object CombatState() => new {SkillHealthRule=new{Enabled=activeGuardOptions?.HealthSkillCondition ?? healthSkillCondition.Checked,Percent=activeGuardOptions?.HealthSkillPercent ?? healthSkillPercent.Value,ExtraKeys=activeGuardOptions?.HealthConditionKeys ?? healthConditionKeys.Text,HealthSource=(activeGuardOptions?.HealerMode ?? healerMode.Checked)?"Healing target":"Character"},
-        AutoDetectSkills=activeGuardOptions?.AutoDetectSkills ?? autoSkills.Checked,ActiveSkillKeys=activeGuardOptions?.SkillKeys,GamekeeperResponseRadius=activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value,LootDuringSkillCooldowns=activeGuardOptions?.LootDuringSkillCooldowns ?? combatPickup.Checked,PickupHeld=Input.PickupHeld,NearbyLootPickupEnabled=activeGuardOptions?.AutoPickupNearbyLoot ?? nearbyLootPickup.Checked,NearbyLootCount=nearbyPickupCount,PickupRadius=activeGuardOptions?.NearbyEnemyRadius ?? nearbyRadius.Value,PrioritizeGamekeeper=activeGuardOptions?.PrioritizeGamekeeper ?? prioritizeGamekeeper.Checked,Enabled=activeGuardOptions?.ClearNearbyEnemies ?? clearNearby.Checked,
-        Radius=activeGuardOptions?.NearbyEnemyRadius ?? nearbyRadius.Value,encounter.Active,
-        NearbyEnemies=encounter.Candidates.Select(e=>new {e.Id,e.DisplayName,e.Position}).ToArray(),
-        EngagedEnemies=encounter.EngagedCandidates.Select(e=>new {e.Id,e.DisplayName,e.Position}).ToArray(),
-        encounter.HasEngaged,encounter.EngagedCount,encounter.HasUnresolvedEngaged,HealingWarning=healingWarning,RestToFullPending=healingRestPending,RestToFullActive=healingRest!=null,
-        encounter.HasUnresolvedNearby,PendingLoot=deferredLoot.Count,DefensePending=defensePending,LastIncomingDamageAt=combatPressure.LastDamageAt ,
-        RangedPack=new {Enabled=activeGuardOptions?.RangedPullEnabled ?? rangedPullEnabled.Checked,Phase=rangedPull.Phase.ToString(),rangedPull.AttemptedCount}};
+            mayClaimCollateral:entity=>(!RangedPullEnabled(options) || !rangedTagging) && CombatCourtesy.PlayerNear(entity.Position,entities,guardSelfId,Math.Max(6,(double)options.OtherPlayerRadiu=new{Enabled=activeGuardOptions?.HealthSkillCondition ?? healthSkillCondition.Checked,Percent=activeGuardOptions?.HealthSkillPercent ?? healthSkillPercent.Value,ExtraKeys=activeGuardOptions?.HealthConditionKeys ?? healthConditionKeys.Text,HealthSource=(activeGuardOptions?.HealerMode ?? healerMode.Checked)?"Healing target":"Character"},
+        AutoDetectSkills=activeGuardOptions?.AutoDetectSkills ?? autoSkills.Checked,ActiveSkillKeys=activeGuardOptions?.SkillKeys,GamekeeperResponseRadius=activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value,LootDuringSk NearbyEnemies=encounter.Candidates.Select(e=>new {e.Id,e.DisplayName,e.Position}).ToArray(),
+        EngagedEnemies=encounter.EngagedCandidates.Select(e=>new {e.Id,e.DisplayName,e.Position})ctiveGuardOptions?.RangedPullEnabled ?? rangedPullEnabled.Checked,Phase=rangedPull.Phase.ToString(),rangedPull.AttemptedCount}};
     object HealerState()=>new {Enabled=activeGuardOptions?.HealerMode ?? healerMode.Checked,AutoDetectSkills=activeGuardOptions?.AutoDetectHealingSkills ?? autoHealingSkills.Checked,
         SkillKeys=activeGuardOptions?.HealingSkillKeys ?? healingSkillKeys.Text,ChargeMilliseconds=activeGuardOptions?.HealChargeMilliseconds ?? healCharge.Value,
         HealBelowPercent=activeGuardOptions?.PartyHealBelowPercent ?? partyHealBelow.Value,Range=activeGuardOptions?.PartyHealRange ?? partyHealRange.Value,
         Target=activeHealTarget==null?null:new {activeHealTarget.Member.Id,activeHealTarget.Member.Name,activeHealTarget.PartyIndex,activeHealTarget.Health,activeHealTarget.Percent},LastSkill=lastHealingSkill,
         Buffs=new{Mode="Live active-effect memory",Enabled=activeGuardOptions?.MaintainAreaBuffs??maintainBuffs.Checked,activeEffects.Available,activeEffects.Status,Decisions=buffDecisions,Active=activeEffects.Effects.Where(e=>e.Active)}};
 
-    string AttackKeys(string keys,HotbarSnapshot bar,bool upkeep)
-    {
-        var effects=world.ActiveEffects();
-        return new(keys.Where(key=>!upkeep || !bar.Slots.Any(s=>s.Key==key.ToString() &&
-            (LiveBuffUpkeep.CanMaintain(s,effects) || s.Kind==SlotKind.Skill && s.SkillTarget==SkillTargetKind.Party))).ToArray());
+    string AttackKeys(string keys,HotbarSnapshot bar,bool upkects) || s.Kind==SlotKind.Skill && s.SkillTarget==SkillTargetKind.Party))).ToArray());
     }
 
     void ObserveBuffs(Options o,HotbarSnapshot bar)
     {
-        var self=world.LocalPlayer();
-        activeEffects=world.ActiveEffects();
-        ObservePotionBuffs(o,bar);
-        buffDecisions=buffPolicy.Evaluate(world.NavigationContext(self)+$":{bar.PageBase}",bar,activeEffects,o.MaintainAreaBuffs,Environment.TickCount64);
-        buffStatus.Text=!activeEffects.Available?activeEffects.Status:buffDecisions.Count==0?"No slotted skills match the current effect catalog.":
-            string.Join("\n",buffDecisions.Select(b=>$"{b.Key}: {b.Skill} ({b.Use}) â€” {b.Status}"));
-    }
-
-    async Task<bool> TryMaintainBuff(Options o,CancellationToken token)
-    {
-        if(HasActiveFight() || combatPressure.RecentDamage(Environment.TickCount64) || PriorityGamekeeper(o)!=null)return false;
-        if(await TryUseBuffPotion(o,token))return true;
-        if(!o.MaintainAreaBuffs)return false;
-        var bar=CheckedHotbar();ObserveBuffs(o,bar);
-        var decision=buffDecisions.FirstOrDefault(b=>b.ShouldCast && HealthSkillAllowed(bar.Slot(b.Key[0]),o));
+        var self=world.LocalPlayer()wed(bar.Slot(b.Key[0]),o));
         if(decision==null)return false;
         var hp=world.HealthSnapshot().GetValueOrDefault(world.LocalPlayer().Id);
         if(!hp.Known||hp.Dead)return false;
         movement?.StopApproach();ReleaseCombatPickup();ClearRangedPending();Input.Release(preserveNearbyPickup:true);
         var slot=bar.Slot(decision.Key[0]);
-        var attempt=Environment.TickCount64;
-        message=$"{(slot.SkillUse==SkillUseKind.Chant?"Turning on chant":"Casting AOE buff")}: {slot.Name}";
-        TraceLog.Record("area buff attempt",new{slot.Key,slot.Id,slot.Name,Mode="live effect",slot.SkillUse,TargetSelection="none",ChargeMilliseconds=slot.SkillUse==SkillUseKind.Cast?o.HealChargeMilliseconds:0});
-        priorityInterruptibleActivity=true;buffInProgress=true;
-        try
-        {
-            await Input.Key((Keys)slot.Key[0],70,token);
-            await Input.Delay(100,token);
-            var selected=CheckedHotbar().Slot(slot.Key[0]);
-            var afterKeyEffect=world.ActiveEffects().Match(slot.Name);
-            if(afterKeyEffect is{Active:true}){ObserveBuffs(o,CheckedHotbar());return true;}
-            if(selected.Id!=slot.Id || selected.Kind!=SlotKind.Skill || !selected.Ready || world.SelectedSkill()!=slot.Id)
-            {
-                buffPolicy.RecordAttempt(decision,attempt,false);
-                TraceLog.Record("area buff selection failed",new{slot.Key,slot.Id,SelectedSkill=world.SelectedSkill(),selected.Ready,selected.RemainingCooldown,selected.Locked});return true;
+        var attempt=Envrn true;
             }
             var effect=world.ActiveEffects().Match(slot.Name);
             if(effect==null)return false;
@@ -1059,46 +877,23 @@ public sealed partial class HunterForm : Form
             if(!await CastHealthCheckedSkill(slot,o,token))return false;
             await Input.Delay(180,token);
             ObserveBuffs(o,CheckedHotbar());
-            TraceLog.Record("area buff activation observation",new{slot.Key,slot.Id,Decision=buffDecisions.FirstOrDefault(b=>b.Key==decision.Key && b.SkillId==decision.SkillId)});
-            return true;
-        }
-        catch {buffPolicy.RecordAttempt(decision,attempt,false);throw;}
-        finally{priorityInterruptibleActivity=false;buffInProgress=false;Input.Release(preserveNearbyPickup:true);}
-    }
-
-    void SupportPreflight()
-    {
-        if(Environment.TickCount64<nextSupportPreflight)return;
-        nextSupportPreflight=Environment.TickCount64+100;
+            TraceLog.Record("area buff activation observation",new{slot.Key,slot.Id,Decision=buffDecisions.FirstOrDefault(b=>b.Key==dec       nextSupportPreflight=Environment.TickCount64+100;
         if(runCharacter==null || !LocalCharacter.Same(runCharacter,world.LocalPlayer()) || runZone!=world.ActiveZone())
-            throw new OperationCanceledException("Character or zone changed during support casting.");
-        _=CheckedHotbar();
-        var hp=world.HealthSnapshot().GetValueOrDefault(runCharacter.Id);
-        if(!hp.Known||hp.Dead)throw new OperationCanceledException("Support stopped: character health unavailable or character dead.");
-        if(activeGuardOptions is {GroupMode:true,HealerMode:true} groupHealer)GroupHealerPreflight(groupHealer);
+            terMode:true} groupHealer)GroupHealerPreflight(groupHealer);
     }
 
     async Task<bool> RunLootJob(LootJob job,Movement drive,Vec anchor,Options options,CancellationToken token)
     {
         // Continuous pickup already handles every live drop. Historical corpse
         // checks must not add another 600+ ms of waiting for each chained kill.
-        if(options.AutoPickupNearbyLoot)return true;
-        navigation.BeginGoal($"loot:{job.Target.Id}:{job.Target.Generation}");
-        lootGuardPosition=job.Position; lootBeforeFight=job.ExistingDrops;
-        try
-        {
-            TraceLog.Record("target loot started",new {job.Target.Id,job.Target.DisplayName,job.Target.PriorityLootObject,job.HoldMs});
-            await CollectLoot(drive,job.Position,anchor,options,token,job.HoldMs,job.Target.PriorityLootObject,job.ExistingDrops);
+        if(options.AutoPickupNearon,anchor,options,token,job.HoldMs,job.Target.PriorityLootObject,job.ExistingDrops);
             TraceLog.Record("target loot finished",new {job.Target.Id,job.Target.DisplayName,job.Target.PriorityLootObject});
             return true;
         }
         catch(EncounterInterruptedException)
         {
             encounterQuietSince=0;
-            TraceLog.Record("loot paused for nearby enemies",new {job.Target.Id,Enemies=encounter.Candidates.Select(e=>e.Id).ToArray()});
-            return false;
-        }
-        catch(TargetProtectionException ex) { message="Pickup skipped: "+ex.Message; TraceLog.Record("loot protection skip",new {job.Target.Id,Reason=ex.Message}); return true; }
+            TraceLog.Record("loot paused ickup skipped: "+ex.Message; TraceLog.Record("loot protection skip",new {job.Target.Id,Reason=ex.Message}); return true; }
         catch(RouteUnavailableException ex) {message="Pickup route unavailable: "+ex.Message;TraceLog.Record("loot navigation skip",new {job.Target.Id,Reason=ex.Message});return true;}
         finally {lootGuardPosition=null;lootBeforeFight=null;drive.StopApproach();Input.Release(preserveNearbyPickup:true);}
     }
@@ -1108,30 +903,13 @@ public sealed partial class HunterForm : Form
         entities=world.Poll(); guardSelfId=world.LocalPlayer().Id;
         if(activeGuardOptions?.GroupMode==true){currentParty=world.Party();ApplyPartyNames();}
         avoidZones=Avoidance.BuildZones(avoidRules,entities,guardSelfId);
-        guardRefreshedAt=Environment.TickCount64;
-        RefreshGroupDecision();
-    }
-
-    void ReleaseCombatPickup()
-    {
-        if(combatPickupHeld)Input.Hold(Keys.E,false,default);
-        combatPickupHeld=false;combatPickupBaseline=null;
-    }
-
-    void StartNearbyPickup(Options options)
-    {
-        nearbyPickupSnapshot.Clear();nearbyPickupCount=0;nextNearbyPickupRead=0;
-        Input.PickupHoldProvider=options.AutoPickupNearbyLoot ? WantsNearbyPickup : null;
+        guardRefreshedAt=Environment.TickCount6ptions.AutoPickupNearbyLoot ? WantsNearbyPickup : null;
     }
 
     bool WantsNearbyPickup()
     {
         var options=activeGuardOptions;
-        if(!working || !connected || options==null || !options.AutoPickupNearbyLoot || cancel?.IsCancellationRequested!=false || returningFromPriority)return false;
-        if(RangedPullEnabled(options) && rangedPull.Active && encounter.HasEngaged)return false;
-        var self=world.LocalPlayer();
-        if(runCharacter==null || !LocalCharacter.Same(runCharacter,self) || runZone!=world.ActiveZone())
-            throw new OperationCanceledException("Character or zone changed during ground pickup.");
+        if(!working || !connected || options==nuerationCanceledException("Character or zone changed during ground pickup.");
         var hp=world.TargetHealth(self.Id);
         if(!hp.Known || hp.Dead)throw new InvalidOperationException("Ground pickup stopped: player health is unavailable or dead.");
         long now=Environment.TickCount64;
@@ -1275,14 +1053,7 @@ public sealed partial class HunterForm : Form
         long now=Environment.TickCount64;
         return entities.Where(entity=>Targeting.IsChest(entity) && entity.Position.Finite &&
                 !latestHealth.GetValueOrDefault(entity.Id).Dead &&
-                (entity.Position-anchor).Length<=(double)options.HuntRadius &&
-                (!chestGuideCooldown.TryGetValue((navigationZone,entity.Id),out var retryAt)||now>=retryAt))
-            .OrderBy(entity=>(entity.Position-position).Length).FirstOrDefault();
-    }
-
-    async Task<bool> GuideToTreasureChest(Movement drive,Vec anchor,Options options,CancellationToken token)
-    {
-        var chest=NearestTreasureChest(world.PlayerPosition(),anchor,options);
+                (entity.Position-anchor).Length<=(double)erPosition(),anchor,options);
         if(chest==null)return false;
         navigation.BeginGoal($"treasure-chest:{navigationZone}:{chest.Id}");
         message=$"Guiding to {Targeting.ChestLabel(chest)}";
@@ -1308,9 +1079,7 @@ public sealed partial class HunterForm : Form
         return true;
     }
 
-    bool TryGreetNearbyPlayer(Options options, Vec position, IReadOnlyList<Entity> observed, uint selfId)
-    {
-        if (!options.GreetPlayers || Input.BasicAttackHeld || Input.RightButtonHeld || !Input.Allowed()) return false;
+    || !Input.Allowed()) return false;
         var player = playerGreeting.Next(position, observed, selfId, (double)options.GreetingRadius);
         if (player == null) return false;
         try
@@ -1318,62 +1087,23 @@ public sealed partial class HunterForm : Form
             Input.Release(preserveNearbyPickup: true);
             Input.Chat("Hello!");
             playerGreeting.Mark(player);
-            message = $"Said hello to { (string.IsNullOrWhiteSpace(player.Name) ? $"player {player.Id:X8}" : player.Name) }.";
-            TraceLog.Record("nearby player greeted", new { player.Id, player.Name, player.Model, Distance = (player.Position - position).Length, Radius = options.GreetingRadius });
-            return true;
-        }
-        catch (Exception ex)
-        {
-            TraceLog.Record("nearby player greeting failed", new { player.Id, Error = ex.Message });
-            return false;
-        }
-    }
-    async Task Calibrate()
-    {
-        if (!RequireHotkeys() || busy || working || !connected) return;
+            message = $"Said hello to { (string.IsNurn;
         var readiness=world.CheckInputWindow();
         if (!readiness.Allowed) { message = readiness.BlockReason!; TraceLog.Record("calibration blocked",readiness); return; }
         try
         {
             CurrentOptions().Save(); working = true; settings.Enabled = false; protectionPanel.Enabled=false; automaticRouting.Enabled=false;clearNavigation.Enabled=false; connect.Enabled = false; start.Enabled=false; cancel = new(); movement = null;
             if(world.RestSupported) await EnsurePosture(false,cancel.Token);
-            message = "Calibrating aim from live facing angleâ€¦";
-            lastCalibrationError = null;
-            bool rangedAim=CurrentOptions().Ranged && !CurrentOptions().HealerMode;
-            if(rangedAim && !world.CameraSupported)throw new InvalidOperationException("3D ranged aiming is unavailable: "+world.CameraStatus);
-            movement = rangedAim
-                ? await Movement.CalibrateRanged(world,cancel.Token,TraceLog.Record,value=>message=value)
-                : await Movement.Calibrate(world,cancel.Token,TraceLog.Record);
-            message = rangedAim ? "Horizontal and vertical aiming ready. Press F8 in game to hunt." : "Turning ready. Press F8 in game to hunt.";
+            message = "Calibrating aim  vertical aiming ready. Press F8 in game to hunt." : "Turning ready. Press F8 in game to hunt.";
             System.Media.SystemSounds.Asterisk.Play();
             string calibrationPath=Path.Combine(AppContext.BaseDirectory,"calibration.json");
             if(rangedAim) RangedAimPersistence.Save(calibrationPath,world,movement);
-            else File.WriteAllText(calibrationPath,JsonSerializer.Serialize(new { TimeUtc = DateTime.UtcNow, movement.Forward, movement.RadiansPerPixel, movement.UnitsPerMs }, new JsonSerializerOptions { WriteIndented = true }));
-        }
-        catch (Exception ex) { lastCalibrationError = ex.Message; TraceLog.Record("calibration failed", new { Error = ex.Message }); Stop(ex.Message); System.Media.SystemSounds.Exclamation.Play(); }
-        finally { Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true; automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; Input.Release(); cancel?.Dispose(); cancel = null; }
-    }
-    async Task RunHealer()
-    {
-        Options o=CurrentOptions();o.Save();working=true;settings.Enabled=false;protectionPanel.Enabled=false;automaticRouting.Enabled=false;clearNavigation.Enabled=false;connect.Enabled=false;start.Enabled=false;cancel=new();var token=cancel.Token;
-        buffPolicy.Restart(); playerGreeting.Reset();
-        var previousAdvance=movement?.CanAdvance;
-        try
-        {
-            if(o.GroupMode)
-            {
+            else File.WriteAllText(calibrationPat
+        catch (Exception ex) { lastCalibrationError = ex.Message; TraceLog.Record("calibration failed", new { Error = ex.Message }); Stop(ex.Message); System.Media.SystemSounds.Exclamation.Pl  {
                 if(movement==null || !world.PartySupported || string.IsNullOrWhiteSpace(o.GroupTankName))
                     throw new InvalidOperationException("Select a tank from the live party roster and calibrate movement before starting the healbot.");
                 o.HuntRadius=o.GroupFollowLimit;o.AutoPickupNearbyLoot=false;o.PrioritizeGamekeeper=false;
-                o.ClearNearbyEnemies=false;lockedTarget=null;encounter.Reset();combatPressure.Reset();
-                movement.CanAdvance=(from,to)=>activeHuntAnchor is Vec anchor &&
-                    Targeting.BoundaryStepAllowed(from,to,anchor,(double)o.GroupFollowLimit) &&
-                    (o.AutomaticRouting?navigation.CanAdvance(from,to,avoidZones):Avoidance.BlockedSegment(from,to,avoidZones)==null);
-            }
-            nextSupportPreflight=0;nextHealAt=0;manaRecovery.Reset();
-            runCharacter=world.LocalPlayer();runZone=world.ActiveZone();activeGuardOptions=o;activeHuntAnchor=runCharacter.Position;activeHealTarget=null;lastHealingSkill=null;
-            RefreshGuardScene();
-            currentHotbar=CheckedHotbar();runHotbarPage=currentHotbar.PageBase;
+          ntHotbar.PageBase;
             Input.Preflight=SupportPreflight;StartNearbyPickup(o);
             if(world.RestSupported)await EnsurePosture(false,token);
             while(true)
@@ -1381,40 +1111,22 @@ public sealed partial class HunterForm : Form
                 await Input.Delay(100,token);
                 var self=world.LocalPlayer();UpdateDetectedCharacter(self);entities=world.Poll();guardSelfId=self.Id;currentParty=world.Party();ApplyPartyNames();
                 if (TryGreetNearbyPlayer(o, self.Position, entities, self.Id)) { await Input.Delay(250, token); continue; }
-                var health=world.HealthSnapshot();currentHotbar=CheckedHotbar();
-                if(o.GroupMode && await TryHealbotRecovery(o,token))continue;
-                if(await TryRestoreMana(o,token))continue;
-                if(o.AutoDetectHealingSkills)o.HealingSkillKeys=HealerPolicy.DetectHealingKeys(currentHotbar);
-                else o.HealingSkillKeys=HealerPolicy.AvailableHealingKeys(o.HealingSkillKeys,currentHotbar);
+                var health=world.HealthSnapsrrentHotbar);
                 o.HealingSkillKeys=AttackKeys(o.HealingSkillKeys,currentHotbar,o.MaintainAreaBuffs);
-                activeHealTarget=HealerPolicy.Select(currentParty,self,entities,health,(double)o.PartyHealRange,o.PartyHealBelowPercent);
-                var healEffects=world.ActiveEffects();
-                var usableHealingKeys=new string(o.HealingSkillKeys.Where(key=>{
-                    var s=currentHotbar.Slot(key);var effect=healEffects.Match(s.Name);
-                    return (!o.GroupMode || activeHealTarget!=null && GroupHealerPolicy.HealingSkill(s,activeHealTarget.IsSelf(self))) && HealthSkillAllowed(s,o) && (s.SkillUse is SkillUseKind.Instance or SkillUseKind.Cast) && (effect==null || !effect.Active) &&
-                        (s.SkillTarget!=SkillTargetKind.Party || healEffects.Available && effect!=null);
-                }).ToArray());
-                activeHealTarget=HealerPolicy.Select(currentParty,self,entities,health,(double)o.PartyHealRange,o.PartyHealBelowPercent);
-                var skill=activeHealTarget==null?null:HealerPolicy.ChooseReady(usableHealingKeys,currentHotbar,healingSkillCursor);
-                if(skill==null && o.GroupMode && await FollowHealbotTank(o,token))continue;
-                if(skill==null && await TryMaintainBuff(o,token))continue;
-                if(activeHealTarget==null)
+                activeHealTarget=HealerPolicy.Select(currentParty,self,entingSkill(s,activeHealTarget.IsSelf(self))) && HealthSkillAllowed(s,o) && (s.SkillUse is SkillUseKind.Instance or SkillUseKind.Cast) && (effect==null || !effect.Active) &&
+                     ties,health,(double)o.PartyHealRange,o.PartyHealBelowPercent);
+                var skill=activeHealTarget==null?null:HealerPolicy.ChooseReady(usableHealingKeys,currentHotbar,healingSkillCurso(activeHealTarget==null)
                 {
                     movement?.StopApproach();Input.Release(preserveNearbyPickup:true);message=o.GroupMode?groupDecision.Status:currentParty.Available?"Healer waiting: party members are above the heal threshold or out of range.":"Healer waiting: character is above the heal threshold.";continue;
                 }
-                if(skill==null)
-                {
-                    Input.Release(preserveNearbyPickup:true);message=$"Healer waiting: {activeHealTarget.Member.Name} needs help, but healing skills are cooling down.";continue;
+                if(skilln.";continue;
                 }
                 var targetKey=skill.SkillTarget==SkillTargetKind.Party?null:HealerPolicy.PartyTargetKey(currentParty,activeHealTarget.Member.Id);
                 if(targetKey==null && skill.SkillTarget!=SkillTargetKind.Party && !activeHealTarget.IsSelf(self))
                 {
                     Input.Release(preserveNearbyPickup:true);message=$"Healer waiting: no safe F-key is mapped for {activeHealTarget.Member.Name}.";continue;
                 }
-                movement?.StopApproach();Input.Release(preserveNearbyPickup:true);
-                int chargeMs=skill.SkillUse==SkillUseKind.Cast?(int)o.HealChargeMilliseconds:0;
-                message=$"Healing {activeHealTarget.Member.Name} with {skill.Name} Â· {(chargeMs==0?"instant click":$"charge {chargeMs} ms")}";
-                TraceLog.Record("healer target selected",new {activeHealTarget.Member.Id,activeHealTarget.Member.Name,activeHealTarget.PartyIndex,activeHealTarget.Health,activeHealTarget.Percent,TargetKey=targetKey?.ToString(),SkillKey=skill.Key,Skill=skill.Name,ChargeMilliseconds=chargeMs});
+                movement?.StopApproach();Input.Release(preserveNearbyPickup:true);yIndex,activeHealTarget.Health,activeHealTarget.Percent,TargetKey=targetKey?.ToString(),SkillKey=skill.Key,Skill=skill.Name,ChargeMilliseconds=chargeMs});
                 healerRecipientKey=HealerPolicy.PartyTargetKey(currentParty,activeHealTarget.Member.Id);
                 healerCasting=true;
                 try
@@ -1450,29 +1162,14 @@ public sealed partial class HunterForm : Form
             if(CurrentOptions().GroupMode && movement==null){message="Calibrate movement before starting group healer mode.";return;}
             await RunHealer(); return;
         }
-        if (movement == null) { message = lastCalibrationError == null ? "Press F6 in game to calibrate movement first." : "F8 paused: " + lastCalibrationError; return; }
-        try
-        {
-            Options o = CurrentOptions(); o.Save(); working = true; settings.Enabled = false; protectionPanel.Enabled=false;automaticRouting.Enabled=false;clearNavigation.Enabled=false; connect.Enabled = false; start.Enabled=false; cancel = new(); var token = cancel.Token;
-            if(o.GroupMode)
-            {
-                if(!world.PartySupported || string.IsNullOrWhiteSpace(o.GroupTankName))throw new InvalidOperationException("Select a tank from the live party roster before starting group mode.");
-                o.ClearNearbyEnemies=false; // Group combat is bounded to the tank area; it does not pull unrelated adds or leave for loot.
-                o.HuntRadius=o.GroupFollowLimit;
-            }
-            var drive = movement;
-            runCharacter=world.LocalPlayer();
-            // Capture the activation point once.  Solo fixed-target combat uses
+        if (movement == null) { message = lastCalibrationError  = true; settings.Enabled = false; protectionPanel.Enabled=false;automaticRouting.Enabled=false;clearNavigation.Enabled=false; connect.Enabled = false; start.Enabled=false; cancel = new(); varSelect a tank from the live party roster before starting group mode.");
+                o.ClearNearbyEnemies=false; // Group combat is bounded to the tank area; it does not pull unrelated adde activation point once.  Solo fixed-target combat uses
             // this immutable point as its standing location; only group mode is
             // allowed to replace the working anchor with the tank position.
             Vec activationLocation = world.PlayerPosition();
             Vec anchor = activationLocation;
             double savedHuntHeading=runCharacter.Heading;
-            activeHuntAnchor=activationLocation;
-            drive.TargetHeightOffset=(double)o.RangedVerticalAimOffset;
-            activeExcursion=o.GroupMode ? null : new HuntExcursion(anchor,(double)o.HuntRadius);
-            runZone=world.ActiveZone();unreachableTargets.Clear();
-            pendingPriorityGamekeeper=null;gamekeeperTransition=false;priorityInterruptibleActivity=false;returningFromPriority=false;
+      lse;returningFromPriority=false;
             rangedPull.Reset(); rangedTagging=false;
             combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;nextEngagementObservation=0;
             courtesy.Reset(); playerGreeting.Reset(); encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; encounterQuietSince=0; encounterUnknownSince=0;
@@ -1480,20 +1177,10 @@ public sealed partial class HunterForm : Form
             activeGuardOptions=o; RefreshGuardScene();
             combatPressure.Observe(world.TargetHealth(guardSelfId),Environment.TickCount64);
             if(world.RestSupported) await EnsurePosture(false,token);
-            Input.Preflight=ProtectionPreflight;StartNearbyPickup(o);
-            activeMovementBoundary=(double)o.HuntRadius;healingWarning=null;healingRestPending=false;healingRest=null;
-            drive.CanAdvance=(from,to)=>Targeting.BoundaryStepAllowed(from,to,anchor,activeMovementBoundary) &&
-                (o.AutomaticRouting ? navigation.CanAdvance(from,to,avoidZones) : Avoidance.BlockedSegment(from,to,avoidZones)==null);
-            nextHealAt = 0;
-            recoveryCursor = 0;
-            var startingBar = world.Hotbar(); runHotbarPage = startingBar.PageBase;
-            string configuredKeys=o.SkillKeys; o.SkillKeys=AttackKeys(o.AutoDetectSkills ? SkillRotation.DetectKeys(startingBar) : SkillRotation.AvailableKeys(configuredKeys,startingBar),startingBar,o.MaintainAreaBuffs);
+            Input.PnAdvance=(from,to)=>Targeting.BoundaryStepAllowed(from,to,anchor,activeMovementBoundary) &&
+                (o.AutomaticRouting ? navigation.CanAdvance(from,to,avoidZones) : Avoidance.Blocked.MaintainAreaBuffs);
             if(o.SkillKeys!=configuredKeys)TraceLog.Record("unavailable attack slots skipped",new {Configured=configuredKeys,Using=o.SkillKeys,BasicAttackOnly=o.SkillKeys.Length==0});
-             TraceLog.Record("hunt started", new { Anchor = activationLocation, ActivationLocation = activationLocation, o.HuntRadius,o.LeaveAreaWhenEmpty,o.Player, o.Target, o.SkillKeys, o.LootHoldMs, PriorityLootObjects = true, o.AntiKillSteal, o.OtherPlayerRadius, o.AvoidNames });
-            var skillDue = o.SkillKeys.ToDictionary(c => c, _ => 0L);
-            int skillCursor = 0; bool gamekeeperExcursion=false;
-            // Offensive combat skills are deliberately infrequent.  A cast is
-            // permitted only for a wounded five-target pack; this timer is
+             TraceLog.Record("hunt started", new { Anchor = activationLocation, ActivationLocation = activationLocation, o.HuntRadius,o.LeaveAreaWhenEmpty,o.Player, o.Target, o.this timer is
             // shared across target switches so a retarget cannot bypass the
             // five-second spacing requirement.
             long nextCombatSkillAt=0;
@@ -1504,6 +1191,7 @@ public sealed partial class HunterForm : Form
              long nextGamekeeperReturnTrace=0;
              Vec gamekeeperReturnLocation=anchor;
              double gamekeeperReturnHeading=savedHuntHeading;
+             bool stationaryAssistReturnPending=false;
             async Task RestoreSavedHuntFacing(CancellationToken restoreToken)
             {
                 if(!double.IsFinite(gamekeeperReturnHeading))return;
@@ -1625,14 +1313,18 @@ public sealed partial class HunterForm : Form
                 await RestoreSavedHuntFacing(returnToken);
                 TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
             }
-            void RememberGamekeeperReturn(Vec current)
+            async Task<bool> ReturnToSavedHuntPointAfterStationaryAssist(CancellationToken returnToken)
             {
-                if(o.GroupMode || !o.ReturnToHuntLocationAfterGamekeeper || gamekeeperReturnPending)return;
-                gamekeeperReturnPending=true;gamekeeperDefeated=false;gamekeeperReturnLocation=activationLocation;
-                TraceLog.Record("saved hunt location for Gamekeeper return",new {Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Current=current,Zone=runZone});
+                consException ex)
+                        {
+                            drive.StopApproach();
+                            TraceLog.Record("stationary assist return route retry",new {Reason=ex.Messg.Record("returned to saved hunt point after stationary melee assist",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
+                    return true;
+                }
+                finally { returningFromPriority=false; if(!arrived)drive.StopApproach(); }
             }
-            completionReturnPending=false;
-            activeCompletionBoundary=Targeting.CompletionRadius((double)o.HuntRadius,(double)o.NearbyEnemyRadius,(double)o.MeleeRange);
+            void RememberGamekeeperReturn(Vec current)
+  yRadius,(double)o.MeleeRange);
             while (true)
             {
                 try
@@ -1645,43 +1337,23 @@ public sealed partial class HunterForm : Form
                 // first so the surviving encounter is reselected from the
                 // saved point instead of interrupting this loop indefinitely.
                 if(gamekeeper==null && gamekeeperReturnPending && gamekeeperDefeated && await ReturnAfterGamekeeper(token))continue;
-                if (await TryHeal(drive, o, token)) continue;
-                if (await TryRestoreMana(o,token)) continue;
-                if(gamekeeper==null)
+                if(gamekeeper==null && stationaryAssistReturnPending)
                 {
-                    if(defensePending && !HasActiveFight())
-                    {
-                        await RepositionUnderPressure(drive,anchor,o,token);
-                        continue;
-                    }
-                    if(!(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
+                    if(await ReturnToSavedHuntPointAfterStationaryAssist(token))stationaryAssistReturnPending=false;
+                    continue;
+                }
+                if (await TryHeal(drive, o, token)) continue;
+                if (await TryRestoreMana(o,token)) cont TryMaintainBuff(o,token))continue;
                 }
                 var pos = world.PlayerPosition();
                 entities = world.Poll();
-                if (TryGreetNearbyPlayer(o, pos, entities, guardSelfId)) { await Input.Delay(250, token); continue; }
-                long now = Environment.TickCount64;
-                int level = world.PlayerLevel();
-                RefreshGuardScene();
+                if (TryGreetNearbyPlayer(o, pRefreshGuardScene();
                 var health = world.HealthSnapshot();
                 ObserveEncounter(o,health,pos,level);
                 gamekeeper=PriorityGamekeeper(o);
-                if(gamekeeper!=null)
-                {
-                    RememberGamekeeperReturn(pos);
-                    pendingPriorityGamekeeper=gamekeeper;healingRestPending=false;healingWarning=null;
-                    activeCompletionBoundary=Math.Max(activeCompletionBoundary,Targeting.CompletionRadius(responseRadius,(double)o.NearbyEnemyRadius,(double)o.MeleeRange));
-                }
-                if(!o.GroupMode)
-                {
-                    if(o.LeaveAreaWhenEmpty && (pos-anchor).Length>(double)o.HuntRadius)completionReturnPending=true;
-                    if(encounter.HasEngaged)
-                    {
-                        double engagedBase=encounter.EngagedCandidates.Select(e=>BaseTargetRadius(e,o))
-                            .DefaultIfEmpty(gamekeeperExcursion?responseRadius:(double)o.HuntRadius).Max();
+           faultIfEmpty(gamekeeperExcursion?responseRadius:(double)o.HuntRadius).Max();
                         activeCompletionBoundary=Math.Max(activeCompletionBoundary,Targeting.CompletionRadius(engagedBase,(double)o.NearbyEnemyRadius,(double)o.MeleeRange));
-                        if((pos-anchor).Length>(double)o.HuntRadius || encounter.EngagedCandidates.Any(e=>(e.Position-anchor).Length>(double)o.HuntRadius))completionReturnPending=true;
-                    }
-                    double playerBoundary=gamekeeper!=null || encounter.HasEngaged || completionReturnPending || o.LeaveAreaWhenEmpty && encounter.Active ? activeCompletionBoundary : gamekeeperExcursion ? responseRadius : (double)o.HuntRadius;
+                        if((pos-anchor).Length>(double)o.HuntRadius || encounter.EngagedCandidates.Any(e=>(e.Position-anchor).Lengt.LeaveAreaWhenEmpty && encounter.Active ? activeCompletionBoundary : gamekeeperExcursion ? responseRadius : (double)o.HuntRadius;
                     if((pos-anchor).Length>playerBoundary+2)throw new InvalidOperationException("Stopped beyond the combat completion boundary.");
                     if(gamekeeper==null && completionReturnPending && !encounter.HasEngaged &&
                         (!o.LeaveAreaWhenEmpty || !encounter.Active && deferredLoot.Count==0))
@@ -1738,10 +1410,7 @@ public sealed partial class HunterForm : Form
                 if(!o.GroupMode && !o.LeaveAreaWhenEmpty && !encounter.HasEngaged && gamekeeperExcursion && target==null)
                 {
                     if((pos-anchor).Length>2)
-                    {
-                        ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                        message="Returning to hunting area after Gamekeeper";
-                        navigation.BeginGoal("return after Gamekeeper");
+                 navigation.BeginGoal("return after Gamekeeper");
                         returningFromPriority=true;
                         try {await NavigateTo(drive,anchor,anchor,o,token,boundaryRadius:responseRadius);}
                         finally {returningFromPriority=false;}
@@ -1764,11 +1433,7 @@ public sealed partial class HunterForm : Form
                     }
                     drive.StopApproach();
                     if(decision.Action!=GroupAction.Attack || decision.Target==null){Input.Release(preserveNearbyPickup:true);await Input.Delay(150,token);continue;}
-                    target=decision.Target;
-                }
-                if(encounter.Active && target==null)
-                {
-                    target=healingRestPending || o.LeaveAreaWhenEmpty && completionReturnPending ? null : Targeting.ChooseEncounter(entities.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos,o)==null),
+                    target=decision.ding ? null : Targeting.ChooseEncounter(entities.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos,o)==null),
                         encounter.Candidates,health,pos,anchor,o.LeaveAreaWhenEmpty ? (double)o.HuntRadius : responseRadius,o.PrioritizeGamekeeper,o.PrioritizeBreakables);
                     if(target!=null) { encounterQuietSince=0; encounterUnknownSince=0; }
                     else if(encounter.HasUnresolvedNearby)
@@ -1778,65 +1443,22 @@ public sealed partial class HunterForm : Form
                         encounterQuietSince=0; message="Waiting for nearby enemy HP before pickupâ€¦";
                         await Input.Delay(100,token); continue;
                     }
-                    else
-                    {
-                        encounterUnknownSince=0;
-                        if(encounterQuietSince==0) encounterQuietSince=Environment.TickCount64;
-                        if(Environment.TickCount64-encounterQuietSince<500) { message="Checking that nearby enemies are clearâ€¦"; await Input.Delay(100,token); continue; }
+                            if(Environment.TickCount64-encounterQuietSince<500) { message="Checking that nearby enemies are clearâ€¦"; await Input.Delay(100,token); continue; }
                         if(deferredLoot.Count>0)
                         {
                             if(await RunLootJob(deferredLoot.Peek(),drive,anchor,o,token))
                             {
-                                deferredLoot.Dequeue();
-                                await ReturnToSavedHuntPointAfterLoot(token);
-                            }
-                            continue;
-                        }
-                        TraceLog.Record("encounter cleared",new {Position=pos});
-                        encounter.Reset(); rangedPull.Reset(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; encounterQuietSince=0;
+              ll; encounterAnchor=null; encounterHasAttack=false; encounterQuietSince=0;
                         if(!completionReturnPending)activeCompletionBoundary=Targeting.CompletionRadius((double)o.HuntRadius,(double)o.NearbyEnemyRadius,(double)o.MeleeRange);
                         if(RangedPullEnabled(o))continue;
-                        if(o.LeaveAreaWhenEmpty || healingRestPending)continue;
-                    }
-                }
-                if(target==null && !o.GroupMode && !encounter.Active && !healingRestPending &&
-                    await GuideToTreasureChest(drive,anchor,o,token))continue;
+                        if(o.LeaveAreaWhenEmpty || healingRestPending)codrive,anchor,o,token))continue;
                 if(target==null && healingRestPending && !encounter.HasEngaged){await Input.Delay(100,token);continue;}
                 if(!o.GroupMode)target ??= o.LeaveAreaWhenEmpty ? HuntingArea.Choose(entities,health,pos,activeExcursion!,
-                    e=>MatchesRequestedTarget(e,o,level),(e,hp)=>TargetGuardReason(e,hp,pos,o)==null,e=>Targeting.PriorityRank(e,o.PrioritizeGamekeeper,o.PrioritizeBreakables),o.PrioritizeBreakables) :
-                    Targeting.Choose(entities.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos,o)==null), health, pos, anchor, (double)o.HuntRadius, e => world.Difficulty(e, level), o.Target, o.AllowedDifficulties,prioritizeGamekeeper:o.PrioritizeGamekeeper,prioritizeBreakables:o.PrioritizeBreakables);
-                if (target == null)
-                {
-                    drive.StopApproach();Input.HoldMouse(false,false,token);
-                    bool insideApproval=o.LeaveAreaWhenEmpty && !o.GroupMode && HuntingArea.HasApprovedInside(entities,health,activeExcursion!,e=>MatchesRequestedTarget(e,o,level));
-                    double searchRadius=o.LeaveAreaWhenEmpty && !o.GroupMode && !insideApproval ? activeExcursion!.OutsideSearchRadius : (double)o.HuntRadius;
-                    var diagnosticEntities=insideApproval ? entities.Where(e=>(e.Position-anchor).Length<=(double)o.HuntRadius) : entities;
-                    targetSearch=o.GroupMode ? null : TargetSearch.Explain(diagnosticEntities,health,pos,anchor,searchRadius,o.LeaveAreaWhenEmpty ? searchRadius : responseRadius,
-                        e=>world.Difficulty(e,level),o.Target,o.AllowedDifficulties,o.PrioritizeGamekeeper,(e,hp)=>TargetGuardReason(e,hp,pos,o));
-                    message=targetSearch?.Message ?? "Waiting: "+groupDecision.Status;
-                    if(lastTargetWait!=message)
-                    {
-                        lastTargetWait=message;
-                        TraceLog.Record("target search waiting",new {Position=pos,Anchor=anchor,o.HuntRadius,Report=targetSearch,Status=message});
-                    }
-                    await Input.Delay(500,token);continue;
-                }
-                targetSearch=null;lastTargetWait="";
-                if(o.LeaveAreaWhenEmpty && !o.GroupMode && !(o.PrioritizeGamekeeper && Targeting.IsGamekeeper(target)) && !encounter.IsEngaged(target) && (target.Position-anchor).Length>(double)o.HuntRadius)
-                {
-                    activeExcursion!.BeginOutsideTrip(target,(double)o.NearbyEnemyRadius,(double)o.MeleeRange);
-                    nextInsideTargetCheck=0;
-                    completionReturnPending=true;activeCompletionBoundary=Math.Max(activeCompletionBoundary,activeExcursion.MovementBoundary);
-                    TraceLog.Record("outside trip started; home area empty",new {Anchor=anchor,o.HuntRadius,activeExcursion.OutsideSearchRadius,Target=target.Id,target.Position});
-                }
-                TraceLog.Record("target selected", new { target.Id, target.Name, target.DisplayName, target.PriorityLootObject, target.Position, Distance = (target.Position - pos).Length });
+                    e=>MatchesRequestedTarget(e,o,level),(e,hp)=>TargetGuardReason(e,hp,pos,o)==null,e=>Targrget.DisplayName, target.PriorityLootObject, target.Position, Distance = (target.Position - pos).Length });
                 if(!o.GroupMode && o.PrioritizeGamekeeper && Targeting.IsGamekeeper(target) && (target.Position-anchor).Length>(double)o.HuntRadius)
                 {gamekeeperExcursion=true;completionReturnPending=true;}
                 lockedTarget = target;
-                if(o.PrioritizeGamekeeper && Targeting.IsGamekeeper(target))
-                {
-                    if(o.GroupMode && activeHuntAnchor.HasValue)anchor=activeHuntAnchor.Value;
-                    await StandForGamekeeper(token);
+                     await StandForGamekeeper(token);
                 }
                 navigation.BeginGoal($"target:{target.Id}:{target.Generation}:{target.Address}");
                 drive.ResetTurnResponse();
@@ -1844,17 +1466,13 @@ public sealed partial class HunterForm : Form
                 int? lastCombatHp=null;
                 long approachStarted = now, combatStart = 0; Vec lastTargetPosition = target.Position; int missingHealth = 0;
                 long stationaryAttackHeldAt=0; int stationaryAttackBaselineHp=-1;
+                bool stationaryAssistUsed=false,stationaryAssistActive=false; Vec stationaryAssistGoal=default;
                 long targetMissingSince = 0;
                 double bodyAllowance=0; int? bodyProbeHp=null;long bodyProbeAt=0;
                 long nextPriorityCheck = 0;
                 bool collectAfterTarget = false;
                 var existingDrops=encounterExistingDrops ?? world.Loot().Select(i=>(i.KeyA,i.KeyB)).ToHashSet();
-                try
-                {
-                while (true)
-                {
-                    token.ThrowIfCancellationRequested();
-                    if(o.GroupMode && !(o.PrioritizeGamekeeper && Targeting.IsGamekeeper(target)))
+           ekeeper && Targeting.IsGamekeeper(target)))
                     {
                         if(Environment.TickCount64-guardRefreshedAt>=100)RefreshGuardScene();
                         if(groupDecision.Tank!=null)anchor=groupDecision.Tank.Position;
@@ -1869,21 +1487,12 @@ public sealed partial class HunterForm : Form
                         // nodes while turning, strafing, or correcting a position.
                         // Release attack input, refresh the scene, and keep the same
                         // identity locked for a short bounded reacquisition window.
-                        if (targetMissingSince == 0) targetMissingSince = Environment.TickCount64;
-                        ReleaseCombatPickup(); drive.StopApproach(); Input.HoldMouse(false, false, token);
+  lse, token);
                         do
                         {
                             await Input.Delay(70, token);
                             RefreshGuardScene();
-                            current = entities.FirstOrDefault(e => e.Id == target.Id);
-                        }
-                        while (current == null && Environment.TickCount64 - targetMissingSince < 1200);
-                        if (current == null)
-                        {
-                            var missingHealthSnapshot = world.TargetHealth(target.Id);
-                            bool stillEngaged = encounter.IsEngaged(target);
-                            TraceLog.Record("target reacquisition timed out", new { target.Id, target.DisplayName, stillEngaged, missingHealthSnapshot.Known, missingHealthSnapshot.Dead, Elapsed = Environment.TickCount64 - targetMissingSince });
-                            if (stillEngaged && !missingHealthSnapshot.Dead && Environment.TickCount64 - targetMissingSince < 1800)
+              & Environment.TickCount64 - targetMissingSince < 1800)
                             {
                                 message = $"Reacquiring engaged target: {target.DisplayName}…";
                                 await Input.Delay(100, token);
@@ -1892,16 +1501,15 @@ public sealed partial class HunterForm : Form
                             if(Targeting.IsGamekeeper(target) && missingHealthSnapshot.Known && missingHealthSnapshot.Dead)
                                 gamekeeperDefeated=true;
                             if(missingHealthSnapshot.Known && missingHealthSnapshot.Dead)
+                            {
                                 lootTracker.RecordKill(target,target.Position,runZone??navigationZone);
+                                if(stationaryAssistUsed && Targeting.IsStationaryHuntTargetId(target.Id))stationaryAssistReturnPending=true;
+                            }
                             collectAfterTarget = courtesy.StartedHere(target);
                             break;
                         }
                     }
-                    if (current.Address != target.Address || current.Generation != target.Generation || current.Name != target.Name || current.Model != target.Model || !current.Targetable)
-                    {
-                        collectAfterTarget = courtesy.StartedHere(target);
-                        TraceLog.Record("target inactive or replaced", new { target.Id, target.DisplayName, Current = current.Targetable ? current.DisplayName : "non-targetable" });
-                        break;
+                    if (current.Address != target.Address || current.Generation != target.Gene                  break;
                     }
                     targetMissingSince = 0;
                     lockedTarget=current;
@@ -1911,49 +1519,24 @@ public sealed partial class HunterForm : Form
                     var hp = world.TargetHealth(target.Id);
                     if (hp.Dead)
                     {
-                        if(Targeting.IsGamekeeper(target))gamekeeperDefeated=true;
-                        lootTracker.RecordKill(target,current.Position,runZone??navigationZone);
+                        if(Targesed && Targeting.IsStationaryHuntTargetId(target.Id))stationaryAssistReturnPending=true;
                         collectAfterTarget = courtesy.StartedHere(target);
-                        TraceLog.Record("target dead", new { target.Id, target.Name, target.DisplayName, target.PriorityLootObject, hp.Current, hp.Maximum, Position = current.Position });
-                        break;
-                    }
-                    if (!hp.Known)
-                    {
-                        ReleaseCombatPickup(); drive.StopApproach(); Input.HoldMouse(false, false, token);
-                        if (++missingHealth >= 10)
-                        {
-                            // These 1-HP breakables can lose their HP record before their world object disappears.
-                            // Stop attacking and sweep actual drops; unknown HP is never reported as a confirmed kill.
-                            if (current.PriorityLootObject && courtesy.StartedHere(target))
-                            {
-                                collectAfterTarget = true;
-                                TraceLog.Record("priority HP removed after attack", new { target.Id, target.DisplayName, Position = current.Position });
+                        Trac                            // Stop attacking and sweep actual drops; unknown HP is never reported as a confirmed kill.
+                            if (current.PriorityLootObject && courtesy.ck", new { target.Id, target.DisplayName, Position = current.Position });
                                 break;
                             }
-                            throw new InvalidOperationException("Target HP is unavailable; stopped.");
-                        }
-                        await Input.Delay(100, token); continue;
-                    }
-                    missingHealth = 0;
+                            throw new InvalidO  missingHealth = 0;
                     if(lastCombatHp.HasValue && hp.Current<lastCombatHp.Value)turnRecoveryAttempts=0;
                     lastCombatHp=hp.Current;
                     if(bodyProbeHp.HasValue && hp.Current<bodyProbeHp.Value) {bodyProbeHp=null;bodyProbeAt=0;TraceLog.Record("close collision attack confirmed",new {target.Id,hp.Current});}
                     if(bodyProbeHp.HasValue && bodyProbeAt!=0 && Environment.TickCount64-bodyProbeAt>3500) throw new RouteUnavailableException("Close target did not take damage; repositioning is needed");
                     pos = world.PlayerPosition();
                     bool priorityFight=o.PrioritizeGamekeeper && Targeting.IsGamekeeper(current);
-                    double targetRadius=priorityFight ? BaseTargetRadius(current,o) : o.GroupMode ? (double)o.HuntRadius : BaseTargetRadius(current,o);
-                    if(!o.GroupMode && encounter.IsEngaged(current) || priorityFight && courtesy.StartedHere(current))
+                    double targetRadius=priorityFiourtesy.StartedHere(current))
                     {
                         targetRadius=Math.Max(activeCompletionBoundary,Targeting.CompletionRadius(targetRadius,(double)o.NearbyEnemyRadius,(double)o.MeleeRange));
                         activeCompletionBoundary=Math.Max(activeCompletionBoundary,targetRadius);
-                        if((pos-anchor).Length>(double)o.HuntRadius || (current.Position-anchor).Length>(double)o.HuntRadius)completionReturnPending=true;
-                    }
-                    // Completion tracking may allow an engaged target to remain
-                    // observable beyond the hunt radius, but it must never widen
-                    // the character's movement boundary. Outside trips and the
-                    // explicit Gamekeeper response are the only exceptions.
-                    bool outsideTrip=activeExcursion is {OutsideTrip:true} && !o.GroupMode;
-                    double movementBoundary=priorityFight || outsideTrip ? targetRadius : Math.Min(targetRadius,(double)o.HuntRadius);
+                        if((pos-anchor).Length>(double)o.HuntRadiusFight || outsideTrip ? targetRadius : Math.Min(targetRadius,(double)o.HuntRadius);
                     activeMovementBoundary=movementBoundary;
                     if ((pos - anchor).Length > movementBoundary + 2) throw new InvalidOperationException("Stopped at the target response boundary.");
                     if (!priorityFight && !outsideTrip && !o.GroupMode && (current.Position-anchor).Length>movementBoundary)
@@ -2000,53 +1583,56 @@ public sealed partial class HunterForm : Form
                     // client's swing animation and makes nearby targets look
                     // untargeted. The window is only used after the target is
                     // already close enough to start a melee attack.
-                    // The client's melee check uses the target's collision
-                    // envelope around its center. Keep the configured stop as
-                    // the navigation preference, but allow a center distance
-                    // up to the verified 1.5-unit attack gate plus a generous
-                    // target-envelope allowance before declaring a target out
-                    // of reach. The live client reports Mimic centers about
+                           // of reach. The live client reports Mimic centers about
                     // two units away while their collision envelope is already
                     // in basic-attack reach.
                     double swingWindow = o.Ranged ? attackStop + .35 :
                         Math.Max(attackStop + .35, Targeting.MeleeAttackRange + 1.0);
                     // Once one of the four fixed hunt assignments is locked,
                     // its low-word identity is authoritative for movement. The
-                    // client can briefly report a qualified or blank model while
-                    // refreshing a creature node; using the model gate here made
-                    // the controller fall through to NavigateTo(target) during
-                    // that refresh and caused the character to chase the target.
-                    // These assignments never navigate to the target or back to
-                    // the anchor from inside the combat loop. The saved point is
+                    // client can briefly report a qualified or         // that refresh and caused the character to chase the target.
+                    // These assignments never chase a target. The saved point is
                     // the standing reference; once combat starts, the controller
-                    // stops approach input and only faces and swings in place.
+                    // stops approach input and only faces and swings in place,
+                    // except for one bounded assist step when an engaged target
+                    // is just outside the swing window.
                     // Gamekeeper priority and group mode remain the explicit
                     // movement exceptions.
                     bool stationaryFarmTarget=!o.GroupMode && !priorityFight && Targeting.IsStationaryHuntTargetId(current.Id);
                     bool stationaryAttackReady=false;
                     if(stationaryFarmTarget)
                     {
-                        // Do not correct anchor drift here. A return route uses
-                        // forward input and can overshoot the saved point while a
-                        // target is moving, producing the oscillating W pulses
-                        // seen in the live trace and starving the swing state.
-                        // Hunt-area/loot recovery owns any deliberate return;
-                        // fixed-target combat itself is always stationary.
-                        drive.StopApproach();
+                        // Fixed targets stay at the saved point by default. If an
+                        // already engaged target is 
                         delta=current.Position-pos;
                         bool keepStationarySwing=Input.BasicAttackHeld && delta.Length<=swingWindow;
-                        if(delta.Length>swingWindow && !keepStationarySwing)
-                        {
-                            ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                            try { await drive.Face(world,delta,token,.035); }
-                            catch(TurnUnresponsiveException) { TraceLog.Record("stationary target face unavailable",new {current.Id,current.DisplayName}); }
-                            message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{swingWindow:F1})";
-                            await Input.Delay(100,token);
-                            continue;
-                        }
-                        // Enter the swing state as soon as the target is in the
-                        // hysteresis window. Facing is feedback, not a gate for
-                        // the attack input: a transient turn read must not
+                        if(delta.Lengt                    Targeting.TryStationaryAssistStep(delta.Length,swingWindow,out double assistStep))
+                            {
+                                Vec direction=delta/delta.Length;
+                                stationaryAssistGoal=pos+direction*assistStep;
+                                stationaryAssistActive=true;stationaryAssistUsed=true;
+                                navigation.BeginGoal("stationary melee assist");
+                                TraceLog.Record("stationary melee assist started",new {current.Id,current.DisplayName,Position=pos                            if(delta.Length<=swingWindow)
+                                {
+                                    drive.StopApproach();stationaryAssistActive=false;
+             ,false,token);
+                                    await NavigateTo(drive,stationaryAssistGoal,anchor,o,token,
+                                        boundaryRadius:Math.Max((double)o.HuntRadius,activeCompletionBoundary));
+                                    await Input.Delay(25,token);
+                                    continue;
+                                }
+                                else
+                                {
+                                    drive.StopApproach();stationaryAssistActive=false;
+                                    message=$"Holding assisted hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{swingWindow:F1})";
+                                    await Input.Delay(100,token);
+                                    continue;
+                                }
+                            }
+                            if(!stationaryAssistActive && delta.Length>swingWindow)
+                            {
+                                ReleaseCombatPickup();Input.HoldMouse(false,false,token);
+                                try { await drive.Face(world,delta,token,.03          // the attack input: a transient turn read must not
                         // prevent a nearby target from receiving a swing.
                         stationaryAttackReady=true;
                         try
@@ -2131,39 +1717,17 @@ public sealed partial class HunterForm : Form
                     }
                     approachStarted = 0;
                     if (drive.StopApproach()) { await Input.Delay(120, token); continue; }
-                    now = Environment.TickCount64;
-                    if (combatStart == 0) combatStart = now;
-                    if(!o.GroupMode && !encounter.Active)
-                    {
-                        encounter.Begin(); encounterHasAttack=false; encounterExistingDrops=existingDrops; encounterAnchor=anchor;
-                        RefreshGuardScene(); ObserveEncounter(o,world.HealthSnapshot(),pos,level);
-                    }
-                    if(stationaryAttackReady)
-                    {
-                        // Keep the basic attack held throughout a stationary
+                            encounter.Begin(); encounterHasAttack=false; encounterExistingDrops=existingDrops; encounterAnchor=anchor;
+                        RefreshGuardScene(); ObserveEncounter(o,world.Henary
                         // engagement. A few client builds stop advancing a
                         // held swing after a long no-damage interval, so the
                         // watchdog below re-arms it only after the target has
                         // remained at the same HP for a bounded period.
                         long stationaryNow=Environment.TickCount64;
-                        if(stationaryAttackBaselineHp<0 || hp.Current!=stationaryAttackBaselineHp)
-                        {
-                            stationaryAttackBaselineHp=hp.Current;
-                            stationaryAttackHeldAt=stationaryNow;
-                        }
-                        bool rearm=!Input.BasicAttackHeld || stationaryNow-stationaryAttackHeldAt>=2500;
-                        if(rearm)
+                             if(rearm)
                         {
                             if(Input.BasicAttackHeld)Input.HoldMouse(false,false,default);
-                            Input.HoldMouse(false,true,token);
-                            stationaryAttackHeldAt=stationaryNow;
-                            TraceLog.Record("stationary melee engaged",new{current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ConfiguredRange=attackStop,Anchor=anchor,Rearmed=true});
-                        }
-                        courtesy.MarkAttack(current);
-                        encounter.MarkAttack(current,hp);
-                        encounterHasAttack=true;
-                        message=$"Swinging at {current.DisplayName} from saved hunt point";
-                        await Input.Delay(45,token);
+                            Input.HoldMou                        await Input.Delay(45,token);
                         // Stationary farm targets used to continue here before
                         // reaching the skill rotation. That made the bot swing
                         // forever while every configured skill was skipped.
@@ -2174,50 +1738,12 @@ public sealed partial class HunterForm : Form
                         var stationaryBar=CheckedHotbar();
                         if(o.AutoDetectSkills)
                         {
-                            string detected=AttackKeys(SkillRotation.DetectKeys(stationaryBar),stationaryBar,o.MaintainAreaBuffs);
-                            if(detected!=o.SkillKeys)
-                            {
-                                o.SkillKeys=detected;skillCursor=0;
-                                foreach(char key in detected)skillDue.TryAdd(key,0);
-                                TraceLog.Record("skill slots detected",new{Keys=detected,Mode="stationary"});
-                            }
-                        }
-                        var stationarySkillGroup=CombatSkillGroup(current,hp,pos,o);
-                        // The five-target gate applies to the combat pack, while
-                        // self-heals may bypass only the shared five-second timer.
-                        bool stationarySkillGate=stationarySkillGroup.Ready;
-                        int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 && stationarySkillGate ?
-                            SkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
-                                slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o) &&
-                                    (stationaryNow>=nextCombatSkillAt || SkillHealthRule.Applies(slot,o))) : -1;
-                        if(stationaryReadyIndex>=0)
+                            string detected=AttackKeys(SkillRotatioSkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
+                                slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && H)
                         {
                             ReleaseCombatPickup();
                             char key=o.SkillKeys[stationaryReadyIndex];
-                            var slot=stationaryBar.Slot(key);
-                            bool delayExempt=SkillHealthRule.Applies(slot,o);
-                            if(o.SmartSkillTargeting)
-                            {
-                                var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
-                                if(hp.Known)skillHealth[current.Id]=hp;
-                                var skillTarget=SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,skillHealth,pos,
-                                    (double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
-                                if(skillTarget!=null && skillTarget.Id!=current.Id)
-                                {
-                                    TraceLog.Record("skill target retarget",new{Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot),Mode="stationary"});
-                                    // Keep the left button held while changing
-                                    // the skill target.  The next loop will face
-                                    // the new target without dropping the swing.
-                                    Input.HoldMouse(false,true,token);
-                                    stationaryAttackHeldAt=stationaryNow;
-                                    target=skillTarget;lockedTarget=skillTarget;
-                                    await Input.Delay(20,token);
-                                    continue;
-                                }
-                            }
-                            try
-                            {
-                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,DelayExempt=delayExempt,NextSkillAt=nextCombatSkillAt});
+                            var slot=statdelayExempt,NextSkillAt=nextCombatSkillAt});
                                 await Input.Key((Keys)key,50,token);
                                 await Input.Delay(80,token);
                                 if(!await CastHealthCheckedSkill(slot,o,token))continue;
