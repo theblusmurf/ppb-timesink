@@ -1,5 +1,17 @@
 # Release notes
 
+## Release1.45
+
+- Fixed fixed-target damage recovery after a stop/restart. Mimic, Tribal,
+  Pulkhan, and Tower profiles now hold the saved anchor when no target is
+  locked yet, and return directly to it if an earlier damage response moved the
+  character.
+- Prevented the generic 2.5-unit defense step from being recreated every loop,
+  which was repeatedly pressing **W** and producing the observed run-away/circle
+  until another target spawned.
+- Added offline coverage for stationary target-filter classification and the
+  no-lock anchor guard.
+
 ## Release1.44
 
 - Preserved a confirmed engaged swing across transient target-node and target-HP
@@ -361,3 +373,4 @@
 Windows releases include a **Patch notes** section generated from the commits since the previous release tag. Each release also lists the packaged ZIP and SHA256 sidecar, followed by the current feature and validation notes.
 
 Keep commit subjects specific and user-facing so the generated notes explain what changed without requiring a separate manual edit for every build.
+

@@ -3189,8 +3189,15 @@ public sealed partial class HunterForm : Form
 
     bool HoldStationaryAnchorDuringDamage(Options options,Vec position)
     {
-        if(activeHuntAnchor is not Vec anchor || lockedTarget is not Entity target)return false;
-        return Targeting.ShouldHoldStationaryAnchor(target,options,position,anchor,world.TargetHealth(target.Id));
+        if(options.GroupMode || activeHuntAnchor is not Vec anchor || !position.Finite ||
+            (position-anchor).Length>1.5)return false;
+        if(lockedTarget is Entity target)
+            return Targeting.ShouldHoldStationaryAnchor(target,options,position,anchor,world.TargetHealth(target.Id));
+        // On a restart the first nearby target can still be protected by the
+        // previous hunt, so there is no locked target yet. Fixed Mimic/Tribal/
+        // Pulkhan/Tower profiles must still remain on their saved anchor while
+        // that stale damage is being observed.
+        return Targeting.IsStationaryHuntFilter(options.Target);
     }
 
     void ObserveCombatPressure(Options options,Health playerHealth,Vec position)
@@ -3256,38 +3263,42 @@ public sealed partial class HunterForm : Form
         // be selected. Each step stays inside the current completion area.
         ReleaseCombatPickup();Input.HoldMouse(false,false,token);
         var position=world.PlayerPosition();
-        if(!options.GroupMode && lockedTarget is Entity fixedTarget &&
-            Targeting.IsStationaryHuntTargetId(fixedTarget.Id) && (position-anchor).Length>1.5)
+        bool stationaryAssignment=!options.GroupMode &&
+            (lockedTarget is Entity locked ? Targeting.IsStationaryHuntTargetId(locked.Id) :
+                Targeting.IsStationaryHuntFilter(options.Target));
+        if(stationaryAssignment)
         {
-            // A fixed hunt target may have triggered the generic damage response
-            // during the short window before the encounter roster was marked.
-            // Once outside the activation tolerance, return directly to that
-            // saved point instead of taking another outward defensive step.
-            message="Incoming damage: returning to the saved hunt anchor.";
-            navigation.BeginGoal("return to saved hunt anchor after damage");
-            defenseRepositioning=true;
-            try
+            if((position-anchor).Length>1.5)
             {
-                await NavigateTo(drive,anchor,anchor,options,token,
-                    boundaryRadius:Math.Max((double)options.HuntRadius,activeCompletionBoundary));
+                // A fixed hunt target may trigger the generic damage response
+                // before an encounter or target lock exists. Return directly
+                // to the anchor; never create another outward defense step.
+                message="Incoming damage: returning to the saved hunt anchor.";
+                navigation.BeginGoal("return to saved hunt anchor after damage");
+                defenseRepositioning=true;
+                try
+                {
+                    await NavigateTo(drive,anchor,anchor,options,token,
+                        boundaryRadius:Math.Max((double)options.HuntRadius,activeCompletionBoundary));
+                }
+                catch(RouteUnavailableException ex)
+                {
+                    drive.StopApproach();
+                    TraceLog.Record("saved hunt anchor return retry",new{Reason=ex.Message,Position=world.PlayerPosition(),Anchor=anchor});
+                    await Input.Delay(100,token);
+                }
+                catch(MovementBlockedException ex)
+                {
+                    drive.StopApproach();
+                    TraceLog.Record("saved hunt anchor return blocked",new{Reason=ex.Message,Position=ex.Position,Anchor=anchor});
+                    await Input.Delay(100,token);
+                }
+                finally { defenseRepositioning=false; }
             }
-            catch(RouteUnavailableException ex)
-            {
-                drive.StopApproach();
-                TraceLog.Record("saved hunt anchor return retry",new {Reason=ex.Message,Position=world.PlayerPosition(),Anchor=anchor,Target=fixedTarget.Id});
-                await Input.Delay(100,token);
-            }
-            catch(MovementBlockedException ex)
-            {
-                drive.StopApproach();
-                TraceLog.Record("saved hunt anchor return blocked",new {Reason=ex.Message,Position=ex.Position,Anchor=anchor,Target=fixedTarget.Id});
-                await Input.Delay(100,token);
-            }
-            finally { defenseRepositioning=false; }
             if((world.PlayerPosition()-anchor).Length<=1.5)
             {
                 defensePending=false;defenseStep=null;drive.StopApproach();
-                TraceLog.Record("returned to saved hunt anchor after damage",new {Position=world.PlayerPosition(),Anchor=anchor,Target=fixedTarget.Id});
+                TraceLog.Record("returned to saved hunt anchor after damage",new {Position=world.PlayerPosition(),Anchor=anchor,Target=lockedTarget?.Id,StationaryAssignment=true});
             }
             return;
         }
@@ -3478,6 +3489,7 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
+
 
 
 

@@ -87,6 +87,15 @@ public static class Targeting
         (id & 0xffff) is 5971 or 5972 or 5973 or 5974;
     public static bool IsStationaryHuntTarget(Entity entity) =>
         IsStationaryHuntTargetId(entity.Id) && IsKnownUnprefixedMonster(entity.Id,entity.Model);
+    public static bool IsStationaryHuntFilter(string? filter)
+    {
+        if(string.IsNullOrWhiteSpace(filter))return false;
+        string normalized=filter.Trim().Replace("pulkhan","pulkan",StringComparison.OrdinalIgnoreCase);
+        return normalized.Contains("mimic",StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("tribal",StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("pulkan",StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("tower",StringComparison.OrdinalIgnoreCase);
+    }
     public const double StationaryAssistMaximumStep=1.5;
     public static bool TryStationaryAssistStep(double targetDistance,double swingWindow,out double step)
     {
@@ -239,6 +248,10 @@ public static class Targeting
         if(!TryStationaryAssistStep(3.5,2.5,out var assistStep) || assistStep>StationaryAssistMaximumStep || assistStep<1.0 ||
             TryStationaryAssistStep(4.01,2.5,out _) || TryStationaryAssistStep(2.5,2.5,out _))
             throw new Exception("Stationary melee assist exceeded its bounded step or admitted an out-of-range target.");
+        if(!IsStationaryHuntFilter("Tribal") || !IsStationaryHuntFilter("Pulkhan") ||
+            !IsStationaryHuntFilter("Tower") || !IsStationaryHuntFilter("Mimic") ||
+            IsStationaryHuntFilter("Green"))
+            throw new Exception("Stationary hunt target filters were not classified consistently.");
 
         // Incidental enemies in an authorized Gamekeeper fight share that fight's
         // completion area; it must not become a wider fresh-monster search.
@@ -254,3 +267,4 @@ public static class Targeting
             throw new Exception("A surviving collateral monster lost its shared completion area or expanded fresh selection.");
     }
 }
+
