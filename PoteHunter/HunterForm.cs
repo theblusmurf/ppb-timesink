@@ -721,10 +721,11 @@ public sealed partial class HunterForm : Form
         Input.PickupHoldProvider=null;nearbyPickupSnapshot.Clear();nearbyPickupCount=0;
         cancel?.Cancel(); ReleaseCombatPickup(); Input.Release(); movement = null; lockedTarget = null; message = reason;
     }
-    void SaveLootLog(string reason)
+    bool SaveLootLog(string reason)
     {
-        if (!lootTrackerLog.TrySave(lootTracker.Snapshot(), reason))
-            message = $"Loot event could not be saved ({reason}).";
+        bool saved = lootTrackerLog.TrySave(lootTracker.Snapshot(), reason);
+        if (!saved) message = $"Loot event could not be saved ({reason}).";
+        return saved;
     }
     void PaintNavigation(object? sender,PaintEventArgs e)
     {

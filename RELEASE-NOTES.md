@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.33
+
+- Preserved the event-log write failure message when a reset is pressed, so a
+  locked or unavailable CSV is reported instead of being hidden by the reset
+  confirmation.
+- Validation: release build and offline self-test.
+
 ## Release1.32
 
 - Replaced periodic loot snapshots with event snapshots for the tracker log.
