@@ -36,17 +36,17 @@ internal static class RevivalSetupChecks
         int stage;
         public Health Health()=>stage==2?new(100,100):new(0,100);
         public Task<VisualControl?> Find(CancellationToken token)=>Task.FromResult(profile.Find(stage==0?before:popup,token));
-        public Task Open(CancellationToken token)
+        public Task<bool> Open(CancellationToken token)
         {
             Require(stage==0&&profile.CanOpen(before,token),"Custom opening action lacked its death-screen marker.");
             Actions.Add("open");OpenedAt.Add(Now);
             if(OpenedAt.Count>=openingsNeeded)stage=1;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
-        public Task Confirm(VisualControl control,CancellationToken token)
+        public Task<bool> Confirm(VisualControl control,CancellationToken token)
         {
             Require(stage==1&&profile.CanConfirm(popup,control,token),"Custom confirmation lacked its dialog marker.");
-            Actions.Add("confirm");stage=2;return Task.CompletedTask;
+            Actions.Add("confirm");stage=2;return Task.FromResult(true);
         }
         public Task Delay(int milliseconds,CancellationToken token){token.ThrowIfCancellationRequested();Now+=milliseconds;return Task.CompletedTask;}
     }

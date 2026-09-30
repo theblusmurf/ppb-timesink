@@ -6,12 +6,28 @@ internal static class DeathRecoveryChecks
 {
     public static void Run()
     {
+        var interruptedRecovery=new DeathRecoveryState();int deathLogs=0;
+        void OnDeath(Health hp){if(interruptedRecovery.Observe(hp,1000))deathLogs++;}
+        foreach(var hp in new[]{new Health(1,100),default})
+            DeathRecoveryState.InterruptIfDead(hp,true,OnDeath);
+        DeathRecoveryState.InterruptIfDead(new(0,100),false,OnDeath);
+        if(interruptedRecovery.Pending||deathLogs!=0)throw new Exception("Unknown/living HP or disabled revival incorrectly began recovery.");
+        for(int i=0;i<2;i++)
+        {
+            bool interrupted=false;
+            try{DeathRecoveryState.InterruptIfDead(new(0,15370),true,OnDeath);}
+            catch(DeathRecoveryRequiredException){interrupted=true;}
+            if(!interrupted||!interruptedRecovery.Pending||deathLogs!=1)
+                throw new Exception("Zero HP during an activity did not enter the shared death recovery exactly once.");
+        }
         var recovery=new DeathRecoveryState();
         if(!recovery.Observe(new(0,100),1000) || recovery.Observe(new(0,100),1100) || !recovery.Pending)
             throw new Exception("Death must begin recovery and log only once.");
         recovery.Observe(default,1200);
         if(!recovery.Pending || recovery.ReadyAt(10)!=11000 || recovery.ReadyAt(0)!=1500)
             throw new Exception("Unreadable health changed the pending revive delay.");
+        if(recovery.ReadyAt(0,true)!=4000 || recovery.ReadyAt(10,true)!=11000)
+            throw new Exception("Visual revival countdown did not use the three-second minimum or respect a longer saved delay.");
         recovery.Observe(new(100,100),1600);
         if(!recovery.Pending)throw new Exception("Manual revival incorrectly bypassed return to the anchor.");
         if(!recovery.Observe(new(0,100),2000) || recovery.ReadyAt(5)!=7000)
@@ -89,7 +105,7 @@ internal static class DeathRecoveryChecks
         }
         finally {if(File.Exists(file))File.Delete(file);if(File.Exists(file+".tmp"))File.Delete(file+".tmp");}
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
-            Passed=true,HardwareInputEmitted=false,Checks=new[]{"one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
+            Passed=true,HardwareInputEmitted=false,Checks=new[]{"zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
                 "waypoints require actual arrival","final anchor tolerance","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
                 "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));

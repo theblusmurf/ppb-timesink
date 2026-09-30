@@ -11,6 +11,7 @@ Settings save automatically. F8 starts; F9 stops.
 See COMPACT-UI.md for details and validation limits.
 
 Death recovery (Setup, combat modes):
+- Confirmed 0 HP is death. Auto recovery also interrupts resting when HP hits 0.
 - Auto revive + return along saved route: on revives and returns; off stops on death.
 - Recognize Revive button is on by default. It clicks only a recognized button,
   then waits for living HP. Turn it off to use the configured revival key.
@@ -18,6 +19,9 @@ Death recovery (Setup, combat modes):
   left-clicks with a minimum 250 ms gap. It stops opening when Revive appears
   or HP is alive/unreadable, and confirms Revive only once. A longer saved
   route delay takes precedence. Custom setups use their saved opening location.
+- A shifting cursor or changing dialog is rechecked before clicking; unsent
+  clicks do not consume the three-click limit. Recovery stops if the screen
+  does not settle within its timeout. Stop messages report the actual reason.
 - Custom revival setup works like repair setup. While dead, connected, and not
   hunting, capture the Revive dialog, select its static text, then its button.
   Choose the optional first step if a left-click opens the dialog: capture the
@@ -33,6 +37,7 @@ Death recovery (Setup, combat modes):
   A saved spot alone is not a return route. Start near the recorded destination.
 - Record Primary and both alternatives from the same starting point (within
   3 map units). Occupied-spot fallback follows recorded paths via that point.
+  Saving only Primary enables its return path, not two alternative destinations.
   If all compatible spots are occupied, it waits there 10 minutes and retries.
   Only currently loaded players can be detected. Blocked routes stop recovery.
 - Auto repair after revival: optional inventory-hammer repair before the return.

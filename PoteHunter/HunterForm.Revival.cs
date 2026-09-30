@@ -70,7 +70,11 @@ public sealed partial class HunterForm
                 message=revivalStatus.Text="Revival test completed: living HP confirmed. Hunting remains stopped.";
             }
         }
-        catch(OperationCanceledException){message="Revival setup/test stopped.";}
+        catch(OperationCanceledException ex)
+        {
+            message="Revival setup/test stopped: "+ex.Message;
+            TraceLog.Record("revival setup/test cancelled",new{Reason=ex.Message});
+        }
         catch(Exception ex){message=revivalStatus.Text="Revival stopped: "+ex.Message;TraceLog.Record("revival setup/test stopped",new{Error=ex.Message});}
         finally
         {

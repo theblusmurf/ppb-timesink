@@ -17,7 +17,14 @@ internal sealed class DeathRecoveryState
         return true;
     }
 
-    public long ReadyAt(int delaySeconds)=>ObservedAt+Math.Max(500,Math.Clamp(delaySeconds,0,600)*1000L);
+    public long ReadyAt(int delaySeconds,bool visual=false)=>ObservedAt+
+        Math.Max(visual?VisualRevival.DeathWaitMilliseconds:500,Math.Clamp(delaySeconds,0,600)*1000L);
+    public static void InterruptIfDead(Health health,bool enabled,Action<Health> observeDeath)
+    {
+        if(!enabled || !health.Dead)return;
+        observeDeath(health);
+        throw new DeathRecoveryRequiredException();
+    }
     public void Reset(){Pending=false;dead=false;ObservedAt=0;}
 }
 

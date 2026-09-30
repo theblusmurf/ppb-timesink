@@ -30,6 +30,12 @@ adapted into PoteHunter and the remaining verification limits.
   Longer saved route delays take precedence. Positive HP
   is required before repair or return. Turning off Recognize Revive button
   retains the configured key method.
+- Confirmed zero HP interrupts resting into the same death recovery as combat.
+  A cursor/dialog change before revival input now requests another check within
+  the recovery timeout; only sent clicks consume the opening/confirmation limit.
+  Hotbar changes during recovery do not trigger the combat UI's stop guard.
+  Stops retain the real reason, and occupied-spot waiting reports missing
+  compatible alternative routes.
 - Custom revival setup can replace the included detector with local paired
   dialog/button patches and an optional recognized death-screen opening click.
   It shares repair's capture editor, binds the profile to the client/window,

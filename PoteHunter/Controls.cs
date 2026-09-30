@@ -31,8 +31,12 @@ public static class Input
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
     [StructLayout(LayoutKind.Sequential)] struct CursorPoint { public int X, Y; }
-    [DllImport("user32.dll")] static extern bool GetCursorPos(out CursorPoint point);
-    public static Point Cursor() { GetCursorPos(out var p); return new Point(p.X, p.Y); }
+    [DllImport("user32.dll",SetLastError=true)] static extern bool GetCursorPos(out CursorPoint point);
+    public static Point Cursor()
+    {
+        if(!GetCursorPos(out var p))throw new InvalidOperationException($"Windows could not read the mouse position (error {Marshal.GetLastWin32Error()}).");
+        return new Point(p.X,p.Y);
+    }
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
@@ -82,7 +86,10 @@ public static class Input
         try
         {
             token.ThrowIfCancellationRequested();
-            if (!Allowed() || Down(Keys.Escape) || Down(Keys.Enter) && !keys.IsHeld(Keys.Enter) || Down(Keys.F9)) throw new OperationCanceledException("Stopped: focus changed or stop/chat key pressed.");
+            if(Down(Keys.F9))throw new OperationCanceledException("F9 stop key pressed.");
+            if(Down(Keys.Escape))throw new OperationCanceledException("Escape stop key pressed.");
+            if(Down(Keys.Enter) && !keys.IsHeld(Keys.Enter))throw new OperationCanceledException("Enter/chat key pressed.");
+            if(!Allowed())throw new OperationCanceledException("Game window lost focus or is no longer available.");
             Preflight?.Invoke();
             // The nearby-loot decision owns E while enabled. Updating raw held
             // state here avoids recursively invoking Check through Hold.

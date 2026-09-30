@@ -1,5 +1,31 @@
 # Release notes
 
+## Release1.57
+
+- Kept confirmed **0 HP** as the death trigger and fixed the resting path so
+  dying transfers control to auto-revive instead of ending the hunt. Unknown
+  health remains distinct from a confirmed death.
+- Fixed visual revival abandoning the recovery when the cursor or dialog
+  changes before a click. It now rechecks and repositions within the existing
+  timeout, preserving the pending return. Only actual opening clicks count
+  toward the three-click limit; an unsent confirmation is rechecked and a sent
+  confirmation is never repeated.
+- Automatic opening clicks now recheck whether Revive appeared while moving
+  the pointer. Three seconds after death and the 250 ms minimum click spacing
+  remain unchanged; the status countdown now shows that full wait. Focus loss
+  and explicit stop keys still stop input.
+- Transient hotbar changes during revival, repair, and return no longer let
+  the combat UI cancel recovery. Living HP and the current hotbar are read again
+  before the character returns to the saved anchor.
+- Stop messages and logs now retain the actual cancellation reason. Deferred
+  clicks record the expected and observed pointer positions for diagnosis.
+- Fallback now explains when an occupied spot has no compatible alternative
+  routes saved. Record Alternative 1 and Alternative 2 from the same route
+  origin to use those destinations; no route is invented automatically.
+- Added offline regressions for zero HP, resting interruptions, refused clicks,
+  bounded retries, single confirmation, and revival through alternative-route
+  arrival. Live gameplay verification remains necessary.
+
 ## Release1.56
 
 - Visual revival now waits at least **3 seconds after death**, then sends

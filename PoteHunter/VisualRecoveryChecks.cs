@@ -86,6 +86,7 @@ internal static class VisualRecoveryChecks
         public readonly List<long> Opens=[];
         public readonly List<long> ConfirmedAt=[];
         public int Confirms,Finds;
+        public int OpenCalls,ConfirmCalls,RefusedOpenings,RefusedConfirmations;
         public int ButtonAfter=1;
         public bool ManualRevival,Stuck,UnknownAfterConfirm;
         public Func<Health>? Read;
@@ -96,8 +97,18 @@ internal static class VisualRecoveryChecks
             token.ThrowIfCancellationRequested();Finds++;
             return Task.FromResult<VisualControl?>(Opens.Count>=ButtonAfter?new(new(500,500),1,new(455,488,91,24),default):null);
         }
-        public Task Open(CancellationToken token){token.ThrowIfCancellationRequested();Opens.Add(Now);return Task.CompletedTask;}
-        public Task Confirm(VisualControl button,CancellationToken token){token.ThrowIfCancellationRequested();Confirms++;ConfirmedAt.Add(Now);return Task.CompletedTask;}
+        public Task<bool> Open(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if(++OpenCalls<=RefusedOpenings)return Task.FromResult(false);
+            Opens.Add(Now);return Task.FromResult(true);
+        }
+        public Task<bool> Confirm(VisualControl button,CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if(++ConfirmCalls<=RefusedConfirmations)return Task.FromResult(false);
+            Confirms++;ConfirmedAt.Add(Now);return Task.FromResult(true);
+        }
         public Task Delay(int milliseconds,CancellationToken token){OnDelay?.Invoke();token.ThrowIfCancellationRequested();Now+=milliseconds;return Task.CompletedTask;}
     }
     static async Task Revival()
@@ -107,6 +118,12 @@ internal static class VisualRecoveryChecks
         var triple=new Surface{ButtonAfter=3};await VisualRevival.Run(triple,0,default);
         Require(triple.Opens.SequenceEqual(new[]{3000L,3250L,3500L})&&triple.Confirms==1,
             "Three-click death screen did not receive three opening clicks after the three-second wait.");
+        var shifted=new Surface{ButtonAfter=3,RefusedOpenings=3};await VisualRevival.Run(shifted,0,default);
+        Require(shifted.Opens.SequenceEqual(new[]{3750L,4000L,4250L})&&shifted.OpenCalls==6&&shifted.Confirms==1,
+            "A shifted pointer consumed opening clicks or cancelled recovery before three real clicks.");
+        var changedDialog=new Surface{ButtonAfter=0,RefusedConfirmations=2};await VisualRevival.Run(changedDialog,0,default);
+        Require(changedDialog.Opens.Count==0&&changedDialog.ConfirmCalls==3&&changedDialog.ConfirmedAt.SequenceEqual(new[]{3200L}),
+            "A changing dialog was not rechecked before the single confirmation click.");
         var delayed=new Surface{Now=10000,ButtonAfter=3};await VisualRevival.Run(delayed,0,default);
         Require(delayed.Opens.SequenceEqual(new[]{10000L,10250L,10500L})&&delayed.Confirms==1,
             "An elapsed saved-route delay gained another death wait.");
@@ -129,6 +146,12 @@ internal static class VisualRecoveryChecks
             "Missing dialog exceeded three opening clicks or did not wait for the last click to settle.");
         var unreadable=new Surface{Read=()=>default};await Fails(unreadable);
         Require(unreadable.Opens.Count==0&&unreadable.FindCount()==0&&unreadable.Confirms==0,"Unknown health allowed revival input.");
+        var unstable=new Surface{RefusedOpenings=int.MaxValue};await Fails(unstable);
+        Require(unstable.Opens.Count==0&&unstable.Confirms==0&&unstable.Now<=18000,
+            "Unstable pointer retries were unbounded or emitted a click.");
+        var stale=new Surface{ButtonAfter=0,RefusedConfirmations=int.MaxValue};await Fails(stale);
+        Require(stale.Opens.Count==0&&stale.Confirms==0&&stale.Now<=18000,
+            "Stale confirmation retries emitted input or exceeded the recovery deadline.");
         foreach(int stopAfter in new[]{1,2})
         {
             var recovered=new Surface{ButtonAfter=3};
@@ -155,14 +178,37 @@ internal static class VisualRecoveryChecks
         try{await VisualRevival.Run(cancel,0,cts.Token);}catch(OperationCanceledException){stopped=true;}
         Require(stopped&&cancel.Confirms==0&&cancel.Opens.Count==0,"Stop/focus cancellation allowed later revival input.");
     }
+    static async Task ZeroHpReturn()
+    {
+        var state=new DeathRecoveryState();
+        bool interrupted=false;
+        try{DeathRecoveryState.InterruptIfDead(new(0,15370),true,hp=>state.Observe(hp,0));}
+        catch(DeathRecoveryRequiredException){interrupted=true;}
+        Require(interrupted&&state.Pending,"Zero HP did not transfer control from an activity to recovery.");
+        var surface=new Surface{ButtonAfter=3,RefusedOpenings=2};
+        await VisualRevival.Run(surface,state.ObservedAt,default);
+        state.Observe(surface.Health(),surface.Now);
+        Require(state.Pending&&surface.Confirms==1,"Repositioning or living HP discarded the pending anchor return.");
+        var primary=new SavedNavigationRoute(1,new(20,0),0,[new(20,0),new(16,0),new(8,0),new(0,0)],DateTime.UtcNow,"Farmer",100);
+        var alternative=primary with{Anchor=new(20,8),Points=[new(20,8),new(16,8),new(8,8),new(0,8),new(0,0)]};
+        SavedNavigationRoute?[] routes=[primary,alternative,null];
+        var fallback=new RecoveryFallbackCycle(0);fallback.Reject(0);
+        int slot=fallback.Select(3,i=>routes[i] is {} r&&RecoveryTravel.SharedOrigin(primary,r),i=>i==0);
+        Require(slot==1,"Recovery did not choose the free alternative after a zero-HP revival.");
+        var plan=RecoveryTravel.Plan(routes,alternative,new(0,0),false);
+        var path=new RecoveryPath(plan.Points,alternative.Anchor);
+        foreach(var point in plan.Points){Require(state.Pending,"Return cleared before arrival.");path.Next(point);}
+        Require(path.Next(alternative.Anchor)==null,"Revival fallback did not finish at the alternative anchor.");
+        state.Reset();Require(!state.Pending,"Arrival failed to complete zero-HP recovery.");
+    }
     static int FindCount(this Surface surface)=>surface.Finds;
     public static async Task Run()
     {
-        var elapsed=Stopwatch.StartNew();Vision();await Revival();await RevivalSetupChecks.Run();
+        var elapsed=Stopwatch.StartNew();Vision();await Revival();await RevivalSetupChecks.Run();await ZeroHpReturn();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"visual-recovery-checks.json"),JsonSerializer.Serialize(new
         {
             Passed=true,HardwareInputEmitted=false,SyntheticTemplateFixtures=true,ElapsedMilliseconds=elapsed.ElapsedMilliseconds,
-            Checks=new[]{"paired repair text and button","moved and scaled inventory","paired Yes confirmation","ambiguous panels rejected","stale hover blocked","centered scaled Revive detection","disappearing and ambiguous Revive blocked","cancellable vision","known dead HP only","three-second death wait including visible dialog","three opening clicks with 250 ms gaps","elapsed saved delay respected","observed death timing","manual revival interrupts opening sequence","unknown HP interrupts opening sequence","no fourth opening click","one confirmation per death","unknown HP cannot repeat input","focus/stop cancellation between opening clicks"}
+            Checks=new[]{"paired repair text and button","moved and scaled inventory","paired Yes confirmation","ambiguous panels rejected","stale hover blocked","centered scaled Revive detection","disappearing and ambiguous Revive blocked","cancellable vision","known dead HP only","three-second death wait including visible dialog","three opening clicks with 250 ms gaps","elapsed saved delay respected","observed death timing","manual revival interrupts opening sequence","unknown HP interrupts opening sequence","no fourth opening click","one confirmation per death","unknown HP cannot repeat input","focus/stop cancellation between opening clicks","shifted pointer retries do not consume actual clicks","stale dialog rechecked before confirmation","bounded retries without blind clicks","zero HP through revival and alternative-route arrival"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }
