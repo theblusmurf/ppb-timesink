@@ -4,6 +4,28 @@ internal sealed record SavedTravel(Vec[] Points,Vec Destination);
 
 internal static class RecoveryTravel
 {
+    internal const double StartupRadius=10;
+    internal static (Vec Point,int Index,double Distance) Nearest(SavedNavigationRoute route,Vec current)
+    {
+        var best=(Point:route.Points[0],Index:0,Distance:(route.Points[0]-current).Length);
+        for(int i=0;i<route.Points.Length-1;i++)
+        {
+            Vec a=route.Points[i],delta=route.Points[i+1]-a;
+            double square=delta.X*delta.X+delta.Y*delta.Y;
+            double fraction=square>0?Math.Clamp(((current.X-a.X)*delta.X+(current.Y-a.Y)*delta.Y)/square,0,1):0;
+            Vec point=a+delta*fraction;double distance=(point-current).Length;
+            if(distance<best.Distance)best=(point,i+1,distance);
+        }
+        return best;
+    }
+    internal static int StartupSlot(IReadOnlyList<SavedNavigationRoute?> routes,Vec current,int zone,string character,double height,int preferred)
+    {
+        if(!current.Finite)return -1;
+        var candidates=Enumerable.Range(0,routes.Count).Where(i=>routes[i] is {} route && Recorded(route) &&
+            RecoveryRouting.Compatible(route,zone,character,height)).Select(i=>(Slot:i,Distance:Nearest(routes[i]!,current).Distance))
+            .Where(item=>item.Distance<=StartupRadius).ToArray();
+        return candidates.OrderBy(item=>item.Slot==preferred?0:1).ThenBy(item=>item.Distance).Select(item=>item.Slot).DefaultIfEmpty(-1).First();
+    }
     internal static bool Recorded(SavedNavigationRoute route)=>route.HasRecordedRoute && route.Points.Length<=2000 &&
         route.Points.All(p=>p.Finite) && (route.Points[0]-route.Anchor).Length<=.5 &&
         route.Points.Zip(route.Points.Skip(1)).All(p=>(p.First-p.Second).Length<=8.01);
@@ -29,20 +51,20 @@ internal static class RecoveryTravel
             (string.IsNullOrWhiteSpace(r.Character) || string.IsNullOrWhiteSpace(target.Character) || r.Character.Equals(target.Character,StringComparison.OrdinalIgnoreCase)))
             .Cast<SavedNavigationRoute>().Select(route=>
             {
-                var nearest=route.Points.Select((p,i)=>(Point:p,Index:i,Distance:(p-current).Length)).OrderBy(p=>p.Distance).First();
-                return(Route:route,nearest.Index,nearest.Distance);
+                var nearest=Nearest(route,current);
+                return(Route:route,nearest.Point,nearest.Index,nearest.Distance);
             }).Where(e=>e.Distance<=20).ToArray();
         if(entries.Length==0)throw new RouteUnavailableException("Character is more than 20 units from the compatible saved routes.");
         double closest=entries.Min(e=>e.Distance);
         var choices=new List<SavedTravel>();
         foreach(var entry in entries.Where(e=>e.Distance<=Math.Min(20,closest+.5)))
         {
-            var points=Connector(current,entry.Route.Points[entry.Index]).ToList();
+            var points=Connector(current,entry.Point).ToList();
             if(!retreat && entry.Route==target)
                 points.AddRange(target.Points.Take(entry.Index).Reverse());
             else
             {
-                points.AddRange(entry.Route.Points.Skip(entry.Index+1));
+                points.AddRange(entry.Route.Points.Skip(entry.Index));
                 points.AddRange(Connector(entry.Route.RevivalOrigin,target.RevivalOrigin));
                 if(!retreat)points.AddRange(target.Points.Reverse().Skip(1));
             }

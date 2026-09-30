@@ -96,6 +96,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(clearSavedNavigationRoute);
         navControls.Controls.Add(clearAllSavedNavigationRoutes);
         navControls.Controls.Add(savedNavigationRoutesStatus);
+        navControls.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(650,0),Text="F8 within 10 map units of a saved path: follow route to anchor, restore facing, then hunt. Selected slot preferred. See Index for all hotkeys."});
         navControls.Controls.Add(resetLootTracker);
         navControls.Controls.Add(resetLootTimer);
 

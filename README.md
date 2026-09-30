@@ -1,5 +1,19 @@
 # PoteHunter
 
+Start / F8 automatically follows a saved route to its anchor when you stand
+within **10 map units of the recorded path**. Select the desired slot in
+Advanced > Navigation; it is preferred when compatible and nearby, otherwise
+the nearest compatible route is chosen. On arrival the character restores
+facing and hunts. This applies to solo hunting. Outside the corridor, Start
+uses the activation location as usual. Record with Home at the start and End
+at the farming endpoint; saving only a spot cannot supply a return path.
+
+The app's **Index** lists all hotkeys: F6 calibrates, F8 starts/stops hunting,
+F9 stops, Home starts route recording, and End finishes/saves the selected
+route. Escape, manual Enter/chat, and game focus loss stop automated input.
+Route shortcuts require connection and stopped hunting, with the game or
+PoteHunter in front. F6/F8 require the game in front.
+
 Latest appearance update: [sleek desktop UI](SLEEK-UI.md), with slate surfaces, teal accents, rounded settings cards, and clearer typography.
 
 Windows x64 hunter with a compact desktop UI, combined group healer mode, HP/MP recovery, attack/defense potions, ranged pack farming, and automated ZIP packaging. See [the compact UI guide](COMPACT-UI.md), [group healer notes](HEALBOT-UPDATE.md), and [potion notes](POTION-UPDATE.md).

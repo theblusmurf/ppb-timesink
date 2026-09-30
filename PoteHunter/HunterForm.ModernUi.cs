@@ -70,6 +70,10 @@ public sealed partial class HunterForm
         tabs.Margin = Padding.Empty;
         tabs.Padding = Point.Empty;
         tabs.SelectedIndex = 0;
+        var indexPage=new TabPage("Index"){AutoScroll=true,Padding=new Padding(16)};
+        indexPage.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(620,0),Text=
+            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PoteHunter in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nIn Advanced > Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Auto revive + return along saved route and Resume farming on arrival. Enable alternatives in Navigation and record them from the same revival start for occupied-spot fallback. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
+        tabs.TabPages.Add(indexPage);
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } groupLayout &&
             groupLayout.Controls.OfType<FlowLayoutPanel>().FirstOrDefault() is { } groupHeader)
         {
@@ -245,7 +249,7 @@ public sealed partial class HunterForm
         };
         var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
         var advancedPages = new[]{protectionPage,navigationPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Advanced",advancedPages)};
+        var sections=new[]{("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Advanced",advancedPages),("Index",new[]{indexPage})};
         var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
         foreach(var (name,pages) in sections)
         {
@@ -492,5 +496,4 @@ public sealed partial class HunterForm
             WireDisplaySanitizer(child);
     }
 }
-
 

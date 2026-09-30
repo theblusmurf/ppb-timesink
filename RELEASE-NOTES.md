@@ -1,5 +1,20 @@
 # Release notes
 
+## Release1.58
+
+- Start / F8 now joins a compatible recorded route when the character is within
+  10 map units of its path, follows it to the saved farming anchor, restores
+  facing, and continues hunting. The selected slot is preferred; otherwise the
+  nearest compatible route is used. Group/healer behavior stays separate.
+- Route proximity and joining use actual path segments, including between
+  recorded waypoints. Existing occupied-spot fallback and death recovery apply
+  during travel. Outside the corridor, ordinary activation-point hunting remains.
+- Added an Index page listing every registered app hotkey, stop guards,
+  route recording, startup travel, and automatic revival/return instructions.
+- Validated startup corridor boundaries, slot preference, map/character/floor
+  compatibility, segment joins, existing recovery, and UI with offline checks.
+  Live game travel remains unverified.
+
 ## Release1.57
 
 - Kept confirmed **0 HP** as the death trigger and fixed the resting path so

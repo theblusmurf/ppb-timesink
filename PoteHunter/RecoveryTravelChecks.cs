@@ -17,6 +17,15 @@ internal static class RecoveryTravelChecks
         var alternative=Route(new(12,0),new(6,0),new(0,0));
         var second=Route(new(-12,0),new(-6,0),new(0,0));
         SavedNavigationRoute?[] routes=[primary,alternative,second];
+        Require(RecoveryTravel.StartupSlot(routes,new(10,9),5,"Test",10,0)==0,"Ten-unit segment corridor was not accepted at its boundary.");
+        Require(RecoveryTravel.StartupSlot([primary],new(10.01,9),5,"Test",10,0)==-1,"Startup joined outside the ten-unit corridor.");
+        Require(RecoveryTravel.StartupSlot(routes,new(0,0),5,"Test",10,2)==2,"Selected compatible route was not preferred.");
+        Require(RecoveryTravel.StartupSlot([primary],new(0,6),6,"Test",10,0)==-1 &&
+            RecoveryTravel.StartupSlot([primary],new(0,6),5,"Other",10,0)==-1 &&
+            RecoveryTravel.StartupSlot([primary],new(0,6),5,"Test",20,0)==-1,"Startup accepted a different map, character, or floor.");
+        var segmentJoin=RecoveryTravel.Plan([primary],primary,new(10,9),false);
+        Require(segmentJoin.Points.Contains(new Vec(0,9)) && segmentJoin.Points.Last()==primary.Anchor &&
+            !segmentJoin.Points.Contains(primary.RevivalOrigin),"Startup failed to join the path segment and travel toward its anchor.");
         var switchPlan=RecoveryTravel.Plan(routes,alternative,primary.Anchor,false);
         Require(switchPlan.Points.SequenceEqual(new Vec[]{new(0,12),new(0,6),new(0,0),new(6,0),new(12,0)}) && switchPlan.Destination==alternative.Anchor,
             "Fallback cut across farm anchors instead of following both recorded paths through their shared origin.");

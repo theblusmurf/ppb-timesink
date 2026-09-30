@@ -1641,12 +1641,27 @@ public sealed partial class HunterForm : Form
             var activationRoute=navigation.SavedRoutesForZone(runZone.Value)
                 .Where(item=>RouteCompatible(item.Route) && (item.Route.Anchor-anchor).Length<=2.5)
                 .OrderBy(item=>(item.Route.Anchor-anchor).Length).FirstOrDefault();
+            int startupSlot=o.GroupMode?-1:RecoveryTravel.StartupSlot(navigation.SavedRoutes,anchor,runZone.Value,runCharacter.Name,savedHuntHeight,SelectedSavedNavigationSlot());
+            bool startupRouteTravel=startupSlot>=0;
+            if(startupRouteTravel)
+            {
+                var route=navigation.GetSavedRoute(startupSlot)!;
+                activationRoute=(startupSlot,route);
+                // Starting along a recorded path farms at its saved endpoint;
+                // only activation already at that endpoint preserves the exact spot.
+                if((route.Anchor-anchor).Length>2.5)
+                {
+                    anchor=activationLocation=route.Anchor;savedHuntHeading=route.Heading;
+                    if(route.Height>0)savedHuntHeight=route.Height;
+                }
+                TraceLog.Record("startup route selected",new{Slot=startupSlot,JoinRadius=RecoveryTravel.StartupRadius,Position=world.PlayerPosition(),Anchor=anchor});
+            }
             if(activationRoute.Route!=null)activeSavedRouteSlot=activationRoute.Slot;
             ApplyRouteProfile(activationRoute.Route);
             // A saved anchor is a standing location, so use a small floor
             // radius even when anti-kill-steal is configured narrowly. Prefer
             // the route's farming radius so occupancy follows the saved tab.
-            bool startSavedReturn=!o.GroupMode && o.UseAlternativeHuntRoutes && activeRouteProfile!=null &&
+            bool startSavedReturn=startupRouteTravel || !o.GroupMode && o.UseAlternativeHuntRoutes && activeRouteProfile!=null &&
                 RecoveryRouting.Occupied(anchor,savedHuntHeight,activeRouteProfile.HuntRadius>0?activeRouteProfile.HuntRadius:(double)o.HuntRadius,entities,runCharacter.Id);
             activeHuntAnchor=activationLocation;
             if(o.AutoReviveAfterDeath)
@@ -1713,7 +1728,7 @@ public sealed partial class HunterForm : Form
             {
                 try { await MoveToSavedHuntAnchor(token,false); }
                 catch(DeathRecoveryRequiredException) { /* Continue into the recovery loop below. */ }
-                if(!deathRecovery.Pending && !activeFarmOnArrival)
+                if(!startupRouteTravel && !deathRecovery.Pending && !activeFarmOnArrival)
                 {
                     message="Saved route reached; farming on arrival is disabled.";
                     TraceLog.Record("saved route reached without farming",new{Slot=selectedSavedRouteSlot,Location=anchor,Zone=runZone});
