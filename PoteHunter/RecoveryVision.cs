@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace PoteHunter;
 
-internal sealed record VisualControl(Point Point,double Scale,Rectangle Button,Rectangle Marker);
+internal sealed record VisualControl(Point Point,double Scale,Rectangle Button,Rectangle Marker,bool Custom=false);
 internal sealed record RepairVisuals(VisualControl? Hammer,VisualControl? Confirm);
 
 // Adapted from Domitus's paired inventory/dialog recognizer. Templates are

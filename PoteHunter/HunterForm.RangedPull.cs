@@ -98,6 +98,7 @@ public sealed partial class HunterForm
                 if(!healbotOptions.HealerMode || !healbotOptions.GroupMode || healbotOptions.GroupTankName!="Preview tank" || !healbotOptions.UseDefensePotions)
                     throw new Exception("Combined healer/group controls did not persist alongside potion settings.");
                 form.CheckCompactControls();
+                form.CheckRevivalSetupUi();
                 form.compactMode.SelectedIndex=0;
                 form.autoRepair.Checked=true;form.PerformLayout();Application.DoEvents();
                 var deathCard=(TableLayoutPanel)form.autoRepair.Parent!.Parent!.Parent!;
@@ -107,7 +108,7 @@ public sealed partial class HunterForm
                     repairCard.Save(Path.Combine(AppContext.BaseDirectory,"ui-repair-card.png"));
                 }
                 using(var sample=new Bitmap(1280,720))
-                using(var editor=new RepairSetupForm(sample,false,UiWindow,UiText){StartPosition=FormStartPosition.Manual,Location=new(-32000,-32000),ShowInTaskbar=false})
+                using(var editor=new RepairSetupForm(sample,false,UiWindow,UiText){StartPosition=FormStartPosition.Manual,Location=new(-32000,-32000),ShowInTaskbar=false,PreviewOnly=true})
                 {
                     using(var g=Graphics.FromImage(sample))
                     {

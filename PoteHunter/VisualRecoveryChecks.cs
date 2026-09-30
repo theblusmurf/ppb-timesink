@@ -130,7 +130,7 @@ internal static class VisualRecoveryChecks
     static int FindCount(this Surface surface)=>surface.Finds;
     public static async Task Run()
     {
-        var elapsed=Stopwatch.StartNew();Vision();await Revival();
+        var elapsed=Stopwatch.StartNew();Vision();await Revival();await RevivalSetupChecks.Run();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"visual-recovery-checks.json"),JsonSerializer.Serialize(new
         {
             Passed=true,HardwareInputEmitted=false,SyntheticTemplateFixtures=true,ElapsedMilliseconds=elapsed.ElapsedMilliseconds,

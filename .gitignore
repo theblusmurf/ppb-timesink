@@ -11,6 +11,7 @@ artifacts/
 navigation-route.json
 navigation-routes.json
 repair-profile.json
+revival-profile.json*
 self-test.txt
 launcher-error.txt
 startup-trace.txt
@@ -23,3 +24,4 @@ ui-layout.txt
 radar-preview.png
 ui-page-*.png
 ui-repair-*.png
+ui-revival-*.png

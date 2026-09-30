@@ -28,6 +28,12 @@ adapted into PoteHunter and the remaining verification limits.
   clicks after the death delay, then one recognized confirmation. Positive HP
   is required before repair or return. Turning off Recognize Revive button
   retains the configured key method.
+- Custom revival setup can replace the included detector with local paired
+  dialog/button patches and an optional recognized death-screen opening click.
+  It shares repair's capture editor, binds the profile to the client/window,
+  and saves only after all selections validate. Test revival performs one real
+  revive without starting farming; Use automatic backs up the custom profile
+  before restoring built-in recognition. Preserve revival-profile.json on upgrade.
 - Existing anti-kill-steal, target safety, and movement-boundary checks remain
   in the active hunt loop.
 - A single **Auto revive + return along saved route** toggle controls recovery.

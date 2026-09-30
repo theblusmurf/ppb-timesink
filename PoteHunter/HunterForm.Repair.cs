@@ -11,7 +11,7 @@ public sealed partial class HunterForm
 
     void AddRepairSettings(TableLayoutPanel card)
     {
-        CompactAdd(card,CompactRow("Revive method",visualRevival));
+        AddRevivalSettings(card);
         CompactAdd(card,CompactRow("Repair",autoRepair));
         var actions=CompactFlow(configureRepair,testRepair);CompactAdd(card,actions);CompactAdd(card,repairStatus);
         priorityHint.SetToolTip(autoRepair,"Recognize the inventory hammer and repair confirmation, repair once after revival, then follow the saved return route. Off by default. Requires the game's repair capability and cost.");
@@ -93,7 +93,7 @@ public sealed partial class HunterForm
         if(confirmation.Marker.Matches(inventoryImage))
             throw new InvalidOperationException("The chosen text also appears without the repair dialog. Select the distinctive repair question instead.");
         new RepairProfile(1,world.ClientHash,inventoryImage.Width,inventoryImage.Height,
-            inventory.Marker,inventory.Button,confirmation.Marker,confirmation.Button).Save();
+            inventory.Marker,inventory.Button!,confirmation.Marker,confirmation.Button!).Save();
         message=repairStatus.Text="Repair setup saved. Cancel the open game confirmation and close inventory before testing.";
         TraceLog.Record("repair setup saved",new{Width=inventoryImage.Width,Height=inventoryImage.Height,Client=world.ClientHash});
     }

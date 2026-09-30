@@ -2,7 +2,8 @@ PoteHunter - Compact Healbot UI
 
 Extract the entire folder and run Start-Fixed-Detection.cmd.
 Copy your old settings.json before starting if you want to keep your preferences.
-Also preserve navigation-routes.json and repair-profile.json (if configured).
+Also preserve navigation-routes.json, repair-profile.json, and revival-profile.json
+(if configured).
 Choose Solo, Group combat, Healer or Group healer in Setup.
 For Group healer, choose a tank and set follow distance, healing skills and range.
 Support contains skill buffs and attack/defense potion switches.
@@ -13,6 +14,17 @@ Death recovery (Setup, combat modes):
 - Auto revive + return along saved route: on revives and returns; off stops on death.
 - Recognize Revive button is on by default. It clicks only a recognized button,
   then waits for living HP. Turn it off to use the configured revival key.
+- Custom revival setup works like repair setup. While dead, connected, and not
+  hunting, capture the Revive dialog, select its static text, then its button.
+  Choose the optional first step if a left-click opens the dialog: capture the
+  death-screen text and that opening click location. Each capture allows five
+  seconds to switch to the game and move the pointer away. Setup sends no clicks.
+- Test revival gives five seconds to switch to the game, then performs one real
+  revival. It requires known dead HP and reports success only after living HP.
+  Hunting stays stopped; repair and return travel run during normal recovery.
+- Custom revival profiles require the same client build, window size, and dialog
+  layout. Missing recognition stops recovery. Use automatic backs up the custom
+  profile and restores the included detector. Full screenshots are not stored.
 - Record a route from the revival point to the farming spot with Home and End.
   A saved spot alone is not a return route. Start near the recorded destination.
 - Record Primary and both alternatives from the same starting point (within

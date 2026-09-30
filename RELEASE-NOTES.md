@@ -1,5 +1,32 @@
 # Release notes
 
+## Release1.55
+
+- Added **Custom revival setup** next to visual revival in Setup → Death
+  recovery. While dead with hunting stopped, capture the dialog, select its
+  static text, and select the Revive button. An optional first capture records
+  the death-screen text and left-click location that opens the dialog.
+- Reused the repair image editor for revival, including zoom, marker selection,
+  and button selection. Capturing setup sends no game clicks and does not kill
+  or revive the character. Cancel leaves the previously saved profile intact.
+- Added **Test revival · 5s**. Switch to the game during the countdown; the test
+  performs one real revival and requires living HP before reporting success.
+  Hunting remains stopped. Normal automatic recovery still handles optional
+  repair and the saved-route return after revival.
+- Custom recognition uses the saved dialog text and button, checks the screen
+  again immediately before clicking, and stops on a client/window-size mismatch
+  or unrecognized controls. Confirmation remains limited to one click. A
+  dialog-only setup does not invent an opening click.
+- Added **Use automatic** to restore the included detector while preserving a
+  timestamped backup of the custom profile. Turning off Recognize Revive button
+  still selects the existing revival-key method.
+- Preserve the new local `revival-profile.json` on upgrade, along with existing
+  settings, routes, and repair profile. Custom screenshots/patches and profile
+  backups are excluded from source control and release packages.
+- Added synthetic recognition, profile persistence, recovery-sequence, and UI
+  checks. Local build and offline checks passed without game input; the custom
+  procedure still needs its in-game test on the user's client.
+
 ## Release1.54
 
 - Added automatic repair recognition using the inventory hammer and matching

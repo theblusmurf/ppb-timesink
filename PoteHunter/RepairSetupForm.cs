@@ -1,6 +1,6 @@
 namespace PoteHunter;
 
-internal sealed record RepairSelection(RepairPatch Marker,RepairPatch Button);
+internal sealed record RecognitionSelection(RepairPatch Marker,RepairPatch? Button,Point Click);
 
 // This editor annotates a captured game image; it never clicks the game.
 internal sealed class RepairSetupForm : Form
@@ -9,14 +9,30 @@ internal sealed class RepairSetupForm : Form
     readonly Label instruction=new(){AutoSize=true,MaximumSize=new Size(940,0),Padding=new Padding(8)};
     readonly Button next=new(){Text="Next: choose button",AutoSize=true,Enabled=false};
     readonly Bitmap image;
-    readonly bool confirmation;
     RepairPatch? marker;
-    public RepairSelection? Selection {get;private set;}
+    internal bool PreviewOnly;
+    protected override bool ShowWithoutActivation=>PreviewOnly;
+    public RecognitionSelection? Selection {get;private set;}
 
     public RepairSetupForm(Bitmap image,bool confirmation,Color background,Color foreground)
+        :this(image,background,foreground,confirmation?"Repair setup · confirmation":"Repair setup · inventory",
+            confirmation?"Drag around distinctive, static REPAIR question text in the confirmation dialog. Exclude the gold amount and Yes/No buttons. Then choose Next."
+                :"Drag around the inventory title or distinctive static text. Exclude item slots, gold, and the hammer. Then choose Next.",
+            confirmation?"Click the center of the repair dialog's YES button in this image. Then choose Save selection."
+                :"Click the center of the REPAIR HAMMER in this image. Then choose Save selection.",false) { }
+
+    internal static RepairSetupForm ForRevival(Bitmap image,bool opening,Color background,Color foreground)=>new(image,background,foreground,
+        opening?"Revival setup · open dialog":"Revival setup · confirm",
+        opening?"Drag around distinctive, static death-screen text visible BEFORE the Revive dialog opens. Exclude timers and changing numbers. Then choose Next."
+            :"Drag around distinctive, static text in the REVIVE dialog, separate from its button. Exclude timers and changing numbers. Then choose Next.",
+        opening?"Click the place you normally click to OPEN the Revive dialog. This image editor sends no game input. Then choose Save selection."
+            :"Click the center of the REVIVE button in this image. This image editor sends no game input. Then choose Save selection.",opening);
+
+    RepairSetupForm(Bitmap image,Color background,Color foreground,string title,string markerInstruction,string buttonInstruction,bool pointOnly)
     {
-        this.image=image;this.confirmation=confirmation;
-        Text=confirmation?"Repair setup · confirmation":"Repair setup · inventory";
+        this.image=image;
+        Text=title;
+        next.Text=pointOnly?"Next: opening click":"Next: choose button";
         BackColor=background;ForeColor=foreground;Font=new Font("Segoe UI",10);
         Size=new(1050,760);MinimumSize=new(760,560);StartPosition=FormStartPosition.CenterParent;
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3};
@@ -33,12 +49,10 @@ internal sealed class RepairSetupForm : Form
         Shown+=(_,_)=>zoom.Value=Math.Clamp((decimal)(Math.Min((double)scroll.ClientSize.Width/image.Width,(double)scroll.ClientSize.Height/image.Height)*100),10,100);
         void MarkerInstruction()
         {
-            instruction.Text=confirmation
-                ?"Drag around distinctive, static REPAIR question text in the confirmation dialog. Exclude the gold amount and Yes/No buttons. Then choose Next."
-                :"Drag around the inventory title or distinctive static text. Exclude item slots, gold, and the hammer. Then choose Next.";
+            instruction.Text=markerInstruction;
         }
         MarkerInstruction();
-        reset.Click+=(_,_)=>{marker=null;canvas.ChoosePoint=false;canvas.Selected=Rectangle.Empty;next.Enabled=false;next.Text="Next: choose button";MarkerInstruction();canvas.Invalidate();};
+        reset.Click+=(_,_)=>{marker=null;canvas.ChoosePoint=false;canvas.Selected=Rectangle.Empty;next.Enabled=false;next.Text=pointOnly?"Next: opening click":"Next: choose button";MarkerInstruction();canvas.Invalidate();};
         canvas.SelectionChanged+=(_,_)=>next.Enabled=!canvas.Selected.IsEmpty;
         next.Click+=(_,_)=>
         {
@@ -47,12 +61,14 @@ internal sealed class RepairSetupForm : Form
                 if(marker==null)
                 {
                     marker=RepairPatch.Capture(image,canvas.Selected);canvas.ChoosePoint=true;canvas.Selected=Rectangle.Empty;
-                    instruction.Text=confirmation?"Click the center of the repair dialog's YES button in this image. Then choose Save selection.":"Click the center of the REPAIR HAMMER in this image. Then choose Save selection.";
+                    instruction.Text=buttonInstruction;
                     next.Text="Save selection";next.Enabled=false;canvas.Invalidate();return;
                 }
-                var button=RepairPatch.Capture(image,canvas.Selected);
-                if(marker.Bounds.IntersectsWith(button.Bounds))throw new InvalidOperationException("The recognition text must be separate from the button. Reselect the marker.");
-                Selection=new(marker,button);DialogResult=DialogResult.OK;
+                Point click=new(canvas.Selected.X+canvas.Selected.Width/2,canvas.Selected.Y+canvas.Selected.Height/2);
+                if(!new Rectangle(Point.Empty,image.Size).Contains(click))throw new InvalidOperationException("Choose a point inside the game image.");
+                var button=pointOnly?null:RepairPatch.Capture(image,canvas.Selected);
+                if(button!=null && marker.Bounds.IntersectsWith(button.Bounds))throw new InvalidOperationException("The recognition text must be separate from the button. Reselect the marker.");
+                Selection=new(marker,button,click);DialogResult=DialogResult.OK;
             }
             catch(Exception ex){instruction.Text=ex.Message;}
         };

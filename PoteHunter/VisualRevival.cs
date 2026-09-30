@@ -53,6 +53,7 @@ internal static class VisualRevival
 
 internal sealed class LiveRevivalSurface(World world,Entity original,int processId,int zone,Action<string> status) : IRevivalSurface
 {
+    readonly RevivalProfile? custom=RevivalProfile.Load(world.ClientHash,RepairScreen.Bounds(world).Size);
     public long Now=>Environment.TickCount64;
     public Health Health()
     {
@@ -66,23 +67,38 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
     public async Task<VisualControl?> Find(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();if(!Dead())return null;
-        status("Recognizing the Revive button");
+        status(custom==null?"Recognizing the Revive button":"Recognizing the saved revival setup");
         using var frame=RepairScreen.Capture(world);
-        var found=await Task.Run(()=>RecoveryVision.Revive(frame,token),token);
+        var found=await Task.Run(()=>custom!=null?custom.Find(frame,token):RecoveryVision.Revive(frame,token),token);
         token.ThrowIfCancellationRequested();return Dead()?found:null;
     }
     public async Task Open(CancellationToken token)
     {
         token.ThrowIfCancellationRequested();if(!Dead())return;
         var bounds=RepairScreen.Bounds(world);
-        var center=new Point(bounds.Left+bounds.Width/2,bounds.Top+bounds.Height/2);
-        Input.MovePointer(center,token);await Input.Delay(80,token);
+        Point local=new(bounds.Width/2,bounds.Height/2);
+        if(custom!=null)
+        {
+            using var frame=RepairScreen.Capture(world);
+            if(!await Task.Run(()=>custom.CanOpen(frame,token),token))
+                throw new InvalidOperationException("The saved Revive dialog or opening step was not recognized. Open the dialog manually, redo Custom revival setup, or choose Use automatic.");
+            local=custom.Opening!.Point;
+        }
+        var click=new Point(bounds.Left+local.X,bounds.Top+local.Y);
+        Input.MovePointer(click,token);await Input.Delay(80,token);
         if(!Dead() || RepairScreen.Bounds(world)!=bounds)return;
+        if(custom!=null)
+        {
+            using var frame=RepairScreen.Capture(world);
+            if(!await Task.Run(()=>custom.CanOpen(frame,token),token))
+                throw new InvalidOperationException("The death screen changed before opening Revive. No click was sent.");
+        }
+        token.ThrowIfCancellationRequested();if(!Dead())return;
         var cursor=Input.Cursor();
-        if(Math.Abs(cursor.X-center.X)>2 || Math.Abs(cursor.Y-center.Y)>2)
+        if(RepairScreen.Bounds(world)!=bounds || Math.Abs(cursor.X-click.X)>2 || Math.Abs(cursor.Y-click.Y)>2)
             throw new OperationCanceledException("Pointer moved before opening the revival dialog.");
         await Input.Click(false,token);
-        TraceLog.Record("revival popup opening click",new{Visual=true});
+        TraceLog.Record("revival popup opening click",new{Visual=true,Custom=custom!=null});
     }
     public async Task Confirm(VisualControl button,CancellationToken token)
     {
@@ -92,13 +108,14 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
         Input.MovePointer(screen,token);await Input.Delay(80,token);
         if(!Dead())return;
         using var frame=RepairScreen.Capture(world);
-        bool stillPresent=await Task.Run(()=>RecoveryVision.ReviveStillPresent(frame,button,token),token);
+        bool stillPresent=await Task.Run(()=>custom!=null?custom.CanConfirm(frame,button,token):
+            !button.Custom && RecoveryVision.ReviveStillPresent(frame,button,token),token);
         token.ThrowIfCancellationRequested();if(!Dead())return;
         var cursor=Input.Cursor();
         if(!stillPresent || RepairScreen.Bounds(world)!=bounds || Math.Abs(cursor.X-screen.X)>2 || Math.Abs(cursor.Y-screen.Y)>2)
             throw new InvalidOperationException("Revive dialog or pointer changed before confirmation. No click was sent.");
         await Input.Click(false,token);status("Revive clicked; waiting for living HP");
-        TraceLog.Record("visual revive confirmed",new{button.Point,button.Scale});
+        TraceLog.Record("visual revive confirmed",new{button.Point,button.Scale,button.Custom});
     }
     public Task Delay(int milliseconds,CancellationToken token)=>Input.Delay(milliseconds,token);
 }
