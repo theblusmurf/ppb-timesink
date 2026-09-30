@@ -20,7 +20,6 @@ public sealed partial class HunterForm
     };
     readonly NumericUpDown navigationViewRadius = new() { Minimum = 10, Maximum = 2000, Increment = 10, Value = 150, Width = 70 };
     readonly Button fitNavigationRadius = new() { Text = "Fit loaded", AutoSize = true };
-    readonly CheckBox useSavedRecoveryRoute = new() { Text = "Use saved death route", AutoSize = true, Checked = true };
     readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when the saved spot is occupied", AutoSize = true, Checked = true };
     readonly ComboBox savedNavigationSlot = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly Label savedNavigationRoutesStatus = new() { AutoSize = true, ForeColor = Color.Silver };
@@ -57,7 +56,6 @@ public sealed partial class HunterForm
                 (int)navigationViewRadius.Minimum, (int)navigationViewRadius.Maximum);
             guideTreasureChests.Checked = options.GuideTreasureChests;
             showTreasureChestMarkers.Checked = options.ShowTreasureChestMarkers;
-            useSavedRecoveryRoute.Checked = options.UseSavedRecoveryRoute;
             useAlternativeHuntRoutes.Checked = options.UseAlternativeHuntRoutes;
             navigation.LoadSavedRoutes();
         }
@@ -68,7 +66,6 @@ public sealed partial class HunterForm
             showLootTrackerOverlay.Checked = true;
             navigationOverlaySize.Value = 450;
             navigationViewRadius.Value = 150;
-            useSavedRecoveryRoute.Checked = true;
             useAlternativeHuntRoutes.Checked = true;
         }
 
@@ -88,9 +85,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(navigationViewRadius);
         navControls.Controls.Add(new Label { Text = "m", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         navControls.Controls.Add(fitNavigationRadius);
-        navControls.Controls.Add(useSavedRecoveryRoute);
         navControls.Controls.Add(useAlternativeHuntRoutes);
-        priorityHint.SetToolTip(useSavedRecoveryRoute,"Follow the saved route after revival. Record from the revival point to the farming destination with Home and End; death never overwrites it.");
         priorityHint.SetToolTip(useAlternativeHuntRoutes,"Check the destination at startup, after revival, and during the return. Use the first free compatible Alternative 1 or 2; stop if none is available.");
         navControls.Controls.Add(new Label { Text = "Save slot:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
         navControls.Controls.Add(savedNavigationSlot);
@@ -112,7 +107,6 @@ public sealed partial class HunterForm
         navigationOverlaySize.ValueChanged += (_, _) => OverlaySettingsChanged();
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
-        useSavedRecoveryRoute.CheckedChanged += (_, _) => OverlaySettingsChanged();
         useAlternativeHuntRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
         savedNavigationSlot.SelectedIndexChanged += (_, _) => RefreshSavedNavigationRouteStatus();
         startNavigationRecording.Click += (_, _) => StartNavigationRouteRecording();
@@ -187,7 +181,6 @@ public sealed partial class HunterForm
         options.NavigationViewRadius = (int)navigationViewRadius.Value;
         options.GuideTreasureChests = guideTreasureChests.Checked;
         options.ShowTreasureChestMarkers = showTreasureChestMarkers.Checked;
-        options.UseSavedRecoveryRoute = useSavedRecoveryRoute.Checked;
         options.UseAlternativeHuntRoutes = useAlternativeHuntRoutes.Checked;
         try
         {
@@ -231,7 +224,7 @@ public sealed partial class HunterForm
                 catch { }
             }
             var profile=new NavigationRouteProfile(routeCharacter,routeHeight,(double)routeOptions.HuntRadius,
-                routeOptions.RevivalDelaySeconds,routeOptions.FarmOnArrival,false);
+            routeOptions.RevivalDelaySeconds,routeOptions.FarmOnArrival,routeOptions.AutoRepairAfterDeath);
             bool saved=spotOnly
                 ? navigation.SaveCurrentSpot(navigationZone,anchor,heading,slot,profile:profile)
                 : navigation.SaveCurrentRoute(navigationZone,anchor,heading,slot,profile:profile);

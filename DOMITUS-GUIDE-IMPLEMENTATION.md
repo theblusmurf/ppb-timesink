@@ -17,7 +17,7 @@ client-specific recognition layer before they can be automated safely.
   cannot become a false return route.
 - Recovery joins the nearest recorded waypoint only when it is within 20 map
   units, then returns to the saved anchor and restores its saved facing.
-- Occupancy fallback is checked at activation. Alternative routes are filtered
+- Occupancy fallback is checked at activation, after revival, and while approaching the anchor. Alternative routes are filtered
   by zone, character, floor/height, and their own farming radius before a free
   route is selected.
 - Auto-revive still requires live HP confirmation and makes at most three
@@ -25,13 +25,22 @@ client-specific recognition layer before they can be automated safely.
   confirmed and before the first key press.
 - Existing anti-kill-steal, target safety, and movement-boundary checks remain
   in the active hunt loop.
+- A single **Auto revive + return along saved route** toggle controls recovery.
+  Enabled recovery requires a recorded compatible return route; a spot-only
+  save is not treated as a recorded path. Disabling it stops hunting on death.
+- Optional **Auto repair after revival** uses the inventory hammer and Yes
+  confirmation, then closes inventory before return. One-time visual setup
+  identifies static inventory/dialog text and controls. The configuration is
+  local and bound to the game build and window size; the test button performs
+  the sequence once. Recognition failure or interruption stops the hunt.
+  Confirmation is attempted at most once per recovery cycle. This feature
+  requires the game's repair capability/cost and does not verify durability.
 
 ## Not automated from the guide
 
-Repair-after-death requires recognizing the client inventory, repair hammer,
-confirmation dialog, and popup state. The current source has no verified UI
-recognition or repair-item API, so adding coordinate clicks would be unsafe and
-could damage an unrelated window. Likewise, `/kill` group switching and the
-guide's named-group wait policy require a server/chat integration that is not
-exposed by the current memory client. These steps remain manual until that
-client capability is available.
+Automatic durability thresholds, repair inventory/price APIs, and verification
+of the resulting durability are not exposed by the current memory client.
+`/kill` group switching and the guide's named-group wait policy also require a
+server/chat integration that is not available. These remain manual. The new
+repair recognizer and recovery checks are validated offline; actual repair
+success and the full return must be checked in the user's game after setup.

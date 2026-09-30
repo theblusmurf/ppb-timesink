@@ -1,5 +1,35 @@
 # Release notes
 
+## Release1.53
+
+- Added **Auto repair after revival** in Setup → Death recovery, off by default.
+  It performs the inventory-hammer repair once after confirmed revival, closes
+  inventory, and then starts the saved-route return. The current toggle applies
+  to all routes, including routes saved before repair was available.
+- Added one-time **Configure repair** and **Test repair · 5s** controls. Setup
+  uses captured images to identify inventory/dialog text and the hammer/Yes
+  buttons. The test performs one repair after giving time to switch to the game.
+  Keep the same game build, window size, and inventory layout after setup.
+- Repair checks the game window, character, health, and recognized controls
+  before input. Missing/stuck dialogs stop the hunt before return. Confirmation
+  is never automatically retried. F9, focus loss, cancellation, and a second
+  death interrupt repair. The game must support repair and its required cost.
+- Combined the revival and saved-route switches into **Auto revive + return
+  along saved route**. On requires a recorded compatible route; off stops on
+  death. Any of the three saved destinations can be the activation spot.
+  Occupied-spot fallback excludes alternatives that contain only a saved spot.
+- Preserve `settings.json`, `navigation-routes.json`, and the new local
+  `repair-profile.json` when upgrading. No repair profile or game images ship
+  in the release. Detailed setup instructions are in README.
+- Removed the old example character name and skill-key list from release
+  defaults; new profiles use live character/skill detection. Existing personal
+  settings in the user's application folder are not modified.
+- Validation: Release build, simulated repair recognition/interruption checks,
+  recovery-route checks, input checks with intercepted packets, settings
+  persistence, and offscreen UI rendering. No live game input was used.
+  Repair completion means the UI sequence closed; durability and actual
+  in-game repair/return remain to be verified after the user's one-time setup.
+
 ## Release1.52
 
 - Fixed the UI stopping the hunt on death even when automatic revival was

@@ -251,7 +251,7 @@ public sealed partial class HunterForm : Form
         revivalDelaySeconds.Width=60;
         deathRecoveryRow.Controls.AddRange([autoRevive,new Label{Text="delay",AutoSize=true,Padding=new Padding(8,4,0,0)},revivalDelaySeconds,new Label{Text="s",AutoSize=true,Padding=new Padding(0,4,4,0)},new Label{Text="key",AutoSize=true,Padding=new Padding(4,4,0,0)},reviveKey,farmOnArrival]);
         Field("Death recovery",deathRecoveryRow,14,0); settings.SetColumnSpan(deathRecoveryRow,3);
-        priorityHint.SetToolTip(autoRevive,"After stable zero HP, release combat input, send the configured revive key, then return to the saved activation anchor.");
+        priorityHint.SetToolTip(autoRevive,"On: revive and follow the recorded route to your anchor, restoring its facing. Off: stop on death. Record a route in Navigation before enabling.");
         priorityHint.SetToolTip(revivalDelaySeconds,"Wait this many seconds after confirmed death before sending the revive key. The value is stored in the saved route profile and clamped to 0-600 seconds.");
         priorityHint.SetToolTip(reviveKey,"Client-specific death-screen key, for example R or Enter. The setting is saved with the hunt profile.");
         priorityHint.SetToolTip(farmOnArrival,"Keep hunting after returning to this saved route. Clear it to use the route only as a recovery destination.");
@@ -344,7 +344,7 @@ public sealed partial class HunterForm : Form
         hint.Dock = DockStyle.Fill; hint.ForeColor = Color.Silver; hint.TextAlign = ContentAlignment.MiddleLeft; root.Controls.Add(hint, 0, 5);
         status.Dock = DockStyle.Fill; status.TextAlign = ContentAlignment.MiddleLeft; root.Controls.Add(status, 0, 6);
         foreach (var b in new[] { connect, start, stop }) { b.FlatStyle = FlatStyle.Flat; b.BackColor = Color.FromArgb(42, 54, 72); b.ForeColor = ForeColor; b.Padding = new Padding(8, 2, 8, 2); }
-        try { var o = Options.Read(); player.Text = ""; filter.Text = o.Target; radius.Value = Math.Clamp(o.HuntRadius, radius.Minimum, radius.Maximum); leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty; autoRevive.Checked=o.AutoReviveAfterDeath; revivalDelaySeconds.Value=Math.Clamp(o.RevivalDelaySeconds,revivalDelaySeconds.Minimum,revivalDelaySeconds.Maximum); farmOnArrival.Checked=o.FarmOnArrival; reviveKey.Text=string.IsNullOrWhiteSpace(o.ReviveKey)?"R":o.ReviveKey; archerClass.Checked=o.ArcherClass; ranged.Checked = o.Ranged || archerClass.Checked; melee.Maximum = ranged.Checked ? 30m : 10m; double minimumRange = archerClass.Checked ? Targeting.ArcherAttackRange : Targeting.BowAttackRange; melee.Value = Math.Clamp(ranged.Checked ? Math.Max(o.MeleeRange, (decimal)minimumRange) : Math.Min(o.MeleeRange, 10m), melee.Minimum, melee.Maximum); attackRangeLabel.Text = ranged.Checked ? "Attack range" : "Melee distance"; autoSkills.Checked=o.AutoDetectSkills;skillKeys.ReadOnly=o.AutoDetectSkills;skillKeys.Text = o.SkillKeys; autoHealingSkills.Checked=o.AutoDetectHealingSkills;healingSkillKeys.ReadOnly=o.AutoDetectHealingSkills;healingSkillKeys.Text=o.HealingSkillKeys; healCharge.Value=Math.Clamp(o.HealChargeMilliseconds,healCharge.Minimum,healCharge.Maximum); partyHealBelow.Value=Math.Clamp(o.PartyHealBelowPercent,partyHealBelow.Minimum,partyHealBelow.Maximum); partyHealRange.Value=Math.Clamp(o.PartyHealRange,partyHealRange.Minimum,partyHealRange.Maximum); healerMode.Checked=o.HealerMode; skillSeconds.Value = Math.Clamp(o.SkillSeconds, skillSeconds.Minimum, skillSeconds.Maximum); lootHold.Value = Math.Clamp(o.LootHoldMs, lootHold.Minimum, lootHold.Maximum); foreach (var (kind, box) in difficultyBoxes) box.Checked = (o.AllowedDifficulties ?? []).Contains(kind.ToString()); gamekeeperRadius.Value=Math.Clamp(o.GamekeeperResponseRadius,gamekeeperRadius.Minimum,gamekeeperRadius.Maximum); combatPickup.Checked = o.LootDuringSkillCooldowns; nearbyLootPickup.Checked=o.AutoPickupNearbyLoot; combatPickup.Enabled=!nearbyLootPickup.Checked; prioritizeGamekeeper.Checked = o.PrioritizeGamekeeper; stationaryGamekeeperPriority.Checked=o.StationaryGamekeeperPriority; autoHeal.Checked = o.AutoHeal; healBelow.Value = Math.Clamp(o.HealBelowPercent, healBelow.Minimum, healBelow.Maximum); healDelay.Value = Math.Clamp(o.HealDelaySeconds, healDelay.Minimum, healDelay.Maximum); antiKillSteal.Checked=o.AntiKillSteal; playerBuffer.Value=Math.Clamp(o.OtherPlayerRadius,playerBuffer.Minimum,playerBuffer.Maximum); greetPlayers.Checked=o.GreetPlayers; avoidRules=o.AvoidNames ?? new(); Avoidance.Validate(avoidRules); foreach(var rule in avoidRules) avoidGrid.Rows.Add(rule.Name,rule.Radius); clearNearby.Checked=o.ClearNearbyEnemies; nearbyRadius.Value=Math.Clamp(o.NearbyEnemyRadius,nearbyRadius.Minimum,nearbyRadius.Maximum); automaticRouting.Checked=o.AutomaticRouting; }
+        try { var o = Options.Read(); player.Text = ""; filter.Text = o.Target; radius.Value = Math.Clamp(o.HuntRadius, radius.Minimum, radius.Maximum); leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty; autoRevive.Checked=o.AutoReviveAfterDeath; autoRepair.Checked=o.AutoRepairAfterDeath; revivalDelaySeconds.Value=Math.Clamp(o.RevivalDelaySeconds,revivalDelaySeconds.Minimum,revivalDelaySeconds.Maximum); farmOnArrival.Checked=o.FarmOnArrival; reviveKey.Text=string.IsNullOrWhiteSpace(o.ReviveKey)?"R":o.ReviveKey; archerClass.Checked=o.ArcherClass; ranged.Checked = o.Ranged || archerClass.Checked; melee.Maximum = ranged.Checked ? 30m : 10m; double minimumRange = archerClass.Checked ? Targeting.ArcherAttackRange : Targeting.BowAttackRange; melee.Value = Math.Clamp(ranged.Checked ? Math.Max(o.MeleeRange, (decimal)minimumRange) : Math.Min(o.MeleeRange, 10m), melee.Minimum, melee.Maximum); attackRangeLabel.Text = ranged.Checked ? "Attack range" : "Melee distance"; autoSkills.Checked=o.AutoDetectSkills;skillKeys.ReadOnly=o.AutoDetectSkills;skillKeys.Text = o.SkillKeys; autoHealingSkills.Checked=o.AutoDetectHealingSkills;healingSkillKeys.ReadOnly=o.AutoDetectHealingSkills;healingSkillKeys.Text=o.HealingSkillKeys; healCharge.Value=Math.Clamp(o.HealChargeMilliseconds,healCharge.Minimum,healCharge.Maximum); partyHealBelow.Value=Math.Clamp(o.PartyHealBelowPercent,partyHealBelow.Minimum,partyHealBelow.Maximum); partyHealRange.Value=Math.Clamp(o.PartyHealRange,partyHealRange.Minimum,partyHealRange.Maximum); healerMode.Checked=o.HealerMode; skillSeconds.Value = Math.Clamp(o.SkillSeconds, skillSeconds.Minimum, skillSeconds.Maximum); lootHold.Value = Math.Clamp(o.LootHoldMs, lootHold.Minimum, lootHold.Maximum); foreach (var (kind, box) in difficultyBoxes) box.Checked = (o.AllowedDifficulties ?? []).Contains(kind.ToString()); gamekeeperRadius.Value=Math.Clamp(o.GamekeeperResponseRadius,gamekeeperRadius.Minimum,gamekeeperRadius.Maximum); combatPickup.Checked = o.LootDuringSkillCooldowns; nearbyLootPickup.Checked=o.AutoPickupNearbyLoot; combatPickup.Enabled=!nearbyLootPickup.Checked; prioritizeGamekeeper.Checked = o.PrioritizeGamekeeper; stationaryGamekeeperPriority.Checked=o.StationaryGamekeeperPriority; autoHeal.Checked = o.AutoHeal; healBelow.Value = Math.Clamp(o.HealBelowPercent, healBelow.Minimum, healBelow.Maximum); healDelay.Value = Math.Clamp(o.HealDelaySeconds, healDelay.Minimum, healDelay.Maximum); antiKillSteal.Checked=o.AntiKillSteal; playerBuffer.Value=Math.Clamp(o.OtherPlayerRadius,playerBuffer.Minimum,playerBuffer.Maximum); greetPlayers.Checked=o.GreetPlayers; avoidRules=o.AvoidNames ?? new(); Avoidance.Validate(avoidRules); foreach(var rule in avoidRules) avoidGrid.Rows.Add(rule.Name,rule.Radius); clearNearby.Checked=o.ClearNearbyEnemies; nearbyRadius.Value=Math.Clamp(o.NearbyEnemyRadius,nearbyRadius.Minimum,nearbyRadius.Maximum); automaticRouting.Checked=o.AutomaticRouting; }
         catch { player.Text = ""; filter.Text = "Ichman Villager"; message = "Settings could not be loaded. Check the fields before use."; }
         try { var savedOptions=Options.Read(); prioritizeBreakables.Checked=savedOptions.PrioritizeBreakables; returnToHuntLocation.Checked=savedOptions.ReturnToHuntLocationAfterGamekeeper; } catch { }
         prioritizeGamekeeper.CheckedChanged += (_,_) => { if(!working && !busy) { try { CurrentOptions().Save(); } catch(Exception ex) { message=ex.Message; } } };
@@ -472,7 +472,7 @@ public sealed partial class HunterForm : Form
             rules.Add(new AvoidRule(name,distance));
         }
         Avoidance.Validate(rules); avoidRules=rules;
-        return WithOverlaySettings(WithManaSettings(WithRangedPullSettings(new Options { Player = player.Text.Trim(), Target = filter.Text.Trim(), HuntRadius = radius.Value, LeaveAreaWhenEmpty=leaveAreaWhenEmpty.Checked, AutoReviveAfterDeath=autoRevive.Checked, RevivalDelaySeconds=(int)revivalDelaySeconds.Value, FarmOnArrival=farmOnArrival.Checked, ReviveKey=configuredReviveKey, MeleeRange = (decimal)Targeting.AttackRange(ranged.Checked || archerClass.Checked, archerClass.Checked, (double)melee.Value), Ranged = ranged.Checked || archerClass.Checked, ArcherClass = archerClass.Checked, SkillKeys = keys, AutoDetectSkills=autoSkills.Checked, SkillSeconds = skillSeconds.Value, LootHoldMs = lootHold.Value, AllowedDifficulties = difficultyBoxes.Where(kv => kv.Value.Checked).Select(kv => kv.Key.ToString()).ToArray(), GamekeeperResponseRadius = gamekeeperRadius.Value, LootDuringSkillCooldowns = combatPickup.Checked, AutoPickupNearbyLoot=nearbyLootPickup.Checked, HealerMode=healerMode.Checked, AutoDetectHealingSkills=autoHealingSkills.Checked, HealingSkillKeys=healingKeys, HealChargeMilliseconds=healCharge.Value, PartyHealBelowPercent=partyHealBelow.Value, PartyHealRange=partyHealRange.Value, PrioritizeGamekeeper = prioritizeGamekeeper.Checked, StationaryGamekeeperPriority=stationaryGamekeeperPriority.Checked, ReturnToHuntLocationAfterGamekeeper=returnToHuntLocation.Checked, PrioritizeBreakables=prioritizeBreakables.Checked, AutoHeal = autoHeal.Checked, HealBelowPercent = healBelow.Value, HealDelaySeconds = healDelay.Value, AntiKillSteal=antiKillSteal.Checked, OtherPlayerRadius=playerBuffer.Value, AvoidNames=rules, ClearNearbyEnemies=clearNearby.Checked, NearbyEnemyRadius=nearbyRadius.Value, AutomaticRouting=automaticRouting.Checked,GroupTankName=selectedTankName,GroupMode=groupEnabled.Checked,GroupFollowDistance=groupFollow.Value,GroupAttackRadius=groupAttack.Value,GroupFollowLimit=groupLimit.Value })));
+        return WithOverlaySettings(WithManaSettings(WithRangedPullSettings(new Options { Player = player.Text.Trim(), Target = filter.Text.Trim(), HuntRadius = radius.Value, LeaveAreaWhenEmpty=leaveAreaWhenEmpty.Checked, AutoReviveAfterDeath=autoRevive.Checked, AutoRepairAfterDeath=autoRepair.Checked, RevivalDelaySeconds=(int)revivalDelaySeconds.Value, FarmOnArrival=farmOnArrival.Checked, ReviveKey=configuredReviveKey, MeleeRange = (decimal)Targeting.AttackRange(ranged.Checked || archerClass.Checked, archerClass.Checked, (double)melee.Value), Ranged = ranged.Checked || archerClass.Checked, ArcherClass = archerClass.Checked, SkillKeys = keys, AutoDetectSkills=autoSkills.Checked, SkillSeconds = skillSeconds.Value, LootHoldMs = lootHold.Value, AllowedDifficulties = difficultyBoxes.Where(kv => kv.Value.Checked).Select(kv => kv.Key.ToString()).ToArray(), GamekeeperResponseRadius = gamekeeperRadius.Value, LootDuringSkillCooldowns = combatPickup.Checked, AutoPickupNearbyLoot=nearbyLootPickup.Checked, HealerMode=healerMode.Checked, AutoDetectHealingSkills=autoHealingSkills.Checked, HealingSkillKeys=healingKeys, HealChargeMilliseconds=healCharge.Value, PartyHealBelowPercent=partyHealBelow.Value, PartyHealRange=partyHealRange.Value, PrioritizeGamekeeper = prioritizeGamekeeper.Checked, StationaryGamekeeperPriority=stationaryGamekeeperPriority.Checked, ReturnToHuntLocationAfterGamekeeper=returnToHuntLocation.Checked, PrioritizeBreakables=prioritizeBreakables.Checked, AutoHeal = autoHeal.Checked, HealBelowPercent = healBelow.Value, HealDelaySeconds = healDelay.Value, AntiKillSteal=antiKillSteal.Checked, OtherPlayerRadius=playerBuffer.Value, AvoidNames=rules, ClearNearbyEnemies=clearNearby.Checked, NearbyEnemyRadius=nearbyRadius.Value, AutomaticRouting=automaticRouting.Checked,GroupTankName=selectedTankName,GroupMode=groupEnabled.Checked,GroupFollowDistance=groupFollow.Value,GroupAttackRadius=groupAttack.Value,GroupFollowLimit=groupLimit.Value })));
     }
     async Task Connect()
     {
@@ -583,8 +583,8 @@ public sealed partial class HunterForm : Form
             avoidZones=Avoidance.BuildZones(avoidRules,entities,self.Id);
             int level = world.PlayerLevel();
             if(working)ObserveDeath(health.GetValueOrDefault(self.Id));
-            if(working && !deathRecovery.Pending && !deathReturnInProgress && activeGuardOptions?.GroupMode==true)RefreshGroupDecision();
-            if(working && !deathRecovery.Pending && !deathReturnInProgress && activeGuardOptions is {GroupMode:false} combatOptions) ObserveEncounter(combatOptions,health,pos,level);
+            if(working && !deathRecovery.Pending && !deathReturnInProgress && !repairInProgress && activeGuardOptions?.GroupMode==true)RefreshGroupDecision();
+            if(working && !deathRecovery.Pending && !deathReturnInProgress && !repairInProgress && activeGuardOptions is {GroupMode:false} combatOptions) ObserveEncounter(combatOptions,health,pos,level);
             var selfHealth = health.GetValueOrDefault(self.Id);
             var selfMana = world.ReadMana();
             int chestCount = entities.Count(e => Targeting.IsChest(e) && !health.GetValueOrDefault(e.Id).Dead);
@@ -687,7 +687,8 @@ public sealed partial class HunterForm : Form
     object ProtectionState() => new { AntiKillSteal=activeGuardOptions?.AntiKillSteal ?? antiKillSteal.Checked,
         OtherPlayerRadius=activeGuardOptions?.OtherPlayerRadius ?? playerBuffer.Value, AvoidNames=avoidRules, ActiveAvoidZones=avoidZones,
         DeathRecovery=new {Enabled=activeGuardOptions?.AutoReviveAfterDeath ?? autoRevive.Checked,deathRecovery.Pending,
-            Phase=deathReturnInProgress?"Returning":deathRecoveryActive?"Reviving":deathRecovery.Pending?"Waiting":"Inactive"},
+            AutoRepair=activeGuardOptions?.AutoRepairAfterDeath ?? autoRepair.Checked,
+            Phase=repairInProgress?"Repairing":deathReturnInProgress?"Returning":deathRecoveryActive?"Reviving":deathRecovery.Pending?"Waiting":"Inactive"},
         Recovery=new {Enabled=true,Phase=retreatRecovery?.Phase.ToString() ?? "Inactive",retreatRecovery?.HealthTarget,ClearanceBeyondRule=RetreatPlanner.Clearance,
             world.RestSupported,RestPosture=world.RestSupported?world.RestState().Posture.ToString():"Unavailable"},
         OtherPlayers=entities.Where(e=>CombatCourtesy.IsOtherPlayer(e,guardSelfId)).Select(e=>new {e.Id,e.Name,e.Model,e.Position}).ToArray() };
@@ -1234,7 +1235,7 @@ public sealed partial class HunterForm : Form
     bool WantsNearbyPickup()
     {
         var options=activeGuardOptions;
-        if(!working || !connected || options==null || deathRecovery.Pending || deathReturnInProgress || !options.AutoPickupNearbyLoot || cancel?.IsCancellationRequested!=false || returningFromPriority)return false;
+        if(!working || !connected || options==null || deathRecovery.Pending || deathReturnInProgress || repairInProgress || !options.AutoPickupNearbyLoot || cancel?.IsCancellationRequested!=false || returningFromPriority)return false;
         if(RangedPullEnabled(options) && rangedPull.Active && encounter.HasEngaged)return false;
         var self=world.LocalPlayer();
         if(runCharacter==null || !LocalCharacter.Same(runCharacter,self) || runZone!=world.ActiveZone())
@@ -1295,7 +1296,7 @@ public sealed partial class HunterForm : Form
             if(o.AutoReviveAfterDeath && playerHealth.Dead){ObserveDeath(playerHealth);throw new DeathRecoveryRequiredException();}
             throw new InvalidOperationException("Player health is unavailable or the character died; stopped.");
         }
-        if(deathReturnInProgress)
+        if(deathReturnInProgress || repairInProgress)
         {
             // Recovery owns movement until the destination and facing are
             // restored. Combat priority must not interrupt this route.
@@ -1634,19 +1635,22 @@ public sealed partial class HunterForm : Form
                 activeRevivalDelaySeconds=Math.Clamp(route is not null && RouteHasProfile(route) ? route.RevivalDelaySeconds : o.RevivalDelaySeconds,0,600);
                 activeFarmOnArrival=route is not null && RouteHasProfile(route) ? route.FarmOnArrival : o.FarmOnArrival;
             }
-            ApplyRouteProfile(primarySavedRoute!=null && RouteCompatible(primarySavedRoute) &&
-                (primarySavedRoute.Anchor-anchor).Length<=2.5 ? primarySavedRoute : null);
+            var activationRoute=navigation.SavedRoutesForZone(runZone.Value)
+                .Where(item=>RouteCompatible(item.Route) && (item.Route.Anchor-anchor).Length<=2.5)
+                .OrderBy(item=>(item.Route.Anchor-anchor).Length).FirstOrDefault();
+            if(activationRoute.Route!=null)activeSavedRouteSlot=activationRoute.Slot;
+            ApplyRouteProfile(activationRoute.Route);
             // A saved anchor is a standing location, so use a small floor
             // radius even when anti-kill-steal is configured narrowly. Prefer
             // the route's farming radius so occupancy follows the saved tab.
             double savedRouteOccupancyRadius=primarySavedRoute is {HuntRadius:>0} ? Math.Max(3,primarySavedRoute.HuntRadius) : Math.Max(3,(double)o.HuntRadius);
-            if(!o.GroupMode && o.UseAlternativeHuntRoutes && primarySavedRoute is {Zone:var primaryZone} &&
+            if(!o.GroupMode && activeSavedRouteSlot==0 && o.UseAlternativeHuntRoutes && primarySavedRoute is {Zone:var primaryZone} &&
                 primaryZone==runZone.Value && (activationLocation-primarySavedRoute.Anchor).Length<=20 &&
                 RouteCompatible(primarySavedRoute) &&
                 RecoveryRouting.Occupied(primarySavedRoute.Anchor,savedHuntHeight,savedRouteOccupancyRadius,entities,runCharacter.Id))
             {
                 selectedSavedRouteSlot=RecoveryRouting.FreeAlternative(navigation.SavedRoutes,runZone.Value,runCharacter.Name,
-                    savedHuntHeight,primarySavedRoute.Anchor,new HashSet<int>(),entities,runCharacter.Id,(double)o.HuntRadius);
+                    savedHuntHeight,primarySavedRoute.Anchor,new HashSet<int>(),entities,runCharacter.Id,(double)o.HuntRadius,o.AutoReviveAfterDeath);
                 selectedSavedRoute=navigation.GetSavedRoute(selectedSavedRouteSlot);
                 if(selectedSavedRoute!=null)
                 {
@@ -1665,6 +1669,12 @@ public sealed partial class HunterForm : Form
                 }
             }
             activeHuntAnchor=activationLocation;
+            if(o.AutoReviveAfterDeath)
+            {
+                string? routeProblem=RecoveryRouting.SavedReturnProblem(activeRouteProfile,runZone.Value,runCharacter.Name,savedHuntHeight,anchor);
+                if(routeProblem!=null)throw new InvalidOperationException(routeProblem);
+                if(o.AutoRepairAfterDeath)_=RepairProfile.Load(world.ClientHash,RepairScreen.Bounds(world).Size);
+            }
             activeExcursion=o.GroupMode ? null : new HuntExcursion(anchor,(double)o.HuntRadius);
             navigation.Observe(world.NavigationContext(runCharacter),runCharacter.Position,runCharacter.Height);
             // Manual Home/End recordings own the persistent route slots.
@@ -1900,7 +1910,7 @@ public sealed partial class HunterForm : Form
                     if(!RecoveryRouting.Occupied(anchor,savedHuntHeight,radius,entities,guardSelfId))return false;
                     occupiedSlots.Add(activeSavedRouteSlot);
                     int slot=RecoveryRouting.FreeAlternative(navigation.SavedRoutes,runZone!.Value,runCharacter!.Name,
-                        savedHuntHeight,anchor,occupiedSlots,entities,guardSelfId,(double)o.HuntRadius);
+                        savedHuntHeight,anchor,occupiedSlots,entities,guardSelfId,(double)o.HuntRadius,o.AutoReviveAfterDeath);
                     if(slot<0)throw new RouteUnavailableException("Saved hunt spot is occupied; no compatible free alternative is saved. Recovery stopped.");
                     var route=navigation.GetSavedRoute(slot)!;
                     Vec previousAnchor=anchor;
@@ -1929,9 +1939,11 @@ public sealed partial class HunterForm : Form
                         Vec current=world.PlayerPosition();
                         if(path==null)
                         {
+                            if(afterDeath && RecoveryRouting.SavedReturnProblem(activeRouteProfile,runZone!.Value,runCharacter!.Name,savedHuntHeight,anchor) is string problem)
+                                throw new RouteUnavailableException(problem);
                             IReadOnlyList<Vec> waypoints=[];
                             usedSavedRoute=false;
-                            if(o.UseSavedRecoveryRoute && activeRouteProfile is {HasRecordedRoute:true} saved &&
+                            if(activeRouteProfile is {HasRecordedRoute:true} saved &&
                                 RouteCompatible(saved) && (saved.Anchor-anchor).Length<=2.5)
                             {
                                 usedSavedRoute=navigation.TryGetRouteToSavedAnchor(runZone!.Value,current,activeSavedRouteSlot,out waypoints);
@@ -2042,6 +2054,7 @@ public sealed partial class HunterForm : Form
                     retreatRecovery=null;retreatDrive=null;lootGuardPosition=null;buffInProgress=false;gamekeeperTransition=false;priorityInterruptibleActivity=false;
                     runHotbarPage=world.Hotbar().PageBase;
                     TraceLog.Record("character revived",new{Position=self.Position,Anchor=anchor,Zone=runZone,HP=hp});
+                    if(o.AutoRepairAfterDeath)await RunRepairAsync(recoveryToken);
                     await MoveToSavedHuntAnchor(recoveryToken,true);
                     deathRecovery.Reset();
                     stopAfterDeathReturn=!activeFarmOnArrival;

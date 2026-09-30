@@ -76,10 +76,12 @@ public sealed partial class HunterForm
         manaReserve.Width=170;manaReserve.TickStyle=TickStyle.None;
         CompactAdd(recovery,CompactRow("Mana reserve",manaReserve,manaReserveValue));
         var deathSettings=CompactCard("DEATH RECOVERY");CompactAdd(settings,deathSettings);
-        autoRevive.Text="Auto revive";farmOnArrival.Text="Resume farming on arrival";
-        CompactAdd(deathSettings,CompactRow("Revival",autoRevive,Caption("Delay (s)"),revivalDelaySeconds,Caption("Key"),reviveKey));
+        autoRevive.Text="Auto revive + return along saved route";farmOnArrival.Text="Resume farming on arrival";
+        CompactAdd(deathSettings,CompactRow("On death",autoRevive));
+        CompactAdd(deathSettings,CompactRow("Revival",Caption("Delay (s)"),revivalDelaySeconds,Caption("Key"),reviveKey));
         CompactAdd(deathSettings,CompactRow("After return",farmOnArrival));
-        CompactAdd(deathSettings,new Label{Text="Saved routes and occupied-spot fallback are in Navigation.",AutoSize=true,MaximumSize=new Size(580,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,4)});
+        AddRepairSettings(deathSettings);
+        CompactAdd(deathSettings,new Label{Text="Record routes with Home / End in Navigation. Turning revival off stops the hunt on death.",AutoSize=true,MaximumSize=new Size(580,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,4)});
         var advanced=CompactCard("ADVANCED SETTINGS");advanced.Visible=false;
         CompactAdd(advanced,CompactRow("Social",greetPlayers));
         CompactAdd(advanced,CompactRow("Character",player));
@@ -164,13 +166,17 @@ public sealed partial class HunterForm
             finally {working=false;cancel=null;activeGuardOptions=previousGuard;deathRecovery.Reset();}
         }
         compactMode.SelectedIndex=0;
-        if(!autoRevive.Visible || !revivalDelaySeconds.Visible || !reviveKey.Visible || !farmOnArrival.Visible)
+        if(!autoRevive.Visible || !autoRepair.Visible || !revivalDelaySeconds.Visible || !reviveKey.Visible || !farmOnArrival.Visible)
             throw new Exception("Death recovery controls are missing from compact Setup.");
-        autoRevive.Checked=false;revivalDelaySeconds.Value=37;reviveKey.Text="Enter";farmOnArrival.Checked=false;
+        autoRevive.Checked=false;autoRepair.Checked=true;revivalDelaySeconds.Value=37;reviveKey.Text="Enter";farmOnArrival.Checked=false;
         SaveCompactSettings();var recoverySettings=Options.Read();
-        if(recoverySettings.AutoReviveAfterDeath || recoverySettings.RevivalDelaySeconds!=37 || recoverySettings.ReviveKey!="Enter" || recoverySettings.FarmOnArrival)
+        if(recoverySettings.AutoReviveAfterDeath || !recoverySettings.AutoRepairAfterDeath || recoverySettings.RevivalDelaySeconds!=37 || recoverySettings.ReviveKey!="Enter" || recoverySettings.FarmOnArrival ||
+            revivalDelaySeconds.Enabled || reviveKey.Enabled || farmOnArrival.Enabled || !configureRepair.Visible || !testRepair.Visible)
             throw new Exception("Death recovery controls did not persist.");
-        autoRevive.Checked=true;revivalDelaySeconds.Value=0;reviveKey.Text="R";farmOnArrival.Checked=true;SaveCompactSettings();
+        autoRevive.Checked=true;autoRepair.Checked=false;revivalDelaySeconds.Value=0;reviveKey.Text="R";farmOnArrival.Checked=true;SaveCompactSettings();
+        if(Options.Read().AutoRepairAfterDeath || !Options.Read().AutoReviveAfterDeath || configureRepair.Visible || testRepair.Visible ||
+            !revivalDelaySeconds.Enabled || !reviveKey.Enabled || !farmOnArrival.Enabled)
+            throw new Exception("Repair and revival toggles were not independent or did not update their controls.");
         for(int index=0;index<4;index++)
         {
             compactMode.SelectedIndex=index;SaveCompactSettings();var saved=Options.Read();
@@ -187,7 +193,7 @@ public sealed partial class HunterForm
         string before=File.ReadAllText(Options.PathName);healthConditionKeys.Text="Q";SaveCompactSettings();
         if(File.ReadAllText(Options.PathName)!=before||compactSaved.Text!="Check settings")throw new Exception("Invalid compact settings were written.");
         healthConditionKeys.Text="";filter.Text="";SaveCompactSettings();
-        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"compact-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,Checks=new[]{"enabled automatic revival survives UI death observation","disabled revival stops","visible persisted death recovery controls","four persisted modes","single effective healing threshold","autosave feedback","invalid edits preserve saved settings"}}));
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"compact-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,Checks=new[]{"enabled automatic revival survives UI death observation","disabled revival stops","visible persisted death recovery controls","independent repair toggle and setup controls","four persisted modes","single effective healing threshold","autosave feedback","invalid edits preserve saved settings"}}));
     }
     void QueueCompactSave()
     {

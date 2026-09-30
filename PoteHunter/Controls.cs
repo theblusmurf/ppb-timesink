@@ -179,6 +179,42 @@ public static class Input
         try { HoldMouse(right, true, token); await Delay(70, token); }
         finally { HoldMouse(right, false, token); }
     }
+    public static void MovePointer(Point screen,CancellationToken token)
+    {
+        Check(token);
+        var desktop=SystemInformation.VirtualScreen;
+        if(!desktop.Contains(screen) || desktop.Width<2 || desktop.Height<2)
+            throw new InvalidOperationException("Repair pointer destination is outside the desktop.");
+        Send(new Packet{Value=new Union{Mouse=new Mouse{
+            X=(int)Math.Round((screen.X-desktop.Left)*65535d/(desktop.Width-1)),
+            Y=(int)Math.Round((screen.Y-desktop.Top)*65535d/(desktop.Height-1)),Flags=0xc001}}});
+    }
+    internal static void CheckRepairPointer()
+    {
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
+        var packets=new List<Packet>();selfTestSink=packets.Add;Allowed=()=>true;Preflight=null;PickupHoldProvider=null;
+        try
+        {
+            Release();packets.Clear();
+            var desktop=SystemInformation.VirtualScreen;
+            MovePointer(desktop.Location,default);
+            MovePointer(new(desktop.Right-1,desktop.Bottom-1),default);
+            if(packets.Count!=2 || packets.Any(p=>p.Type!=0 || p.Value.Mouse.Flags!=0xc001) ||
+                packets[0].Value.Mouse.X!=0 || packets[0].Value.Mouse.Y!=0 ||
+                packets[1].Value.Mouse.X!=65535 || packets[1].Value.Mouse.Y!=65535)
+                throw new Exception("Repair pointer coordinates did not span the virtual desktop correctly.");
+            void Refused(Point point,CancellationToken token)
+            {
+                bool failed=false;try{MovePointer(point,token);}catch(InvalidOperationException){failed=true;}catch(OperationCanceledException){failed=true;}
+                if(!failed || packets.Count!=2)throw new Exception("Invalid, cancelled, or unfocused repair moved the pointer.");
+            }
+            Refused(new(desktop.Right,desktop.Bottom),default);
+            Refused(desktop.Location,new CancellationToken(true));
+            Allowed=()=>false;Refused(desktop.Location,default);
+            Allowed=()=>true;Preflight=()=>throw new InvalidOperationException("Character changed");Refused(desktop.Location,default);
+        }
+        finally {Preflight=null;PickupHoldProvider=null;Release();selfTestSink=null;Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;}
+    }
     public static async Task ChargeClick(int milliseconds, CancellationToken token)
     {
         if(milliseconds<50||milliseconds>10000)throw new ArgumentOutOfRangeException(nameof(milliseconds));

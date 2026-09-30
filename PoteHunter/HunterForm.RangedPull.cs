@@ -99,6 +99,27 @@ public sealed partial class HunterForm
                     throw new Exception("Combined healer/group controls did not persist alongside potion settings.");
                 form.CheckCompactControls();
                 form.compactMode.SelectedIndex=0;
+                form.autoRepair.Checked=true;form.PerformLayout();Application.DoEvents();
+                var deathCard=(TableLayoutPanel)form.autoRepair.Parent!.Parent!.Parent!;
+                using(var repairCard=new Bitmap(deathCard.Width,deathCard.Height))
+                {
+                    deathCard.DrawToBitmap(repairCard,new Rectangle(Point.Empty,deathCard.Size));
+                    repairCard.Save(Path.Combine(AppContext.BaseDirectory,"ui-repair-card.png"));
+                }
+                using(var sample=new Bitmap(1280,720))
+                using(var editor=new RepairSetupForm(sample,false,UiWindow,UiText){StartPosition=FormStartPosition.Manual,Location=new(-32000,-32000),ShowInTaskbar=false})
+                {
+                    using(var g=Graphics.FromImage(sample))
+                    {
+                        g.Clear(Color.FromArgb(25,30,35));
+                        g.DrawString("SYNTHETIC SETUP FIXTURE",form.Font,Brushes.White,30,30);
+                    }
+                    editor.Show();editor.PerformLayout();Application.DoEvents();
+                    using var preview=new Bitmap(editor.Width,editor.Height);
+                    editor.DrawToBitmap(preview,new Rectangle(Point.Empty,editor.Size));
+                    preview.Save(Path.Combine(AppContext.BaseDirectory,"ui-repair-editor.png"));
+                }
+                form.autoRepair.Checked=false;
                 form.Size=form.MinimumSize;form.PerformLayout();Application.DoEvents();
                 using(var setupMinimum=new Bitmap(form.Width,form.Height))
                 {

@@ -25,6 +25,13 @@ internal sealed class DeathRecoveryRequiredException : Exception;
 
 internal static class RecoveryRouting
 {
+    public static string? SavedReturnProblem(SavedNavigationRoute? route,int zone,string character,double height,Vec anchor)
+    {
+        if(route is not {HasRecordedRoute:true})return "Record a return route with Home / End in Navigation, or turn off Auto revive + return.";
+        if(!Compatible(route,zone,character,height) || (route.Anchor-anchor).Length>2.5)
+            return "The recorded route does not match this character, map, or anchor. Select the saved spot before starting.";
+        return null;
+    }
     // The client may recreate the local body on revival. Retain account/body
     // identity checks while allowing its allocation and generation to change.
     public static bool SameCharacter(Entity before,Entity after)=>
@@ -40,12 +47,12 @@ internal static class RecoveryRouting
             selfId,Math.Max(3,radius))!=null;
 
     public static int FreeAlternative(IReadOnlyList<SavedNavigationRoute?> routes,int zone,string character,
-        double huntHeight,Vec occupiedAnchor,IReadOnlySet<int> rejected,IEnumerable<Entity> entities,uint selfId,double defaultRadius)
+        double huntHeight,Vec occupiedAnchor,IReadOnlySet<int> rejected,IEnumerable<Entity> entities,uint selfId,double defaultRadius,bool requireRecorded=false)
     {
         for(int slot=1;slot<routes.Count;slot++)
         {
             var route=routes[slot];
-            if(rejected.Contains(slot) || route==null || !Compatible(route,zone,character,huntHeight) ||
+            if(rejected.Contains(slot) || route==null || requireRecorded&&!route.HasRecordedRoute || !Compatible(route,zone,character,huntHeight) ||
                 (route.Anchor-occupiedAnchor).Length<=.5)continue;
             if(!Occupied(route.Anchor,route.Height,route.HuntRadius>0?route.HuntRadius:defaultRadius,entities,selfId))return slot;
         }

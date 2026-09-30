@@ -36,6 +36,17 @@ internal static class DeathRecoveryChecks
         var alt1=primary with{Anchor=new(20,0),Points=[new(20,0),new(20,4),new(20,8)],FarmOnArrival=false};
         var alt2=primary with{Anchor=new(40,0),Points=[new(40,0),new(40,4),new(40,8)]};
         SavedNavigationRoute?[] routes=[primary,alt1,alt2];
+        if(RecoveryRouting.SavedReturnProblem(primary,5,"Farmer",10,anchor)!=null ||
+            RecoveryRouting.SavedReturnProblem(alt1,5,"Farmer",10,alt1.Anchor)!=null ||
+            RecoveryRouting.SavedReturnProblem(null,5,"Farmer",10,anchor)==null ||
+            RecoveryRouting.SavedReturnProblem(primary with{Points=[anchor]},5,"Farmer",10,anchor)==null ||
+            RecoveryRouting.SavedReturnProblem(primary,6,"Farmer",10,anchor)==null ||
+            RecoveryRouting.SavedReturnProblem(primary,5,"Other",10,anchor)==null ||
+            RecoveryRouting.SavedReturnProblem(primary,5,"Farmer",20,anchor)==null ||
+            RecoveryRouting.SavedReturnProblem(primary,5,"Farmer",10,new(40,0))==null)
+            throw new Exception("Combined revival/return accepted a missing or incompatible recorded route.");
+        if(RecoveryRouting.FreeAlternative([primary,alt1 with{Points=[alt1.Anchor]},alt2],5,"Farmer",10,anchor,new HashSet<int>(),[],1,5,true)!=2)
+            throw new Exception("Automatic revival selected a spot-only alternative without a return route.");
         var rejected=new HashSet<int>();
         int Choose(IEnumerable<Entity> entities)=>RecoveryRouting.FreeAlternative(routes,5,"Farmer",10,anchor,rejected,entities,1,5);
         if(!RecoveryRouting.Occupied(anchor,10,5,[self,other],1) ||
@@ -77,7 +88,7 @@ internal static class DeathRecoveryChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,HardwareInputEmitted=false,Checks=new[]{"one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
                 "waypoints require actual arrival","final anchor tolerance","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
-                "no fallback oscillation","saved route preserved through hunting and respawn"}
+                "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }

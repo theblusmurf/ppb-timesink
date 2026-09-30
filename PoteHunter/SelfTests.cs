@@ -86,6 +86,8 @@ static class SelfTests
             RoutePlanner.SelfTest();
             Navigation.SelfTest();
             DeathRecoveryChecks.Run();
+            AutoRepairChecks.Run().GetAwaiter().GetResult();
+            Input.CheckRepairPointer();
             Input.CheckReviveInput().GetAwaiter().GetResult();
             ChestCatalog.SelfTest();
             RetreatRecovery.SelfTest();

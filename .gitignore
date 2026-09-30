@@ -10,6 +10,7 @@ artifacts/
 *.jsonl
 navigation-route.json
 navigation-routes.json
+repair-profile.json
 self-test.txt
 launcher-error.txt
 startup-trace.txt
@@ -21,3 +22,4 @@ ranged-ui-check.json
 ui-layout.txt
 radar-preview.png
 ui-page-*.png
+ui-repair-*.png
