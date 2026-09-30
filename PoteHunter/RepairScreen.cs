@@ -33,20 +33,29 @@ internal static class RepairScreen
 internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Action validate,CancellationToken runToken) : IRepairSurface
 {
     readonly HashSet<RepairAction> attempted=new();
-    sealed record View(RepairObservation State,Point? Hammer,Point? Confirm,VisualControl? HammerVisual,VisualControl? ConfirmVisual);
+    internal sealed record View(RepairObservation State,Point? Hammer,Point? Confirm,VisualControl? HammerVisual,VisualControl? ConfirmVisual);
+    internal static View Recognize(Bitmap image,RepairProfile? profile,CancellationToken token,Func<RepairVisuals> automatic)
+    {
+        token.ThrowIfCancellationRequested();
+        if(profile!=null && image.Width==profile.Width && image.Height==profile.Height)
+        {
+            // A validated user setup is authoritative. Do not delay its small
+            // patch checks behind a scan of every pixel at every UI scale.
+            bool inventory=profile.Inventory.Matches(image),hammer=inventory && profile.Hammer.Matches(image);
+            bool prompt=profile.Prompt.Matches(image),confirm=prompt && profile.Confirm.Matches(image);
+            token.ThrowIfCancellationRequested();
+            return new(new(inventory,hammer,prompt,confirm),hammer?profile.Hammer.Center:null,
+                confirm?profile.Confirm.Center:null,null,null);
+        }
+        var visual=automatic();token.ThrowIfCancellationRequested();
+        return new(new(visual.Hammer!=null,visual.Hammer!=null,visual.Confirm!=null,visual.Confirm!=null),
+            visual.Hammer?.Point,visual.Confirm?.Point,visual.Hammer,visual.Confirm);
+    }
     async Task<View> Read(CancellationToken token)
     {
         runToken.ThrowIfCancellationRequested();token.ThrowIfCancellationRequested();validate();
         using var image=RepairScreen.Capture(world);
-        var view=await Task.Run(()=>
-        {
-            var visual=RecoveryVision.Repair(image,token);
-            bool manual=profile!=null && image.Width==profile.Width && image.Height==profile.Height;
-            bool inventory=manual && profile!.Inventory.Matches(image),hammer=inventory && profile!.Hammer.Matches(image);
-            bool prompt=manual && profile!.Prompt.Matches(image),confirm=prompt && profile!.Confirm.Matches(image);
-            return new View(new(visual.Hammer!=null||inventory,visual.Hammer!=null||hammer,visual.Confirm!=null||prompt,visual.Confirm!=null||confirm),
-                visual.Hammer?.Point ?? (hammer?profile!.Hammer.Center:null),visual.Confirm?.Point ?? (confirm?profile!.Confirm.Center:null),visual.Hammer,visual.Confirm);
-        },token);
+        var view=await Task.Run(()=>Recognize(image,profile,token,()=>RecoveryVision.Repair(image,token)),token);
         runToken.ThrowIfCancellationRequested();validate();return view;
     }
     public async Task<RepairObservation> Observe(CancellationToken token)=>(await Read(token)).State;
@@ -59,7 +68,10 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
         {
             if(state.Prompt || state.Inventory!=(action==RepairAction.CloseInventory))
                 throw new InvalidOperationException("Inventory changed before its repair input.");
-            await Input.Key(Keys.I,70,token);return;
+            TraceLog.Record("repair inventory key requested",new{Action=action.ToString(),Key="I",Recognition=profile!=null?"Custom setup":"Automatic templates"});
+            await Input.Key(Keys.I,70,token);
+            TraceLog.Record("repair inventory key sent",new{Action=action.ToString(),Key="I",GameResponseVerified=false});
+            return;
         }
         bool confirm=action==RepairAction.Confirm;
         if(confirm ? !state.Prompt||!state.Confirm : !state.Inventory||!state.Hammer||state.Prompt)

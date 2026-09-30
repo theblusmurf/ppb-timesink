@@ -1,5 +1,23 @@
 # Release notes
 
+## Release1.64
+
+- Fixed repair setup being delayed behind full-screen automatic recognition.
+  A valid saved custom repair profile now reads its small inventory/hammer and
+  prompt/button patches directly and uses its saved coordinates. Missing
+  controls remain unrecognised; automatic templates are retained when no
+  compatible custom profile is loaded. Marker rechecks still precede clicks.
+- Live Release1.63 logs showed the earlier inventory I press sent at 19:58:59Z,
+  about 35 seconds after revival, then an inventory recognition timeout.
+  Later tests after saving a profile were cancelled before another I press.
+  The previous reader scanned the full screen before checking that profile.
+  Windows accepting the key does not establish whether the game opened inventory.
+- Added requested/sent inventory-key logs and profile-priority regressions for
+  correct, absent, cancelled and automatic controls. Existing single-attempt
+  repair actions, HP/focus guards and precise button checks remain. Local build,
+  offline repair/recovery/input and UI checks passed without live repair input.
+  Live repair and durability verification remain pending; preserve repair-profile.json.
+
 ## Release1.63
 
 - Fixed revival opening clicks blocked by a stable cursor 50 pixels above the

@@ -87,16 +87,38 @@ internal static class AutoRepairChecks
             RepairPatch.Capture(image,new(170,10,40,24)),RepairPatch.Capture(image,new(250,10,40,24)));
         profile.Validate("CLIENT",image.Size);
         Require(profile.Inventory.Matches(image),"A matching repair marker was rejected.");
+        RepairVisuals NoAutomatic()=>throw new Exception("Custom repair setup ran the full-screen automatic scan.");
+        var customView=LiveRepairSurface.Recognize(image,profile,default,NoAutomatic);
+        Require(customView.State.Inventory && customView.State.Hammer && customView.State.Prompt && customView.State.Confirm &&
+            customView.Hammer==profile.Hammer.Center && customView.Confirm==profile.Confirm.Center && customView.HammerVisual==null,
+            "Saved repair controls were not used directly.");
         using(var changed=(Bitmap)image.Clone())
         {
             using(var g=Graphics.FromImage(changed))g.FillRectangle(Brushes.Black,profile.Prompt.Bounds);
             Require(!profile.Prompt.Matches(changed) && profile.Inventory.Matches(changed),"A missing repair prompt matched its template.");
+            var observed=LiveRepairSurface.Recognize(changed,profile,default,NoAutomatic);
+            Require(observed.State.Inventory && observed.State.Hammer && !observed.State.Prompt && !observed.State.Confirm,
+                "Saved inventory recognition invented a repair confirmation.");
         }
         using(var plain=new Bitmap(360,90))
         {
             using(var g=Graphics.FromImage(plain))g.Clear(Color.SaddleBrown);
             Invalid(()=>RepairPatch.Capture(plain,new(10,10,40,24)),"A plain background was accepted as a repair control.");
+            var missing=LiveRepairSurface.Recognize(plain,profile,default,NoAutomatic);
+            Require(missing.State==default,"Missing custom controls triggered automatic scanning or false recognition.");
         }
+        int autoScans=0;
+        var automaticView=LiveRepairSurface.Recognize(image,null,default,()=>{autoScans++;return new(null,null);});
+        Require(autoScans==1 && automaticView.State==default,"Automatic repair recognition was lost without a custom setup.");
+        using(var cancelled=new CancellationTokenSource())
+        {
+            cancelled.Cancel();bool stopped=false;
+            try{LiveRepairSurface.Recognize(image,profile,cancelled.Token,NoAutomatic);}catch(OperationCanceledException){stopped=true;}
+            Require(stopped,"Custom recognition ignored cancellation.");
+        }
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"repair-profile-priority-checks.json"),
+            JsonSerializer.Serialize(new{Passed=true,CustomSetupBypassesFullScreenScan=true,MissingControlsRejected=true,
+                AutomaticWithoutProfileRetained=true,CancellationRetained=true}));
         Invalid(()=>RepairPatch.Capture(image,new(-1,10,40,24)),"An out-of-frame control was accepted.");
         Invalid(()=>profile.Validate("different-client",image.Size),"A repair setup from another client was accepted.");
         Invalid(()=>profile.Validate("client",new(400,90)),"A resized game window reused old repair coordinates.");
