@@ -1,5 +1,21 @@
 # Release notes
 
+## Release1.61
+
+- Added an independent Show route overlay toggle in Advanced > Navigation.
+  The passive game overlay auto-fits all saved routes in the current zone,
+  colours Primary and both alternatives, marks anchors/facing, and shows the
+  10-unit startup corridor. The existing radar route toggle stays separate.
+- Added three saved loot-overlay designs: Dungeon HUD (detailed dark panel),
+  Compact Ribbon (low-height totals/rates), and Parchment Ledger (warm journal).
+  All use the same six tracked item totals, gold amounts, session timers and
+  earning rates. Detailed layouts show source kills/drops and recent loot.
+- Loot headers remain draggable without activating the game; changing designs
+  keeps the overlay on screen. Route visibility changes display only, not travel.
+- Offline build/UI checks validate saved choices, independent route visibility,
+  passive route-window styles, and render all three designs with sample data.
+  Live game overlay placement remains unverified; running app untouched.
+
 ## Release1.60
 
 - Fixed revival opening clicks repeatedly being withheld when the game's cursor

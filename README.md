@@ -1,5 +1,17 @@
 # PoteHunter
 
+**Advanced > Navigation** has a separate **Show route overlay** toggle for
+an automatically fitted map of Primary and both Alternative paths, saved
+anchors/facing, your position, and the 10-unit startup corridor. It is passive
+and click-through, placed at the bottom right of the game; radar remains separate.
+This toggle changes visibility only, not whether the bot follows saved routes.
+
+Beside **Show loot tracker**, choose **Dungeon HUD**, **Compact Ribbon**, or
+**Parchment Ledger**. The saved design changes presentation only; every design
+uses the same session totals and rates for Silvin, Mithril, Iternium, Fehu, Gold
+and Gems. Drag its header to move it. The ribbon summarises aggregate kills/drops;
+the detailed HUD and ledger also show attribution and recent drops.
+
 Start / F8 automatically follows a saved route to its anchor when you stand
 within **10 map units of the recorded path**. Select the desired slot in
 Advanced > Navigation; it is preferred when compatible and nearby, otherwise

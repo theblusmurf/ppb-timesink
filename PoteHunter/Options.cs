@@ -64,9 +64,11 @@ public sealed class Options
     // Keep radar route geometry optional so the overlay can stay focused on
     // nearby targets, chests, and the character while a route is running.
     public bool ShowNavigationRoutes { get; set; } = true;
+    public bool ShowRouteOverlay { get; set; }
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
     public bool ShowLootTrackerOverlay { get; set; } = true;
+    public int LootTrackerDesign { get; set; }
     public int LootTrackerOverlayX { get; set; } = -1;
     public int LootTrackerOverlayY { get; set; } = -1;
     public bool ShowTreasureChestMarkers { get; set; } = true;

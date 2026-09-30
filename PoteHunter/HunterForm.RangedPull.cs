@@ -18,6 +18,7 @@ public sealed partial class HunterForm
             try
             {
                 form.CheckNavigationRouteHotkeys();
+                form.CheckOverlayDesigns();
                 form.ranged.Checked = false;
                 form.InvokeOnClick(form.ranged,EventArgs.Empty);
                 form.rangedPullEnabled.Checked = true;
@@ -144,7 +145,7 @@ public sealed partial class HunterForm
                     throw new Exception("Radar preview activated or lost its passive window styles: "+System.Text.Json.JsonSerializer.Serialize(radarState));
                 File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"ranged-ui-check.json"),
                     System.Text.Json.JsonSerializer.Serialize(new {Passed=true,Connected=form.connected,Working=form.working,
-                        Checks=new[]{"real control values persisted and reloaded","offscreen ranged tab rendered","live startup handler omitted","Home/End route guards preserve active recordings"}}));
+                        Checks=new[]{"real control values persisted and reloaded","offscreen ranged tab rendered","live startup handler omitted","Home/End route guards preserve active recordings","independent route overlay toggle persisted","three loot designs rendered","loot design persisted when routes toggled","route overlay passive styles verified"}}));
                 return 0;
             }
             finally {form.timer.Dispose();form.world.Dispose();}
