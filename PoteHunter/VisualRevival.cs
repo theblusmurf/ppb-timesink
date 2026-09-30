@@ -12,9 +12,12 @@ internal interface IRevivalSurface
 
 internal static class VisualRevival
 {
+    const int DeathWaitMilliseconds=3000,OpeningGapMilliseconds=250,OpeningClicks=3;
+
     public static async Task Run(IRevivalSurface surface,long deathAt,CancellationToken token)
     {
-        long deadline=surface.Now+15000,nextOpen=Math.Max(surface.Now,deathAt+2000);
+        long readyAt=Math.Max(surface.Now,deathAt+DeathWaitMilliseconds);
+        long deadline=readyAt+15000,nextOpen=readyAt;
         int openings=0;
         while(surface.Now<deadline)
         {
@@ -22,6 +25,11 @@ internal static class VisualRevival
             var hp=surface.Health();
             if(hp.Known && !hp.Dead)return;
             if(!hp.Known){await surface.Delay(100,token);continue;}
+            // The death animation must finish even when Revive is already visible.
+            if(surface.Now<readyAt)
+            {
+                await surface.Delay((int)Math.Min(100,readyAt-surface.Now),token);continue;
+            }
             var button=await surface.Find(token);
             hp=surface.Health();
             if(hp.Known && !hp.Dead)return;
@@ -42,10 +50,13 @@ internal static class VisualRevival
             }
             if(surface.Now>=nextOpen)
             {
-                if(openings==3)throw new InvalidOperationException("Revive button was not recognized after three popup-opening attempts. Revive manually or use key mode.");
-                await surface.Open(token);openings++;nextOpen=surface.Now+1000;
+                if(openings==OpeningClicks)throw new InvalidOperationException("Revive button was not recognized after three opening clicks. Revive manually or check Custom revival setup.");
+                await surface.Open(token);openings++;
+                // Check the dialog and HP between clicks; never click through a
+                // recognized popup. Give the last opening click time to settle.
+                nextOpen=surface.Now+(openings==OpeningClicks?1000:OpeningGapMilliseconds);
             }
-            await surface.Delay(100,token);
+            await surface.Delay((int)Math.Clamp(nextOpen-surface.Now,1,100),token);
         }
         throw new InvalidOperationException("Health or the Revive dialog remained unavailable. Recovery stopped without another confirmation.");
     }

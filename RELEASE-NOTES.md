@@ -1,5 +1,22 @@
 # Release notes
 
+## Release1.56
+
+- Visual revival now waits at least **3 seconds after death**, then sends
+  **three opening left-clicks** with a minimum 250 ms gap when needed. Both
+  automatic recognition and the saved custom opening location use this timing.
+- The opening sequence ends early when the Revive button appears or the
+  character is alive. Unknown HP blocks clicks; stopping or losing game focus
+  interrupts the sequence. Revive confirmation is still clicked only once.
+- An already visible Revive button now also respects the three-second wait.
+  A longer saved route delay takes precedence without adding another three
+  seconds. Test revival measures its wait from the pre-countdown dead-HP check.
+- Setup shows the click timing beside the revival controls. Existing custom
+  profiles, settings, routes, and optional repair continue to work.
+- Offline checks cover three-click death screens with both detectors, timing,
+  early dialog recognition, interrupted sequences, and no repeated confirmation.
+  Live revival timing still needs verification in the game.
+
 ## Release1.55
 
 - Added **Custom revival setup** next to visual revival in Setup → Death

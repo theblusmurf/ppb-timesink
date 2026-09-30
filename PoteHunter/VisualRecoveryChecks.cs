@@ -82,8 +82,9 @@ internal static class VisualRecoveryChecks
 
     sealed class Surface : IRevivalSurface
     {
-        public long Now {get;private set;}
+        public long Now {get;set;}
         public readonly List<long> Opens=[];
+        public readonly List<long> ConfirmedAt=[];
         public int Confirms,Finds;
         public int ButtonAfter=1;
         public bool ManualRevival,Stuck,UnknownAfterConfirm;
@@ -96,28 +97,55 @@ internal static class VisualRecoveryChecks
             return Task.FromResult<VisualControl?>(Opens.Count>=ButtonAfter?new(new(500,500),1,new(455,488,91,24),default):null);
         }
         public Task Open(CancellationToken token){token.ThrowIfCancellationRequested();Opens.Add(Now);return Task.CompletedTask;}
-        public Task Confirm(VisualControl button,CancellationToken token){token.ThrowIfCancellationRequested();Confirms++;return Task.CompletedTask;}
+        public Task Confirm(VisualControl button,CancellationToken token){token.ThrowIfCancellationRequested();Confirms++;ConfirmedAt.Add(Now);return Task.CompletedTask;}
         public Task Delay(int milliseconds,CancellationToken token){OnDelay?.Invoke();token.ThrowIfCancellationRequested();Now+=milliseconds;return Task.CompletedTask;}
     }
     static async Task Revival()
     {
         var normal=new Surface();await VisualRevival.Run(normal,0,default);
-        Require(normal.Opens.SequenceEqual(new[]{2000L})&&normal.Confirms==1,"Revival did not wait two seconds, open, and confirm once.");
+        Require(normal.Opens.SequenceEqual(new[]{3000L})&&normal.Confirms==1,"Revival did not wait three seconds, open, and confirm once.");
+        var triple=new Surface{ButtonAfter=3};await VisualRevival.Run(triple,0,default);
+        Require(triple.Opens.SequenceEqual(new[]{3000L,3250L,3500L})&&triple.Confirms==1,
+            "Three-click death screen did not receive three opening clicks after the three-second wait.");
+        var delayed=new Surface{Now=10000,ButtonAfter=3};await VisualRevival.Run(delayed,0,default);
+        Require(delayed.Opens.SequenceEqual(new[]{10000L,10250L,10500L})&&delayed.Confirms==1,
+            "An elapsed saved-route delay gained another death wait.");
+        var laterDeath=new Surface{ButtonAfter=3};await VisualRevival.Run(laterDeath,1000,default);
+        Require(laterDeath.Opens.SequenceEqual(new[]{4000L,4250L,4500L}),"Opening clicks were not timed from the observed death.");
         var already=new Surface{Read=()=>new(50,100)};await VisualRevival.Run(already,0,default);
         Require(already.FindCount()==0&&already.Opens.Count==0&&already.Confirms==0,"A living character received revival input.");
         var manual=new Surface{ManualRevival=true};await VisualRevival.Run(manual,0,default);
         Require(manual.Opens.Count==1&&manual.Confirms==0,"Manual revival was followed by another confirmation.");
         var present=new Surface{ButtonAfter=0};await VisualRevival.Run(present,0,default);
-        Require(present.Opens.Count==0&&present.Confirms==1,"An already visible Revive button caused an unnecessary opening click.");
+        Require(present.Opens.Count==0&&present.ConfirmedAt.SequenceEqual(new[]{3000L}),
+            "An already visible Revive button bypassed the death wait or caused an unnecessary opening click.");
         async Task Fails(Surface surface)
         {
             bool failed=false;try{await VisualRevival.Run(surface,0,default);}catch(InvalidOperationException){failed=true;}
             Require(failed,"Unconfirmed revival did not time out.");
         }
         var missing=new Surface{ButtonAfter=10};await Fails(missing);
-        Require(missing.Opens.SequenceEqual(new[]{2000L,3000L,4000L})&&missing.Confirms==0,"Missing dialog exceeded three spaced opening attempts.");
+        Require(missing.Opens.SequenceEqual(new[]{3000L,3250L,3500L})&&missing.Confirms==0&&missing.Now>=4500,
+            "Missing dialog exceeded three opening clicks or did not wait for the last click to settle.");
         var unreadable=new Surface{Read=()=>default};await Fails(unreadable);
         Require(unreadable.Opens.Count==0&&unreadable.FindCount()==0&&unreadable.Confirms==0,"Unknown health allowed revival input.");
+        foreach(int stopAfter in new[]{1,2})
+        {
+            var recovered=new Surface{ButtonAfter=3};
+            recovered.Read=()=>recovered.Opens.Count>=stopAfter?new(100,100):new(0,100);
+            await VisualRevival.Run(recovered,0,default);
+            Require(recovered.Opens.Count==stopAfter&&recovered.Confirms==0,"Opening sequence clicked after manual revival.");
+            var lostHealth=new Surface{ButtonAfter=3};
+            lostHealth.Read=()=>lostHealth.Opens.Count>=stopAfter?default:new(0,100);
+            await Fails(lostHealth);
+            Require(lostHealth.Opens.Count==stopAfter&&lostHealth.Confirms==0,"Opening sequence clicked after HP became unreadable.");
+            using var stop=new CancellationTokenSource();var interrupted=new Surface{ButtonAfter=3};
+            interrupted.OnDelay=()=>{if(interrupted.Opens.Count>=stopAfter)stop.Cancel();};
+            bool cancelled=false;
+            try{await VisualRevival.Run(interrupted,0,stop.Token);}catch(OperationCanceledException){cancelled=true;}
+            Require(cancelled&&interrupted.Opens.Count==stopAfter&&interrupted.Confirms==0,
+                "Stop/focus cancellation failed to interrupt the opening sequence.");
+        }
         foreach(bool unknown in new[]{false,true})
         {
             var stuck=new Surface{Stuck=true,UnknownAfterConfirm=unknown};await Fails(stuck);
@@ -134,7 +162,7 @@ internal static class VisualRecoveryChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"visual-recovery-checks.json"),JsonSerializer.Serialize(new
         {
             Passed=true,HardwareInputEmitted=false,SyntheticTemplateFixtures=true,ElapsedMilliseconds=elapsed.ElapsedMilliseconds,
-            Checks=new[]{"paired repair text and button","moved and scaled inventory","paired Yes confirmation","ambiguous panels rejected","stale hover blocked","centered scaled Revive detection","disappearing and ambiguous Revive blocked","cancellable vision","known dead HP only","manual revival","three spaced opening attempts","one confirmation per death","unknown HP cannot repeat input","focus/stop cancellation"}
+            Checks=new[]{"paired repair text and button","moved and scaled inventory","paired Yes confirmation","ambiguous panels rejected","stale hover blocked","centered scaled Revive detection","disappearing and ambiguous Revive blocked","cancellable vision","known dead HP only","three-second death wait including visible dialog","three opening clicks with 250 ms gaps","elapsed saved delay respected","observed death timing","manual revival interrupts opening sequence","unknown HP interrupts opening sequence","no fourth opening click","one confirmation per death","unknown HP cannot repeat input","focus/stop cancellation between opening clicks"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }

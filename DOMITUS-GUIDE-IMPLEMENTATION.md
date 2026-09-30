@@ -25,7 +25,9 @@ adapted into PoteHunter and the remaining verification limits.
   active minutes, and retry. A second death preserves this pending cycle.
 - Visual revival requires known dead HP and recognizes the centered Revive
   button using the supplied template. It permits at most three popup-opening
-  clicks after the death delay, then one recognized confirmation. Positive HP
+  clicks after a minimum three-second death wait, with a minimum 250 ms gap
+  and a screen/HP check between clicks, then one recognized confirmation.
+  Longer saved route delays take precedence. Positive HP
   is required before repair or return. Turning off Recognize Revive button
   retains the configured key method.
 - Custom revival setup can replace the included detector with local paired

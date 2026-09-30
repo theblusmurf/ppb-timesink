@@ -14,6 +14,10 @@ Death recovery (Setup, combat modes):
 - Auto revive + return along saved route: on revives and returns; off stops on death.
 - Recognize Revive button is on by default. It clicks only a recognized button,
   then waits for living HP. Turn it off to use the configured revival key.
+- Visual revival waits at least 3 seconds after death, then sends three opening
+  left-clicks with a minimum 250 ms gap. It stops opening when Revive appears
+  or HP is alive/unreadable, and confirms Revive only once. A longer saved
+  route delay takes precedence. Custom setups use their saved opening location.
 - Custom revival setup works like repair setup. While dead, connected, and not
   hunting, capture the Revive dialog, select its static text, then its button.
   Choose the optional first step if a left-click opens the dialog: capture the

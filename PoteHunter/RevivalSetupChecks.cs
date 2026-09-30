@@ -28,17 +28,20 @@ internal static class RevivalSetupChecks
         new(RepairPatch.Capture(before,new(65,95,260,35)),null,480,320),
         new(RepairPatch.Capture(popup,new(365,215,240,35)),RepairPatch.Capture(popup,new(455,282,60,28)),485,296));
 
-    sealed class Surface(RevivalProfile profile,Bitmap before,Bitmap popup) : IRevivalSurface
+    sealed class Surface(RevivalProfile profile,Bitmap before,Bitmap popup,int openingsNeeded=1) : IRevivalSurface
     {
         public long Now {get;private set;}
         public readonly List<string> Actions=[];
+        public readonly List<long> OpenedAt=[];
         int stage;
         public Health Health()=>stage==2?new(100,100):new(0,100);
         public Task<VisualControl?> Find(CancellationToken token)=>Task.FromResult(profile.Find(stage==0?before:popup,token));
         public Task Open(CancellationToken token)
         {
             Require(stage==0&&profile.CanOpen(before,token),"Custom opening action lacked its death-screen marker.");
-            Actions.Add("open");stage=1;return Task.CompletedTask;
+            Actions.Add("open");OpenedAt.Add(Now);
+            if(OpenedAt.Count>=openingsNeeded)stage=1;
+            return Task.CompletedTask;
         }
         public Task Confirm(VisualControl control,CancellationToken token)
         {
@@ -57,6 +60,9 @@ internal static class RevivalSetupChecks
         Require(!(profile with{Opening=null}).CanOpen(before,default),"Dialog-only setup invented an opening click.");
         var surface=new Surface(profile,before,popup);await VisualRevival.Run(surface,0,default);
         Require(surface.Actions.SequenceEqual(new[]{"open","confirm"}),"Custom revival did not open, confirm once, then wait for living HP.");
+        var triple=new Surface(profile,before,popup,3);await VisualRevival.Run(triple,0,default);
+        Require(triple.Actions.SequenceEqual(new[]{"open","open","open","confirm"})&&triple.OpenedAt.SequenceEqual(new[]{3000L,3250L,3500L}),
+            "Custom opening location did not support three clicks after the death wait.");
         using(var hovered=(Bitmap)popup.Clone())
         {
             using(var g=Graphics.FromImage(hovered))g.FillRectangle(Brushes.Gray,profile.Confirm.Button!.Bounds);

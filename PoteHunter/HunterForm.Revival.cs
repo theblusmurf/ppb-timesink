@@ -13,7 +13,8 @@ public sealed partial class HunterForm
         CompactAdd(card,CompactRow("Revive method",visualRevival));
         revivalActions=CompactFlow(configureRevival,testRevival,automaticRevival);
         CompactAdd(card,revivalActions);CompactAdd(card,revivalStatus);
-        priorityHint.SetToolTip(configureRevival,"While dead with hunting stopped, capture the Revive dialog and select its text/button. An optional first capture sets the click that opens the dialog. Setup sends no game clicks.");
+        priorityHint.SetToolTip(configureRevival,"While dead with hunting stopped, capture the Revive dialog and select its text/button. The optional opening location receives up to three left-clicks after the 3-second death wait. Setup sends no game clicks.");
+        priorityHint.SetToolTip(visualRevival,"Wait at least 3 seconds after death, then send up to three opening left-clicks with a 250 ms gap. Stop opening when Revive appears, confirm once, and wait for living HP. A longer saved route delay still applies.");
         priorityHint.SetToolTip(testRevival,"Wait 5 seconds, switch to the game, and revive once using the selected visual setup. Requires known dead HP. This test performs a real revival; repair and return travel run during normal recovery.");
         priorityHint.SetToolTip(automaticRevival,"Keep a backup of your custom revival profile and return to the included automatic detector.");
         configureRevival.Click+=async(_,_)=>await RunRevivalTool(true);
@@ -35,6 +36,7 @@ public sealed partial class HunterForm
         automaticRevival.Visible=custom;
         revivalStatus.Text=custom?"Custom revival setup saved. Test once while dead; keep the same client, window size, and dialog layout."
             :"Automatic recognition. Custom setup is optional; capture it while dead with hunting stopped.";
+        revivalStatus.Text+=" Death wait: 3s · opening clicks: 3 (stop when Revive appears).";
         if(!autoRevive.Checked)revivalStatus.Text+=" Enable Auto revive + return to use it during a hunt.";
     }
     static void RequireRevivalSetupState(Health health)
@@ -62,8 +64,9 @@ public sealed partial class HunterForm
             if(configure)await ConfigureRevivalAsync(ValidateDead,token);
             else
             {
+                long deadAt=Environment.TickCount64;
                 await RepairCountdown("Revival test: switch to the game and move off the button",token);ValidateDead();
-                await VisualRevival.Run(new LiveRevivalSurface(world,original,processId,zone,text=>message=text),Environment.TickCount64-2000,token);
+                await VisualRevival.Run(new LiveRevivalSurface(world,original,processId,zone,text=>message=text),deadAt,token);
                 message=revivalStatus.Text="Revival test completed: living HP confirmed. Hunting remains stopped.";
             }
         }
