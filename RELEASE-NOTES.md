@@ -1,5 +1,20 @@
 # Release notes
 
+## Release1.60
+
+- Fixed revival opening clicks repeatedly being withheld when the game's cursor
+  no longer matched the injected centre move. Live Release1.59 logs showed
+  expected (1720, 720) versus actual (1720, 670); most attempts sent no click.
+- Before an opening or recognised confirmation click, correct a displaced
+  cursor once using Windows screen coordinates and require a verified match.
+  Clipped/rejected positioning, lost focus, changed window, or unreadable/living
+  HP still prevent the click. Alignment outcomes are logged for diagnosis.
+- Retained the two-second death wait, up to three centre openings one second
+  apart, one recognised confirmation, and 200 ms health polling for 15 seconds.
+- Offline checks cover the observed 50-pixel displacement, correction failure,
+  already aligned cursors, and cancellation after correction. No live input
+  was used for validation; actual revival still needs in-game verification.
+
 ## Release1.59
 
 - Visual revival now requires confirmed dead HP and waits at least two seconds

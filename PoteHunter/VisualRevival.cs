@@ -119,9 +119,9 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
             if(!canOpen)return Retry("death screen changed; checking for the Revive button");
         }
         token.ThrowIfCancellationRequested();if(!Dead())return false;
-        var cursor=Input.Cursor();
-        if(RepairScreen.Bounds(world)!=bounds || Math.Abs(cursor.X-click.X)>2 || Math.Abs(cursor.Y-click.Y)>2)
-            return Retry("pointer moved before the opening click; repositioning",new{Expected=click,Actual=cursor});
+        if(RepairScreen.Bounds(world)!=bounds)return Retry("game window moved before the opening click");
+        if(!Input.AlignPointer(click,token))return Retry("pointer could not align for the opening click",new{Expected=click,Actual=Input.Cursor()});
+        if(!Dead() || RepairScreen.Bounds(world)!=bounds)return false;
         await Input.Click(false,token);
         TraceLog.Record("revival popup opening click",new{Visual=true,Custom=custom!=null});
         return true;
@@ -137,9 +137,10 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
         bool stillPresent=await Task.Run(()=>custom!=null?custom.CanConfirm(frame,button,token):
             !button.Custom && RecoveryVision.ReviveStillPresent(frame,button,token),token);
         token.ThrowIfCancellationRequested();if(!Dead())return false;
-        var cursor=Input.Cursor();
-        if(!stillPresent || RepairScreen.Bounds(world)!=bounds || Math.Abs(cursor.X-screen.X)>2 || Math.Abs(cursor.Y-screen.Y)>2)
-            return Retry("dialog or pointer changed before confirmation; checking again",new{Expected=screen,Actual=cursor,DialogPresent=stillPresent});
+        if(!stillPresent || RepairScreen.Bounds(world)!=bounds)
+            return Retry("dialog changed before confirmation; checking again",new{DialogPresent=stillPresent});
+        if(!Input.AlignPointer(screen,token))return Retry("pointer could not align for confirmation",new{Expected=screen,Actual=Input.Cursor()});
+        if(!Dead() || RepairScreen.Bounds(world)!=bounds)return false;
         await Input.Click(false,token);status("Revive clicked; waiting for living HP");
         TraceLog.Record("visual revive confirmed",new{button.Point,button.Scale,button.Custom});
         return true;

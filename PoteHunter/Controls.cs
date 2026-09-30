@@ -32,6 +32,28 @@ public static class Input
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
     [StructLayout(LayoutKind.Sequential)] struct CursorPoint { public int X, Y; }
     [DllImport("user32.dll",SetLastError=true)] static extern bool GetCursorPos(out CursorPoint point);
+    [DllImport("user32.dll",SetLastError=true)] static extern bool SetCursorPos(int x,int y);
+    internal static bool AlignPointer(Point destination,Func<Point> read,Func<Point,bool> position,Action validate)
+    {
+        static bool Near(Point actual,Point expected)=>Math.Abs(actual.X-expected.X)<=2 && Math.Abs(actual.Y-expected.Y)<=2;
+        validate();
+        if(Near(read(),destination))return true;
+        // A foreground game may displace an injected absolute move before the
+        // final click. Correct once with Windows screen coordinates, then
+        // require an actual cursor match; never admit a displaced click.
+        validate();
+        if(!position(destination))return false;
+        validate();
+        return Near(read(),destination);
+    }
+    internal static bool AlignPointer(Point screen,CancellationToken token)
+    {
+        if(!SystemInformation.VirtualScreen.Contains(screen))throw new InvalidOperationException("Revival pointer destination is outside the desktop.");
+        Point before=Cursor();
+        bool aligned=AlignPointer(screen,Cursor,point=>SetCursorPos(point.X,point.Y),()=>Check(token));
+        TraceLog.Record("revival pointer alignment",new{Expected=screen,Before=before,Actual=Cursor(),Aligned=aligned,Method="Windows screen coordinates"});
+        return aligned;
+    }
     public static Point Cursor()
     {
         if(!GetCursorPos(out var p))throw new InvalidOperationException($"Windows could not read the mouse position (error {Marshal.GetLastWin32Error()}).");
@@ -198,6 +220,17 @@ public static class Input
     }
     internal static void CheckRepairPointer()
     {
+        Point desired=new(1720,720),actual=new(1720,670);int corrections=0,checks=0;
+        if(!AlignPointer(desired,()=>actual,point=>{corrections++;actual=point;return true;},()=>checks++) || corrections!=1 || checks!=3)
+            throw new Exception("Displaced revival pointer was not corrected and revalidated.");
+        if(!AlignPointer(desired,()=>desired,_=>throw new Exception("An aligned pointer was moved again."),()=>{}))
+            throw new Exception("Aligned revival pointer was refused.");
+        if(AlignPointer(desired,()=>new(1720,670),_=>true,()=>{}) || AlignPointer(desired,()=>new(1720,670),_=>false,()=>{}))
+            throw new Exception("Clipped or rejected pointer allowed a misplaced revival click.");
+        int validations=0;bool cancelled=false;
+        try{AlignPointer(desired,()=>new(1720,670),_=>true,()=>{if(++validations==3)throw new OperationCanceledException();});}
+        catch(OperationCanceledException){cancelled=true;}
+        if(!cancelled)throw new Exception("Pointer correction ignored focus/cancellation revalidation.");
         var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
         var packets=new List<Packet>();selfTestSink=packets.Add;Allowed=()=>true;Preflight=null;PickupHoldProvider=null;
         try
