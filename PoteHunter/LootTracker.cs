@@ -13,7 +13,6 @@ public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList
 public sealed class LootTracker
 {
     const double DropAttributionRadius=12;
-    const uint MaximumPileQuantity=10_000_000;
     static readonly TimeSpan DropAttributionWindow=TimeSpan.FromSeconds(20);
     static readonly string[] SourceOrder=["Mimic","Tribal","Pulkhan","Tower"];
     static readonly string[] TrackedLootOrder=["Silvin","Mithril","Iternium","Fehu","Gold","Gems"];
@@ -49,7 +48,7 @@ public sealed class LootTracker
     {
         public int Kills;
         public int Drops;
-        public readonly Dictionary<string,int> Items=new(StringComparer.OrdinalIgnoreCase);
+        public readonly Dictionary<string,long> Items=new(StringComparer.OrdinalIgnoreCase);
     }
     sealed record UnmatchedDrop(GroundItem Item,DateTime FirstSeenUtc);
     sealed record PendingKill(string Source,uint Id,uint Generation,Vec Position,DateTime SeenUtc,int Zone);
@@ -84,14 +83,14 @@ public sealed class LootTracker
         return null;
     }
 
-    /// <summary>Returns the currency represented by a drop. The ground-pile quantity is authoritative when present; textual amounts are only a fallback for explicitly named currency records.</summary>
+    /// <summary>Decodes currency from the pile's signed type value, or an explicit textual amount. An unavailable amount contributes zero, never an invented one gold.</summary>
     public static long GoldAmountFor(GroundItem item)
     {
-        if(item.Quantity>0 && item.Quantity<=MaximumPileQuantity)return item.Quantity;
+        if(item.TypeId<0)return item.EncodedGoldAmount;
         string text=$"{item.Name} {item.Description}";
         Match named=GoldAmountPattern.Match(text);
         string raw=named.Success?(named.Groups["before"].Success?named.Groups["before"].Value:named.Groups["after"].Value):"";
-        return long.TryParse(raw.Replace(",",""),NumberStyles.None,CultureInfo.InvariantCulture,out long amount) && amount>0?amount:1;
+        return long.TryParse(raw.Replace(",",""),NumberStyles.None,CultureInfo.InvariantCulture,out long amount) && amount>0?amount:0;
     }
 
     /// <summary>Marks whether the bot is actively farming so GPH excludes idle and disconnected time.</summary>
@@ -186,7 +185,7 @@ public sealed class LootTracker
                 else if(!Equals(observed.Item,item))
                 {
                     // Keep the original observation time, but retain the
-                    // freshest quantity and position for delayed matching.
+                    // freshest encoded amount and position for delayed matching.
                     unmatched[key]=observed=new UnmatchedDrop(item,observed.FirstSeenUtc);
                 }
                 PendingKill? match=FindMatchLocked(item,currentZone,now);
@@ -229,10 +228,10 @@ public sealed class LootTracker
         string itemName=trackedName ?? (string.IsNullOrWhiteSpace(item.Name)?"Unknown item":item.Name.Trim());
         SourceState state=sources[match.Source];
         state.Drops++;
-        state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+1;
         long amount=trackedName=="Gold"?GoldAmountFor(item):1;
+        state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+amount;
         if(trackedName!=null)trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+amount;
-        string recentName=trackedName=="Gold"?$"Gold ({amount:N0})":itemName;
+        string recentName=trackedName=="Gold"?(amount>0?$"Gold ({amount:N0})":"Gold (amount unavailable)"):itemName;
         recent.Insert(0,new LootTrackerDropSummary(match.Source,recentName,item.Position,now));
         if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
         known.Add(key);
@@ -313,16 +312,16 @@ public sealed class LootTracker
             new GroundItem(4,4,4,"Mithril shard",new(.6,.5),0),
             new GroundItem(5,5,5,"Rare ore",new(.7,.5),0,"Iternium ore"),
             new GroundItem(6,6,6,"Fehu rune",new(.8,.5),0),
-            new GroundItem(7,7,7,"Gold",new(.9,.5),0),
+            new GroundItem(7,7,7,"Gold 1",new(.9,.5),0),
             new GroundItem(8,8,8,"Gemstone",new(1,.5),0)],8);
         snap=tracker.Snapshot();
         if(snap.Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Tracked item drops were not attributed.");
         if(snap.TrackedLoot.Any(item=>item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
         if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0))!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0))!="Mithril")
             throw new Exception("Legacy valuable aliases did not normalize to the corrected labels.");
-        var encodedGold=new GroundItem(12,12,unchecked((int)(0x80000000u|115u)),"Special drop",new(.5,.5),0,Quantity:115);
+        var encodedGold=new GroundItem(12,12,unchecked((int)(0x80000000u|115u)),"Special drop",new(.5,.5),0);
         if(TrackedLootFor(encodedGold)!="Gold" || GoldAmountFor(encodedGold)!=115 ||
-            GoldAmountFor(new GroundItem(18,18,unchecked((int)(0x80000000u|115u)),"Special drop",new(.5,.5),0))!=1 ||
+            GoldAmountFor(encodedGold with {Name="Gold 999"})!=115 ||
             TrackedLootFor(new GroundItem(13,13,13,"Gold coin",new(.5,.5),0))!="Gold" ||
             GoldAmountFor(new GroundItem(16,16,16,"Gold 1,250",new(.5,.5),0))!=1250 ||
             GoldAmountFor(new GroundItem(17,17,17,"8 gold",new(.5,.5),0))!=8 ||
@@ -332,7 +331,8 @@ public sealed class LootTracker
         var amountTracker=new LootTracker();amountTracker.ObserveDrops([existing],8);amountTracker.RecordKill(mimic,new(0,0),8);amountTracker.ObserveDrops([existing,encodedGold],8);
         if(amountTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
             throw new Exception("Gold amount was not accumulated from the special-drop id.");
-        var baselineGold=new GroundItem(30,30,unchecked((int)(0x80000000u|115u)),"Special drop",new(0,0),0,Quantity:115);
+        GoldRecordSelfTest(mimic);
+        var baselineGold=new GroundItem(30,30,unchecked((int)(0x80000000u|115u)),"Special drop",new(0,0),0);
         var dedupeTracker=new LootTracker();
         dedupeTracker.ObserveDrops([baselineGold],8,new(0,0),10);
         dedupeTracker.RecordKill(mimic,new(0,0),8);
@@ -361,13 +361,13 @@ public sealed class LootTracker
         var radiusTracker=new LootTracker();
         radiusTracker.ObserveDrops([],8,new(0,0),10);
         radiusTracker.RecordKill(mimic,new(0,0),8);
-        radiusTracker.ObserveDrops([new GroundItem(32,32,unchecked((int)(0x80000000u|99u)),"Special drop",new(20,0),0,Quantity:99)],8,new(0,0),10);
+        radiusTracker.ObserveDrops([new GroundItem(32,32,unchecked((int)(0x80000000u|99u)),"Special drop",new(20,0),0)],8,new(0,0),10);
         if(radiusTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
             throw new Exception("A pile outside the saved farming radius was credited.");
         var typeIdentityTracker=new LootTracker();
         typeIdentityTracker.ObserveDrops([new GroundItem(40,40,1,"Existing",new(0,0),0)],8,new(0,0),10);
         typeIdentityTracker.RecordKill(mimic,new(0,0),8);
-        typeIdentityTracker.ObserveDrops([new GroundItem(40,40,unchecked((int)(0x80000000u|77u)),"Special drop",new(0,0),0,Quantity:77)],8,new(0,0),10);
+        typeIdentityTracker.ObserveDrops([new GroundItem(40,40,unchecked((int)(0x80000000u|77u)),"Special drop",new(0,0),0)],8,new(0,0),10);
         if(typeIdentityTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
             throw new Exception("A refreshed pile was double-counted when its item type changed.");
         var idleTracker=new LootTracker();idleTracker.ResetTimer();
@@ -390,5 +390,63 @@ public sealed class LootTracker
         var resetTimed=timerTracker.Snapshot();
         if(resetTimed.TrackedLoot.First(item=>item.Name=="Gold").Count!=115 || resetTimed.HourlyLoot.Any(item=>item.PerHour!=0))
             throw new Exception("Resetting the loot timer changed totals or retained the old rate window.");
+    }
+
+    static void GoldRecordSelfTest(Entity mimic)
+    {
+        // Actual values from the Release1.48 recording. The old +0x0c reader
+        // rejected these unrelated values and silently recorded one per pile.
+        (int Type,uint Unused,long Amount)[] recorded=[
+            (-2147483551,990760296,97),
+            (-2147483529,1216813036,119),
+            (-2147483527,1216750021,121),
+            (-2147483532,1420326648,116),
+            (-2147483566,1216750021,82)];
+        var tracker=new LootTracker();
+        tracker.ObserveDrops([],8);
+        tracker.RecordKill(mimic,new(0,0),8);
+        var drops=new List<GroundItem>();
+        foreach(var sample in recorded)
+        {
+            byte[] record=new byte[0x28];
+            BitConverter.TryWriteBytes(record.AsSpan(0),100u+(uint)drops.Count);
+            BitConverter.TryWriteBytes(record.AsSpan(4),254410752u);
+            BitConverter.TryWriteBytes(record.AsSpan(8),sample.Type);
+            BitConverter.TryWriteBytes(record.AsSpan(0x0c),sample.Unused);
+            BitConverter.TryWriteBytes(record.AsSpan(0x1c),50f);
+            BitConverter.TryWriteBytes(record.AsSpan(0x20),100f);
+            BitConverter.TryWriteBytes(record.AsSpan(0x24),25f);
+            var item=GroundItem.FromRecord(record,"Gold");
+            if(GoldAmountFor(item)!=sample.Amount || item.Position!=new Vec(.5,.25) || item.Height!=1)
+                throw new Exception("A recorded ground pile did not preserve its gold amount and position.");
+            // Small stale values must also be ignored, not accepted as amounts.
+            BitConverter.TryWriteBytes(record.AsSpan(0x0c),1u);
+            if(GoldAmountFor(GroundItem.FromRecord(record,"Gold"))!=sample.Amount)
+                throw new Exception("Uninitialized ground-record data overrode the encoded gold amount.");
+            drops.Add(item);
+        }
+        tracker.ObserveDrops(drops,8);
+        tracker.ObserveDrops([],8);
+        tracker.ObserveDrops(drops,8);
+        var snap=tracker.Snapshot();
+        var source=snap.Sources.Single(row=>row.Source=="Mimic");
+        if(snap.TrackedLoot.Single(item=>item.Name=="Gold").Count!=535 || source.Drops!=5 || source.Items.Single().Count!=535)
+            throw new Exception("Recorded gold piles must contribute 535 gold once, not five pile counts.");
+        tracker.activeRateElapsed=TimeSpan.FromMinutes(30);
+        snap=tracker.Snapshot();
+        if(snap.HourlyLoot.Single(item=>item.Name=="Gold").PerHour!=1070)
+            throw new Exception("Gold per hour was not calculated from currency amounts.");
+        var unknown=new GroundItem(200,200,2,"Gold",new(0,0),0);
+        tracker.ObserveDrops([unknown],8);
+        snap=tracker.Snapshot();
+        if(GoldAmountFor(unknown)!=0 || GoldAmountFor(unknown with {TypeId=int.MinValue})!=0 ||
+            snap.TrackedLoot.Single(item=>item.Name=="Gold").Count!=535 || snap.RecentDrops[0].Name!="Gold (amount unavailable)")
+            throw new Exception("An unavailable gold amount must not be recorded as one gold.");
+        var large=new GroundItem(300,300,-1,"Gold",new(0,0),0);
+        tracker.ObserveDrops([large,large with {KeyA=301}],8);
+        snap=tracker.Snapshot();
+        if(snap.TrackedLoot.Single(item=>item.Name=="Gold").Count!=4294967829L ||
+            snap.Sources.Single(row=>row.Source=="Mimic").Items.Single().Count!=4294967829L)
+            throw new Exception("Gold session and source totals overflowed the 32-bit pile count.");
     }
 }

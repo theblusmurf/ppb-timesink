@@ -29,7 +29,20 @@ public readonly record struct Health(int Current, uint Maximum)
     public bool Known => Maximum > 0;
     public bool Dead => Known && Current <= 0;
 }
-public record GroundItem(uint KeyA, uint KeyB, int TypeId, string Name, Vec Position, double Height, string Description = "", uint Quantity = 0);
+public record GroundItem(uint KeyA, uint KeyB, int TypeId, string Name, Vec Position, double Height, string Description = "")
+{
+    public long EncodedGoldAmount => TypeId < 0 ? unchecked((uint)TypeId) & 0x7fffffffu : 0;
+
+    internal static GroundItem FromRecord(ReadOnlySpan<byte> record, string name, string description = "")
+    {
+        // The high bit of +0x08 marks currency; the remaining bits carry its
+        // amount. +0x0c is not initialized by the client's ground-item constructor.
+        return new GroundItem(BitConverter.ToUInt32(record), BitConverter.ToUInt32(record[4..]),
+            BitConverter.ToInt32(record[8..]), name,
+            new Vec(BitConverter.ToSingle(record[0x1c..]) / 100.0, BitConverter.ToSingle(record[0x24..]) / 100.0),
+            BitConverter.ToSingle(record[0x20..]) / 100.0, description);
+    }
+}
 public sealed partial class World : IDisposable
 {
     BuildProfile profile = BuildProfile.Original;
@@ -445,15 +458,10 @@ public sealed partial class World : IDisposable
                 try
                 {
                     var b = Native.Read(handle!, (nint)record, 0x28);
-                    uint a = BitConverter.ToUInt32(b, 0), keyB = BitConverter.ToUInt32(b, 4);
                     int type = BitConverter.ToInt32(b, 8);
-                    // Ground records carry the pile quantity immediately after
-                    // the type id. The following fields include internal
-                    // pointers, so they must never be interpreted as currency.
-                    uint quantity = BitConverter.ToUInt32(b, 0x0c);
-                    var pos = new Vec(BitConverter.ToSingle(b, 0x1c) / 100.0, BitConverter.ToSingle(b, 0x24) / 100.0);
-                    double y = BitConverter.ToSingle(b, 0x20) / 100.0;
-                    if (pos.Finite && Math.Abs(pos.X) <= 10000 && Math.Abs(pos.Y) <= 10000 && double.IsFinite(y)) { var details = DescribeItem(type); result.Add(new GroundItem(a, keyB, type, details.Name, pos, y, details.Description, quantity)); }
+                    var details = DescribeItem(type);
+                    var item = GroundItem.FromRecord(b, details.Name, details.Description);
+                    if (item.Position.Finite && Math.Abs(item.Position.X) <= 10000 && Math.Abs(item.Position.Y) <= 10000 && double.IsFinite(item.Height)) result.Add(item);
                 }
                 catch (System.ComponentModel.Win32Exception) { }
             }
@@ -464,10 +472,7 @@ public sealed partial class World : IDisposable
     string ItemName(int type)
     {
         if (itemNames.TryGetValue(type, out var known)) return known;
-        // The negative type is an internal kind/code, not a currency amount.
-        // Keep the generated label neutral so it cannot be mistaken for the
-        // quantity encoded in the ground record.
-        string fallback = type < 0 ? "Special drop" : $"Item type {type}";
+        string fallback = type < 0 ? "Gold" : $"Item type {type}";
         if (type is < 0 or > 65535) return fallback;
         long table = moduleBase + profile.ItemDefinitions;
         uint count = Pointer(table), records = Pointer(table + 4);

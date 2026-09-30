@@ -92,11 +92,19 @@ public sealed class LootTrackerLog
         try
         {
             var tracker = new LootTracker();
+            tracker.ObserveDrops([], 8);
+            tracker.RecordKill(new Entity(10, 0x80001753, "Mimic", new(0, 0), 0), new(0, 0), 8);
+            tracker.ObserveDrops([
+                new GroundItem(1, 1, -2147483551, "Gold", new(0, 0), 0),
+                new GroundItem(2, 2, -2147483529, "Gold", new(0, 0), 0)], 8);
             var log = new LootTrackerLog(path);
             if (!log.TrySave(tracker.Snapshot(), "Reset") || !File.Exists(path)) throw new Exception("Event log was not written.");
             string[] lines = File.ReadAllLines(path);
             if (lines.Length != 2 || !lines[0].Contains("TimestampLocal", StringComparison.Ordinal) || !lines[1].Contains("\"Reset\"", StringComparison.Ordinal))
                 throw new Exception("Event log header or reason was invalid.");
+            int goldColumn = Array.IndexOf(lines[0].Split(','), "GoldTotal");
+            if (goldColumn < 0 || lines[1].Split(',')[goldColumn] != "\"216\"")
+                throw new Exception("The event log recorded pile counts instead of the gold amount.");
             if (!log.TrySave(tracker.Snapshot(), "Death") || File.ReadAllLines(path).Length != 3)
                 throw new Exception("Event log did not append a second event.");
         }

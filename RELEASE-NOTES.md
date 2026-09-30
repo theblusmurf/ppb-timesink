@@ -1,5 +1,22 @@
 # Release notes
 
+## Release1.50
+
+- Fixed the Release1.48 gold regression that recorded **one gold per pile**.
+  Gold now uses the amount encoded in the ground item's signed type value;
+  the uninitialized field at `+0x0c` is no longer read as a quantity.
+- Corrected source summaries to report gold amounts, matching session totals,
+  gold per hour, recent drops, and death/reset CSV logs. Drop counts still count
+  the number of piles/items.
+- Unavailable amounts are labeled explicitly and do not add invented gold.
+- Added regression checks using recorded client values: five piles worth
+  97, 119, 121, 116, and 82 contribute **535 gold**, once. Coverage includes
+  stale field values, repeated observations, large totals, rates, and CSV output.
+- These remain detected ground-drop totals. They do not confirm wallet credit
+  or recover totals already recorded by an older running application.
+- Validation: .NET 10 Release build passed with no warnings or errors; all
+  offline self-tests passed. Live wallet reconciliation has not been performed.
+
 ## Release1.49
 
 - Added a persisted **Show routes on radar** option to the Navigation controls.
@@ -15,6 +32,7 @@
 
 ## Release1.48
 
+- The quantity-field change below was incorrect and is superseded by Release1.50.
 - Corrected gold pile accounting to use the ground record's quantity field.
   Negative item IDs are now used only to classify a currency pile; their lower
   bits are no longer reported as a payout amount.
