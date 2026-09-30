@@ -82,6 +82,7 @@ public sealed class Options
     public bool UseAlternativeHuntRoutes { get; set; } = true;
     public bool AutoReviveAfterDeath { get; set; } = true;
     public bool AutoRepairAfterDeath { get; set; }
+    public bool VisualRevivalDetection { get; set; } = true;
     public int RevivalDelaySeconds { get; set; }
     public bool FarmOnArrival { get; set; } = true;
     // The death screen is client/UI specific. Keep the key configurable instead

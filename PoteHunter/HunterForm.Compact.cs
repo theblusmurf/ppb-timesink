@@ -166,17 +166,20 @@ public sealed partial class HunterForm
             finally {working=false;cancel=null;activeGuardOptions=previousGuard;deathRecovery.Reset();}
         }
         compactMode.SelectedIndex=0;
-        if(!autoRevive.Visible || !autoRepair.Visible || !revivalDelaySeconds.Visible || !reviveKey.Visible || !farmOnArrival.Visible)
+        if(!autoRevive.Visible || !autoRepair.Visible || !visualRevival.Visible || !revivalDelaySeconds.Visible || !reviveKey.Visible || !farmOnArrival.Visible)
             throw new Exception("Death recovery controls are missing from compact Setup.");
-        autoRevive.Checked=false;autoRepair.Checked=true;revivalDelaySeconds.Value=37;reviveKey.Text="Enter";farmOnArrival.Checked=false;
+        autoRevive.Checked=false;autoRepair.Checked=true;visualRevival.Checked=true;revivalDelaySeconds.Value=37;reviveKey.Text="Enter";farmOnArrival.Checked=false;
         SaveCompactSettings();var recoverySettings=Options.Read();
         if(recoverySettings.AutoReviveAfterDeath || !recoverySettings.AutoRepairAfterDeath || recoverySettings.RevivalDelaySeconds!=37 || recoverySettings.ReviveKey!="Enter" || recoverySettings.FarmOnArrival ||
-            revivalDelaySeconds.Enabled || reviveKey.Enabled || farmOnArrival.Enabled || !configureRepair.Visible || !testRepair.Visible)
+            !recoverySettings.VisualRevivalDetection || visualRevival.Enabled || revivalDelaySeconds.Enabled || reviveKey.Enabled || farmOnArrival.Enabled || !configureRepair.Visible || !testRepair.Visible)
             throw new Exception("Death recovery controls did not persist.");
         autoRevive.Checked=true;autoRepair.Checked=false;revivalDelaySeconds.Value=0;reviveKey.Text="R";farmOnArrival.Checked=true;SaveCompactSettings();
         if(Options.Read().AutoRepairAfterDeath || !Options.Read().AutoReviveAfterDeath || configureRepair.Visible || testRepair.Visible ||
-            !revivalDelaySeconds.Enabled || !reviveKey.Enabled || !farmOnArrival.Enabled)
+            !revivalDelaySeconds.Enabled || reviveKey.Enabled || !visualRevival.Enabled || !farmOnArrival.Enabled)
             throw new Exception("Repair and revival toggles were not independent or did not update their controls.");
+        visualRevival.Checked=false;SaveCompactSettings();
+        if(Options.Read().VisualRevivalDetection || !reviveKey.Enabled)throw new Exception("Revival key fallback did not persist.");
+        visualRevival.Checked=true;SaveCompactSettings();
         for(int index=0;index<4;index++)
         {
             compactMode.SelectedIndex=index;SaveCompactSettings();var saved=Options.Read();

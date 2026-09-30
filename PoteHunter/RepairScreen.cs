@@ -5,13 +5,13 @@ internal static class RepairScreen
     public static Rectangle Bounds(World world)
     {
         if(!NavigationOverlay.TryGetClientScreenBounds(world.Window,out var bounds) || !SystemInformation.VirtualScreen.Contains(bounds))
-            throw new InvalidOperationException("Keep the complete game window visible for repair.");
+            throw new InvalidOperationException("Keep the complete game window visible for visual recovery.");
         return bounds;
     }
     public static Bitmap Capture(World world)
     {
         if(!Input.Allowed() || !world.CheckInputWindow().Allowed)
-            throw new OperationCanceledException("Repair needs the game in the foreground.");
+            throw new OperationCanceledException("Visual recovery needs the game in the foreground.");
         var bounds=Bounds(world);
         var frame=new Bitmap(bounds.Width,bounds.Height);
         try
@@ -23,29 +23,38 @@ internal static class RepairScreen
                 var pixel=frame.GetPixel(x,y);int light=(pixel.R+pixel.G+pixel.B)/3;
                 if(light>15)nonBlack++;levels.Add(light/8);
             }
-            if(nonBlack<30 || levels.Count<5)throw new InvalidOperationException("The game image is unavailable. Use a visible windowed/borderless game for repair setup.");
+            if(nonBlack<30 || levels.Count<5)throw new InvalidOperationException("The game image is unavailable. Use a visible windowed/borderless game for visual recovery.");
             return frame;
         }
         catch {frame.Dispose();throw;}
     }
 }
 
-internal sealed class LiveRepairSurface(World world,RepairProfile profile,Action validate,CancellationToken runToken) : IRepairSurface
+internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Action validate,CancellationToken runToken) : IRepairSurface
 {
     readonly HashSet<RepairAction> attempted=new();
-    public RepairObservation Observe()
+    sealed record View(RepairObservation State,Point? Hammer,Point? Confirm,VisualControl? HammerVisual,VisualControl? ConfirmVisual);
+    async Task<View> Read(CancellationToken token)
     {
-        runToken.ThrowIfCancellationRequested();validate();
+        runToken.ThrowIfCancellationRequested();token.ThrowIfCancellationRequested();validate();
         using var image=RepairScreen.Capture(world);
-        if(image.Width!=profile.Width || image.Height!=profile.Height)
-            throw new InvalidOperationException("The game window size changed during repair. Configure repair again.");
-        return new(profile.Inventory.Matches(image),profile.Hammer.Matches(image),profile.Prompt.Matches(image),profile.Confirm.Matches(image));
+        var view=await Task.Run(()=>
+        {
+            var visual=RecoveryVision.Repair(image,token);
+            bool manual=profile!=null && image.Width==profile.Width && image.Height==profile.Height;
+            bool inventory=manual && profile!.Inventory.Matches(image),hammer=inventory && profile!.Hammer.Matches(image);
+            bool prompt=manual && profile!.Prompt.Matches(image),confirm=prompt && profile!.Confirm.Matches(image);
+            return new View(new(visual.Hammer!=null||inventory,visual.Hammer!=null||hammer,visual.Confirm!=null||prompt,visual.Confirm!=null||confirm),
+                visual.Hammer?.Point ?? (hammer?profile!.Hammer.Center:null),visual.Confirm?.Point ?? (confirm?profile!.Confirm.Center:null),visual.Hammer,visual.Confirm);
+        },token);
+        runToken.ThrowIfCancellationRequested();validate();return view;
     }
+    public async Task<RepairObservation> Observe(CancellationToken token)=>(await Read(token)).State;
     public async Task Perform(RepairAction action,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if(!attempted.Add(action))throw new InvalidOperationException("Repair input was already attempted; refusing a duplicate.");
-        var state=Observe();
+        var view=await Read(token);var state=view.State;
         if(action is RepairAction.OpenInventory or RepairAction.CloseInventory)
         {
             if(state.Prompt || state.Inventory!=(action==RepairAction.CloseInventory))
@@ -56,16 +65,23 @@ internal sealed class LiveRepairSurface(World world,RepairProfile profile,Action
         if(confirm ? !state.Prompt||!state.Confirm : !state.Inventory||!state.Hammer||state.Prompt)
             throw new InvalidOperationException("The expected repair control changed before clicking.");
         Rectangle bounds=RepairScreen.Bounds(world);
-        Point local=confirm?profile.Confirm.Center:profile.Hammer.Center;
+        Point local=(confirm?view.Confirm:view.Hammer) ?? throw new InvalidOperationException("Repair button position is unavailable.");
         var screen=new Point(bounds.X+local.X,bounds.Y+local.Y);
         Input.MovePointer(screen,token);
         await Input.Delay(80,token);
         // Hover may change the button appearance. Recheck the independent
         // dialog/inventory marker immediately before clicking its button.
-        state=Observe();
+        bool marker;
+        using(var image=RepairScreen.Capture(world))
+        {
+            var visual=confirm?view.ConfirmVisual:view.HammerVisual;
+            marker=await Task.Run(()=>visual!=null ? RecoveryVision.RepairMarker(image,visual,confirm,token) :
+                profile!=null && (confirm?profile.Prompt.Matches(image):profile.Inventory.Matches(image)&&!profile.Prompt.Matches(image)),token);
+        }
+        validate();token.ThrowIfCancellationRequested();
         var cursor=Input.Cursor();
         if(RepairScreen.Bounds(world)!=bounds || Math.Abs(cursor.X-screen.X)>2 || Math.Abs(cursor.Y-screen.Y)>2 ||
-            (confirm?!state.Prompt:!state.Inventory||state.Prompt))
+            !marker)
             throw new InvalidOperationException("Repair focus, dialog, or pointer position changed. No click was sent.");
         await Input.Click(false,token);
         TraceLog.Record("repair control clicked",new{Control=action.ToString()});

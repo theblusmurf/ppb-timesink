@@ -109,13 +109,24 @@ jobs:
             $changeLines = @(git log --pretty=format:'- `%h` %s' -n 30 HEAD)
           }
           if ($changeLines.Count -eq 0) { $changeLines = @('- Packaging and validation updates.') }
-          $subject = (git log -1 --pretty=format:'%s' HEAD).Trim()
-          if ([string]::IsNullOrWhiteSpace($subject)) { $subject = 'Maintenance update' }
+          $versionNotes = @()
+          $capturingNotes = $false
+          foreach ($line in (Get-Content -LiteralPath 'RELEASE-NOTES.md')) {
+            if ($line.StartsWith('## ')) {
+              if ($capturingNotes) { break }
+              $capturingNotes = $line -eq "## $env:RELEASE_TAG"
+              continue
+            }
+            if ($capturingNotes) { $versionNotes += $line }
+          }
           $releaseTitle = $env:RELEASE_TAG
           @(
             "$releaseTitle for Windows x64."
             ''
             '## Patch notes'
+            $versionNotes
+            ''
+            '## Source changes'
             "Changes since $($previousTag ?? 'the initial release'):"
             $changeLines
             ''

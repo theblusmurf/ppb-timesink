@@ -11,15 +11,15 @@ internal static class AutoRepairChecks
         public bool NoInventory,NoHammer,UnknownPrompt,NoConfirm,StuckPrompt,StuckInventory;
         public Exception? AfterHammer;
         public Action? OnDelay;
-        public RepairObservation Observe()
+        public Task<RepairObservation> Observe(CancellationToken token)
         {
             if(stage==2 && AfterHammer!=null)throw AfterHammer;
-            return stage switch
+            return Task.FromResult<RepairObservation>(stage switch
             {
                 1 or 3=>new(true,!NoHammer,false,false),
                 2=>new(true,false,!UnknownPrompt,!NoConfirm),
                 _=>default
-            };
+            });
         }
         public Task Perform(RepairAction action,CancellationToken token)
         {

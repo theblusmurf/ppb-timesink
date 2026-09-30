@@ -14,6 +14,7 @@
   <ItemGroup><Compile Include="../PoteMemoryProbe/ClientCompatibility.cs" Link="ClientCompatibility.cs" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="BuildSignatures.json" LogicalName="PoteHunter.BuildSignatures.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="DefaultSettings.json" LogicalName="PoteHunter.DefaultSettings.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="Repair*.png;ReviveButton.png" LogicalName="PoteHunter.%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup><None Include="maps\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <PropertyGroup Condition="'$(Portable)' == 'true'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -25,4 +26,3 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 </Project>
-

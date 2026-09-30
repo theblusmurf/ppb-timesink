@@ -27,7 +27,7 @@ internal static class RecoveryRouting
 {
     public static string? SavedReturnProblem(SavedNavigationRoute? route,int zone,string character,double height,Vec anchor)
     {
-        if(route is not {HasRecordedRoute:true})return "Record a return route with Home / End in Navigation, or turn off Auto revive + return.";
+        if(route==null || !RecoveryTravel.Recorded(route))return "Record a return route with Home / End in Navigation, or turn off Auto revive + return.";
         if(!Compatible(route,zone,character,height) || (route.Anchor-anchor).Length>2.5)
             return "The recorded route does not match this character, map, or anchor. Select the saved spot before starting.";
         return null;
@@ -46,18 +46,6 @@ internal static class RecoveryRouting
         CombatCourtesy.PlayerNear(anchor,entities.Where(e=>height<=0 || e.Height<=0 || Math.Abs(e.Height-height)<2),
             selfId,Math.Max(3,radius))!=null;
 
-    public static int FreeAlternative(IReadOnlyList<SavedNavigationRoute?> routes,int zone,string character,
-        double huntHeight,Vec occupiedAnchor,IReadOnlySet<int> rejected,IEnumerable<Entity> entities,uint selfId,double defaultRadius,bool requireRecorded=false)
-    {
-        for(int slot=1;slot<routes.Count;slot++)
-        {
-            var route=routes[slot];
-            if(rejected.Contains(slot) || route==null || requireRecorded&&!route.HasRecordedRoute || !Compatible(route,zone,character,huntHeight) ||
-                (route.Anchor-occupiedAnchor).Length<=.5)continue;
-            if(!Occupied(route.Anchor,route.Height,route.HuntRadius>0?route.HuntRadius:defaultRadius,entities,selfId))return slot;
-        }
-        return -1;
-    }
 }
 
 internal sealed class RecoveryPath

@@ -3,26 +3,31 @@ namespace PoteHunter;
 public sealed partial class HunterForm
 {
     readonly CheckBox autoRepair=new(){Text="Auto repair after revival",AutoSize=true};
-    readonly Button configureRepair=new(){Text="Configure repair",AutoSize=true};
+    readonly CheckBox visualRevival=new(){Text="Recognize Revive button",AutoSize=true,Checked=true};
+    readonly Button configureRepair=new(){Text="Custom repair setup",AutoSize=true};
     readonly Button testRepair=new(){Text="Test repair · 5s",AutoSize=true};
     readonly Label repairStatus=new(){AutoSize=true,MaximumSize=new Size(540,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,6)};
     bool repairInProgress;
 
     void AddRepairSettings(TableLayoutPanel card)
     {
+        CompactAdd(card,CompactRow("Revive method",visualRevival));
         CompactAdd(card,CompactRow("Repair",autoRepair));
         var actions=CompactFlow(configureRepair,testRepair);CompactAdd(card,actions);CompactAdd(card,repairStatus);
-        priorityHint.SetToolTip(autoRepair,"Run the configured inventory-hammer repair once after automatic revival, before following the saved return route. Off by default. Requires the game's repair capability and any repair cost.");
-        priorityHint.SetToolTip(configureRepair,"Capture the inventory and repair confirmation, then identify their static text and buttons. Game input is not sent during setup.");
+        priorityHint.SetToolTip(autoRepair,"Recognize the inventory hammer and repair confirmation, repair once after revival, then follow the saved return route. Off by default. Requires the game's repair capability and cost.");
+        priorityHint.SetToolTip(configureRepair,"Optional fallback for another inventory layout. Automatic recognition normally uses the included Domitus templates. Custom setup sends no game input.");
         priorityHint.SetToolTip(testRepair,"With hunting stopped, wait 5 seconds, switch to the game, and run the configured repair sequence once. This confirms the game's repair cost.");
         void Refresh()
         {
             actions.Visible=repairStatus.Visible=autoRepair.Checked;
-            revivalDelaySeconds.Enabled=reviveKey.Enabled=farmOnArrival.Enabled=autoRevive.Checked;
+            revivalDelaySeconds.Enabled=farmOnArrival.Enabled=visualRevival.Enabled=autoRevive.Checked;
+            reviveKey.Enabled=autoRevive.Checked&&!visualRevival.Checked;
             repairStatus.Text=!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
-                :File.Exists(RepairProfile.PathName)?"Repair setup saved. Test it after changing the game layout.":"One-time setup required. Configure repair, then test it with the game in front.";
+                :"Automatic recognition enabled. Test repair first; custom setup is optional.";
         }
         autoRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};autoRevive.CheckedChanged+=(_,_)=>Refresh();
+        visualRevival.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
+        priorityHint.SetToolTip(visualRevival,"Recognize the Revive button before clicking and wait for living HP. Turn off to use the configured revival key instead.");
         configureRepair.Click+=async(_,_)=>await RunRepairTool(true);
         testRepair.Click+=async(_,_)=>await RunRepairTool(false);
         Refresh();
@@ -96,7 +101,13 @@ public sealed partial class HunterForm
     async Task RunRepairAsync(CancellationToken token)
     {
         var self=world.LocalPlayer();int zone=world.ActiveZone();
-        var profile=RepairProfile.Load(world.ClientHash,RepairScreen.Bounds(world).Size);
+        RepairProfile? profile=null;
+        if(File.Exists(RepairProfile.PathName))
+        {
+            try{profile=RepairProfile.Load(world.ClientHash,RepairScreen.Bounds(world).Size);}
+            catch(Exception ex) when(ex is InvalidOperationException or IOException)
+            {TraceLog.Record("custom repair profile skipped",new{Reason=ex.Message,Using="Automatic recognition"});}
+        }
         var previousPreflight=Input.Preflight;
         void Validate()
         {

@@ -83,7 +83,7 @@ internal enum RepairAction { OpenInventory, Hammer, Confirm, CloseInventory }
 
 internal interface IRepairSurface
 {
-    RepairObservation Observe();
+    Task<RepairObservation> Observe(CancellationToken token);
     Task Perform(RepairAction action,CancellationToken token);
     Task Delay(CancellationToken token);
 }
@@ -94,23 +94,30 @@ internal static class AutoRepair
     {
         async Task WaitFor(Func<RepairObservation,bool> test,string failure)
         {
-            for(int attempt=0;attempt<25;attempt++)
+            using var phase=CancellationTokenSource.CreateLinkedTokenSource(token);
+            phase.CancelAfter(TimeSpan.FromSeconds(12));
+            try
             {
-                token.ThrowIfCancellationRequested();
-                if(test(surface.Observe()))return;
-                await surface.Delay(token);
+                for(int attempt=0;attempt<25;attempt++)
+                {
+                    phase.Token.ThrowIfCancellationRequested();
+                    if(test(await surface.Observe(phase.Token)))return;
+                    await surface.Delay(phase.Token);
+                }
             }
+            catch(OperationCanceledException) when(!token.IsCancellationRequested && phase.IsCancellationRequested)
+            {throw new InvalidOperationException(failure);}
             throw new InvalidOperationException(failure);
         }
         token.ThrowIfCancellationRequested();
-        var first=surface.Observe();
+        var first=await surface.Observe(token);
         if(first.Prompt)throw new InvalidOperationException("A repair dialog was already open. Close it before starting repair.");
         if(!first.Inventory)
         {
             await surface.Perform(RepairAction.OpenInventory,token);
             await WaitFor(s=>s.Inventory&&!s.Prompt,"Inventory was not recognized. Repair stopped; check its layout and setup.");
         }
-        await WaitFor(s=>s.Inventory&&s.Hammer&&!s.Prompt,"The configured repair hammer was not recognized.");
+        await WaitFor(s=>s.Inventory&&s.Hammer&&!s.Prompt,"The repair hammer and inventory were not recognized.");
         await surface.Perform(RepairAction.Hammer,token);
         await WaitFor(s=>s.Prompt&&s.Confirm,"The repair confirmation was not recognized. No confirmation was clicked.");
         // Each click is attempted once. A timeout never repeats a confirmation.

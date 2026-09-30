@@ -87,6 +87,8 @@ static class SelfTests
             Navigation.SelfTest();
             DeathRecoveryChecks.Run();
             AutoRepairChecks.Run().GetAwaiter().GetResult();
+            VisualRecoveryChecks.Run().GetAwaiter().GetResult();
+            RecoveryTravelChecks.Run().GetAwaiter().GetResult();
             Input.CheckRepairPointer();
             Input.CheckReviveInput().GetAwaiter().GetResult();
             ChestCatalog.SelfTest();

@@ -1,5 +1,37 @@
 # Release notes
 
+## Release1.54
+
+- Added automatic repair recognition using the inventory hammer and matching
+  inventory/repair-dialog text from the supplied Domitus source. It recognizes
+  moved windows and supported UI scales. **Custom repair setup** remains an
+  optional fallback; **Test repair · 5s** runs one real repair. Auto repair is
+  still off by default and does not independently verify equipment durability.
+- Added **Recognize Revive button** under Setup → Death recovery, enabled by
+  default. It requires known dead HP, recognizes the on-screen button, clicks
+  confirmation once, and waits for living HP. It permits at most three spaced
+  popup-opening clicks. Turn it off to retain the configured revival key.
+- Fixed occupied-spot fallback to reverse the current recorded path to the
+  shared revival point and then follow the destination route. Primary and both
+  alternatives participate. Record all routes from the same origin (within
+  3 map units); incompatible or spot-only routes are excluded.
+- When every compatible spot is occupied, return to that shared origin, wait
+  ten active minutes, and retry the route cycle. Death during travel/waiting
+  preserves pending recovery. Occupancy uses loaded recognized players only.
+- Return follows actual waypoints, keeps movement held between consecutive
+  waypoints when steering allows, reaches the activation anchor, and restores
+  facing before resuming farming. Blocked routes stop with a reason. An engaged
+  enemy that leaves the allowed area now triggers anchor return and waiting.
+- Recognition runs off the UI thread. Rechecks before clicks, cancellation,
+  focus/death guards, and bounded waits prevent stale or repeated confirmation.
+  Live status identifies revival, repair, return, and occupied-spot waiting.
+- Removed the superseded alternative-selection helper. Existing combat skill
+  gates, stationary target rules, and swing ranges remain in place.
+- Preserve `settings.json`, `navigation-routes.json`, and any custom
+  `repair-profile.json` when upgrading. Offline template, recovery, input, and
+  UI checks passed; live repair/revival and route travel still need verification
+  in the user's client.
+
 ## Release1.53
 
 - Added **Auto repair after revival** in Setup → Death recovery, off by default.

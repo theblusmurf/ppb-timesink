@@ -45,10 +45,13 @@ internal static class DeathRecoveryChecks
             RecoveryRouting.SavedReturnProblem(primary,5,"Farmer",20,anchor)==null ||
             RecoveryRouting.SavedReturnProblem(primary,5,"Farmer",10,new(40,0))==null)
             throw new Exception("Combined revival/return accepted a missing or incompatible recorded route.");
-        if(RecoveryRouting.FreeAlternative([primary,alt1 with{Points=[alt1.Anchor]},alt2],5,"Farmer",10,anchor,new HashSet<int>(),[],1,5,true)!=2)
-            throw new Exception("Automatic revival selected a spot-only alternative without a return route.");
-        var rejected=new HashSet<int>();
-        int Choose(IEnumerable<Entity> entities)=>RecoveryRouting.FreeAlternative(routes,5,"Farmer",10,anchor,rejected,entities,1,5);
+        var fallback=new RecoveryFallbackCycle(0);fallback.Reject(0);
+        int Choose(IEnumerable<Entity> entities)=>fallback.Select(routes.Length,
+            slot=>routes[slot] is {} route && RecoveryTravel.Recorded(route) && RecoveryRouting.Compatible(route,5,"Farmer",10),
+            slot=>RecoveryRouting.Occupied(routes[slot]!.Anchor,10,5,entities,1));
+        routes[1]=alt1 with{Points=[alt1.Anchor]};
+        if(Choose([])!=2)throw new Exception("Automatic revival selected a spot-only alternative without a return route.");
+        routes[1]=alt1;
         if(!RecoveryRouting.Occupied(anchor,10,5,[self,other],1) ||
             RecoveryRouting.Occupied(anchor,10,5,[self with{Position=anchor},npc,other with{Height=20}],1) || Choose([other])!=1)
             throw new Exception("Occupied primary did not select the first free alternative on the farming floor.");
@@ -56,11 +59,11 @@ internal static class DeathRecoveryChecks
             throw new Exception("Occupied alternative one did not fall back to alternative two.");
         if(Choose([other with{Position=alt1.Anchor},other with{Id=3,Position=alt2.Anchor}])!=-1)
             throw new Exception("Recovery selected an occupied destination.");
-        rejected.Add(1);
+        fallback.Reject(1);
         if(Choose([])!=2)throw new Exception("An occupied unloaded route was selected again during the same return.");
-        rejected.Add(2);
+        fallback.Reject(2);
         if(Choose([])!=-1)throw new Exception("Recovery oscillated between rejected destinations.");
-        rejected.Clear();routes[1]=alt1 with{Zone=6};routes[2]=alt2 with{Character="Other"};
+        fallback.Restart();fallback.Reject(0);routes[1]=alt1 with{Zone=6};routes[2]=alt2 with{Character="Other"};
         if(Choose([])!=-1 || RecoveryRouting.Compatible(alt1 with{Height=20},5,"Farmer",10))
             throw new Exception("Recovery accepted a different zone, character, or farming floor.");
 

@@ -86,7 +86,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(new Label { Text = "m", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         navControls.Controls.Add(fitNavigationRadius);
         navControls.Controls.Add(useAlternativeHuntRoutes);
-        priorityHint.SetToolTip(useAlternativeHuntRoutes,"Check the destination at startup, after revival, and during the return. Use the first free compatible Alternative 1 or 2; stop if none is available.");
+        priorityHint.SetToolTip(useAlternativeHuntRoutes,"Check occupancy at startup, after revival, and during return. Record all three routes from the same revival point. Switch along saved paths; when every compatible spot is occupied, wait at the route start for 10 minutes and retry. Only loaded players can be detected.");
         navControls.Controls.Add(new Label { Text = "Save slot:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
         navControls.Controls.Add(savedNavigationSlot);
         navControls.Controls.Add(startNavigationRecording);

@@ -1,8 +1,8 @@
 # Domitus farming guide mapping
 
-The supplied guide was reviewed as a behavior reference. This note records
-which parts are implemented in the current source and which parts need a
-client-specific recognition layer before they can be automated safely.
+The supplied guide and Domitus-Complete-Program-and-Source-20260930-020248Z
+source were reviewed as behavior references. This note records what was
+adapted into PoteHunter and the remaining verification limits.
 
 ## Implemented
 
@@ -19,28 +19,41 @@ client-specific recognition layer before they can be automated safely.
   units, then returns to the saved anchor and restores its saved facing.
 - Occupancy fallback is checked at activation, after revival, and while approaching the anchor. Alternative routes are filtered
   by zone, character, floor/height, and their own farming radius before a free
-  route is selected.
-- Auto-revive still requires live HP confirmation and makes at most three
-  spaced attempts. The configured revival delay is applied after death is
-  confirmed and before the first key press.
+  route is selected. Primary and both alternatives participate in the cycle.
+  Switching follows the current path back to the shared origin (within 3 units)
+  then the destination's path. All occupied: return to the origin, wait ten
+  active minutes, and retry. A second death preserves this pending cycle.
+- Visual revival requires known dead HP and recognizes the centered Revive
+  button using the supplied template. It permits at most three popup-opening
+  clicks after the death delay, then one recognized confirmation. Positive HP
+  is required before repair or return. Turning off Recognize Revive button
+  retains the configured key method.
 - Existing anti-kill-steal, target safety, and movement-boundary checks remain
   in the active hunt loop.
 - A single **Auto revive + return along saved route** toggle controls recovery.
   Enabled recovery requires a recorded compatible return route; a spot-only
   save is not treated as a recorded path. Disabling it stops hunting on death.
 - Optional **Auto repair after revival** uses the inventory hammer and Yes
-  confirmation, then closes inventory before return. One-time visual setup
-  identifies static inventory/dialog text and controls. The configuration is
-  local and bound to the game build and window size; the test button performs
-  the sequence once. Recognition failure or interruption stops the hunt.
+  confirmation, then closes inventory before return. Paired button/text
+  recognition uses four embedded Domitus templates and supports moved windows
+  and common scales. Custom repair setup remains an optional local fallback
+  bound to the game build/window size; the test button performs the sequence
+  once. Recognition failure or interruption stops the hunt.
   Confirmation is attempted at most once per recovery cycle. This feature
   requires the game's repair capability/cost and does not verify durability.
+- Cancellable image searches run on a worker; the input thread rechecks
+  focus, character, HP, dialog markers, and pointer position before clicking.
+- Enemies leaving the allowed area cause anchor return and waiting, retaining
+  Gamekeeper completion boundaries and the existing stationary combat rules.
 
 ## Not automated from the guide
 
 Automatic durability thresholds, repair inventory/price APIs, and verification
 of the resulting durability are not exposed by the current memory client.
-`/kill` group switching and the guide's named-group wait policy also require a
-server/chat integration that is not available. These remain manual. The new
-repair recognizer and recovery checks are validated offline; actual repair
-success and the full return must be checked in the user's game after setup.
+`/kill` group switching and the source's six named farming groups are not
+imported. The occupied-spot wait policy is adapted to the three existing local
+route slots. Recognition uses synthetic composites of the supplied templates;
+revival, repair, route, cooldown, input, and UI checks run offline without game
+input. Actual durability, visual detection in the user's client, and complete
+return travel still need live verification. Existing five-target/80%-HP skill
+gates, skill spacing, and swing ranges are retained.
