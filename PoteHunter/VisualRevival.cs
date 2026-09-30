@@ -13,14 +13,16 @@ internal interface IRevivalSurface
 
 internal static class VisualRevival
 {
-    internal const int DeathWaitMilliseconds=3000;
-    const int OpeningGapMilliseconds=250,OpeningClicks=3;
+    internal const int DeathWaitMilliseconds=2000;
+    const int OpeningGapMilliseconds=1000,OpeningClicks=3;
+    internal static Point OpeningPoint(Size size)=>new(size.Width/2,size.Height/2);
 
     public static async Task Run(IRevivalSurface surface,long deathAt,CancellationToken token)
     {
         long readyAt=Math.Max(surface.Now,deathAt+DeathWaitMilliseconds);
         long deadline=readyAt+15000,nextOpen=readyAt;
         int openings=0;
+        bool dialogRecognized=false;
         while(surface.Now<deadline)
         {
             token.ThrowIfCancellationRequested();
@@ -38,6 +40,7 @@ internal static class VisualRevival
             if(!hp.Known){await surface.Delay(100,token);continue;}
             if(button!=null)
             {
+                dialogRecognized=true;
                 // Exactly one recognized confirmation per death. Unreadable
                 // HP afterward waits for confirmation rather than clicking again.
                 if(!await surface.Confirm(button,token))
@@ -45,21 +48,23 @@ internal static class VisualRevival
                     await surface.Delay(100,token);continue;
                 }
                 long aliveBy=surface.Now+15000;
-                while(surface.Now<aliveBy)
+                while(true)
                 {
                     token.ThrowIfCancellationRequested();hp=surface.Health();
                     if(hp.Known && !hp.Dead)return;
-                    await surface.Delay(100,token);
+                    if(surface.Now>=aliveBy)break;
+                    await surface.Delay((int)Math.Min(200,aliveBy-surface.Now),token);
                 }
                 throw new InvalidOperationException("Revive was clicked once, but living HP was not confirmed. Recovery stopped.");
             }
+            if(dialogRecognized)throw new InvalidOperationException("Recognized Revive dialog disappeared before confirmation. Recovery stopped without further opening clicks.");
             if(surface.Now>=nextOpen)
             {
                 if(openings==OpeningClicks)throw new InvalidOperationException("Revive button was not recognized after three opening clicks. Revive manually or check Custom revival setup.");
                 if(await surface.Open(token))openings++;
                 // Check the dialog and HP between clicks; never click through a
                 // recognized popup. Give the last opening click time to settle.
-                nextOpen=surface.Now+(openings==OpeningClicks?1000:OpeningGapMilliseconds);
+                nextOpen=surface.Now+OpeningGapMilliseconds;
             }
             await surface.Delay((int)Math.Clamp(nextOpen-surface.Now,1,100),token);
         }
@@ -103,21 +108,14 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
     {
         token.ThrowIfCancellationRequested();if(!Dead())return false;
         var bounds=RepairScreen.Bounds(world);
-        Point local=new(bounds.Width/2,bounds.Height/2);
-        if(custom!=null)
-        {
-            using var frame=RepairScreen.Capture(world);
-            if(!await Task.Run(()=>custom.CanOpen(frame,token),token))
-                return Retry("waiting for the saved death-screen opening step");
-            local=custom.Opening!.Point;
-        }
+        Point local=VisualRevival.OpeningPoint(bounds.Size);
         var click=new Point(bounds.Left+local.X,bounds.Top+local.Y);
         Input.MovePointer(click,token);await Input.Delay(80,token);
         if(!Dead())return false;
         if(RepairScreen.Bounds(world)!=bounds)return Retry("game window moved; checking its new position");
         using(var frame=RepairScreen.Capture(world))
         {
-            bool canOpen=await Task.Run(()=>custom!=null?custom.CanOpen(frame,token):RecoveryVision.Revive(frame,token)==null,token);
+            bool canOpen=await Task.Run(()=>custom!=null?custom.Find(frame,token)==null:RecoveryVision.Revive(frame,token)==null,token);
             if(!canOpen)return Retry("death screen changed; checking for the Revive button");
         }
         token.ThrowIfCancellationRequested();if(!Dead())return false;

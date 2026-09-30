@@ -38,7 +38,7 @@ internal static class RevivalSetupChecks
         public Task<VisualControl?> Find(CancellationToken token)=>Task.FromResult(profile.Find(stage==0?before:popup,token));
         public Task<bool> Open(CancellationToken token)
         {
-            Require(stage==0&&profile.CanOpen(before,token),"Custom opening action lacked its death-screen marker.");
+            Require(stage==0&&profile.Find(before,token)==null && VisualRevival.OpeningPoint(before.Size)==new Point(480,320),"Custom opening failed to use centre before recognition.");
             Actions.Add("open");OpenedAt.Add(Now);
             if(OpenedAt.Count>=openingsNeeded)stage=1;
             return Task.FromResult(true);
@@ -61,8 +61,11 @@ internal static class RevivalSetupChecks
         var surface=new Surface(profile,before,popup);await VisualRevival.Run(surface,0,default);
         Require(surface.Actions.SequenceEqual(new[]{"open","confirm"}),"Custom revival did not open, confirm once, then wait for living HP.");
         var triple=new Surface(profile,before,popup,3);await VisualRevival.Run(triple,0,default);
-        Require(triple.Actions.SequenceEqual(new[]{"open","open","open","confirm"})&&triple.OpenedAt.SequenceEqual(new[]{3000L,3250L,3500L}),
-            "Custom opening location did not support three clicks after the death wait.");
+        Require(triple.Actions.SequenceEqual(new[]{"open","open","open","confirm"})&&triple.OpenedAt.SequenceEqual(new[]{2000L,3000L,4000L}),
+            "Custom recognition did not support three centre clicks after the death wait.");
+        var dialogOnly=new Surface(profile with{Opening=null},before,popup);
+        await VisualRevival.Run(dialogOnly,0,default);
+        Require(dialogOnly.Actions.SequenceEqual(new[]{"open","confirm"}),"Dialog-only profile blocked the centre opening click.");
         using(var hovered=(Bitmap)popup.Clone())
         {
             using(var g=Graphics.FromImage(hovered))g.FillRectangle(Brushes.Gray,profile.Confirm.Button!.Bounds);

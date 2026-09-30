@@ -15,17 +15,17 @@ Death recovery (Setup, combat modes):
 - Auto revive + return along saved route: on revives and returns; off stops on death.
 - Recognize Revive button is on by default. It clicks only a recognized button,
   then waits for living HP. Turn it off to use the configured revival key.
-- Visual revival waits at least 3 seconds after death, then sends three opening
-  left-clicks with a minimum 250 ms gap. It stops opening when Revive appears
+- Visual revival waits at least 2 seconds after death, then sends up to three centre opening
+  left-clicks with a minimum 1 second gap. It stops opening when Revive appears
   or HP is alive/unreadable, and confirms Revive only once. A longer saved
-  route delay takes precedence. Custom setups use their saved opening location.
+  route delay takes precedence. Custom profiles also use the window centre.
+  After the single confirmation, HP is checked every 200 ms for up to 15 seconds.
 - A shifting cursor or changing dialog is rechecked before clicking; unsent
   clicks do not consume the three-click limit. Recovery stops if the screen
   does not settle within its timeout. Stop messages report the actual reason.
 - Custom revival setup works like repair setup. While dead, connected, and not
   hunting, capture the Revive dialog, select its static text, then its button.
-  Choose the optional first step if a left-click opens the dialog: capture the
-  death-screen text and that opening click location. Each capture allows five
+  Opening always uses the centre; setup captures only the dialog. Capture allows five
   seconds to switch to the game and move the pointer away. Setup sends no clicks.
 - Test revival gives five seconds to switch to the game, then performs one real
   revival. It requires known dead HP and reports success only after living HP.

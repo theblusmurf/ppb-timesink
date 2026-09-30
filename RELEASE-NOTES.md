@@ -1,5 +1,22 @@
 # Release notes
 
+## Release1.59
+
+- Visual revival now requires confirmed dead HP and waits at least two seconds
+  from the observed death before checking for the centred Revive dialog.
+- If no recognised popup is visible, click the game-window centre up to three
+  times, one second apart, checking recognition and health between clicks.
+  An already visible popup skips opening; recognised popups stop opening clicks.
+- Click the recognised Revive button once, then check health every 200 ms for
+  up to 15 seconds. Failed recognition or unconfirmed revival stops recovery
+  without further clicks. Stop/focus/identity guards remain in place.
+- Custom profiles still recognise their paired dialog/button, but opening now
+  always uses the centre. Setup captures the dialog only; older opening points
+  are retained in user files but ignored. Longer saved death delays still apply.
+- Offline checks cover timing, centre geometry, early recognition, unknown HP,
+  disappearing dialogs, one confirmation, 200 ms polling, and the 15-second
+  deadline. Live revival remains unverified; running applications untouched.
+
 ## Release1.58
 
 - Start / F8 now joins a compatible recorded route when the character is within

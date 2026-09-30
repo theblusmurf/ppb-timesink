@@ -13,8 +13,8 @@ public sealed partial class HunterForm
         CompactAdd(card,CompactRow("Revive method",visualRevival));
         revivalActions=CompactFlow(configureRevival,testRevival,automaticRevival);
         CompactAdd(card,revivalActions);CompactAdd(card,revivalStatus);
-        priorityHint.SetToolTip(configureRevival,"While dead with hunting stopped, capture the Revive dialog and select its text/button. The optional opening location receives up to three left-clicks after the 3-second death wait. Setup sends no game clicks.");
-        priorityHint.SetToolTip(visualRevival,"Wait at least 3 seconds after death, then send up to three opening left-clicks with a 250 ms gap. Stop opening when Revive appears, confirm once, and wait for living HP. A longer saved route delay still applies.");
+        priorityHint.SetToolTip(configureRevival,"While dead with hunting stopped, capture the Revive dialog and select its text/button. Opening clicks always use the game-window centre, up to three times, one second apart after a 2-second death wait. Setup sends no game clicks.");
+        priorityHint.SetToolTip(visualRevival,"Wait at least 2 seconds after death, then send up to three centre opening clicks one second apart. Skip opening if Revive is visible; confirm once, then check HP every 200 ms for up to 15 seconds. A longer saved route delay still applies.");
         priorityHint.SetToolTip(testRevival,"Wait 5 seconds, switch to the game, and revive once using the selected visual setup. Requires known dead HP. This test performs a real revival; repair and return travel run during normal recovery.");
         priorityHint.SetToolTip(automaticRevival,"Keep a backup of your custom revival profile and return to the included automatic detector.");
         configureRevival.Click+=async(_,_)=>await RunRevivalTool(true);
@@ -36,7 +36,7 @@ public sealed partial class HunterForm
         automaticRevival.Visible=custom;
         revivalStatus.Text=custom?"Custom revival setup saved. Test once while dead; keep the same client, window size, and dialog layout."
             :"Automatic recognition. Custom setup is optional; capture it while dead with hunting stopped.";
-        revivalStatus.Text+=" Death wait: 3s · opening clicks: 3 (stop when Revive appears).";
+        revivalStatus.Text+=" Death wait: 2s · centre clicks: up to 3, 1s apart · HP check: 200ms / 15s.";
         if(!autoRevive.Checked)revivalStatus.Text+=" Enable Auto revive + return to use it during a hunt.";
     }
     static void RequireRevivalSetupState(Health health)
@@ -84,47 +84,21 @@ public sealed partial class HunterForm
     }
     async Task ConfigureRevivalAsync(Action validateDead,CancellationToken token)
     {
-        var choice=MessageBox.Show(this,
-            "Does a click open the Revive dialog?\n\nYes: capture the death screen and choose that opening click first.\nNo: capture the already visible Revive dialog only.\n\nSetup only reads the screen. You will open the dialog manually; do not click Revive until you choose Test revival.",
-            "Custom revival setup",MessageBoxButtons.YesNoCancel,MessageBoxIcon.Information);
-        if(choice==DialogResult.Cancel)throw new OperationCanceledException();
-        async Task<Bitmap> Capture(bool opening)
-        {
-            string instruction=opening
-                ?"Leave the death screen visible BEFORE the Revive dialog opens. After OK, switch to the game within 5 seconds and move the pointer away from its text."
-                :"Open the Revive dialog manually, without confirming revival. After OK, switch to the game within 5 seconds and move the pointer away from the dialog and button.";
-            if(MessageBox.Show(this,instruction,"Capture revival setup",MessageBoxButtons.OKCancel,MessageBoxIcon.Information)!=DialogResult.OK)
-                throw new OperationCanceledException();
-            await RepairCountdown("Capturing revival setup: switch to the game",token);validateDead();
-            var frame=RepairScreen.Capture(world);Activate();return frame;
-        }
-        RecognitionSelection Select(Bitmap image,bool opening)
-        {
-            using var editor=RepairSetupForm.ForRevival(image,opening,UiWindow,UiText);
-            using var cancelled=token.Register(()=>{if(editor.IsHandleCreated&&!editor.IsDisposed)editor.BeginInvoke((Action)(()=>{if(!editor.IsDisposed)editor.DialogResult=DialogResult.Cancel;}));});
-            token.ThrowIfCancellationRequested();
-            if(editor.ShowDialog(this)!=DialogResult.OK || editor.Selection is not {} selection)throw new OperationCanceledException();
-            token.ThrowIfCancellationRequested();validateDead();return selection;
-        }
-        Bitmap? openingImage=null;
-        try
-        {
-            RevivalStep? opening=null;
-            if(choice==DialogResult.Yes){openingImage=await Capture(true);opening=RevivalStep.From(Select(openingImage,true));}
-            using var confirmationImage=await Capture(false);
-            if(openingImage!=null && openingImage.Size!=confirmationImage.Size)
-                throw new InvalidOperationException("Keep the same game window size through both revival captures.");
-            var confirmation=RevivalStep.From(Select(confirmationImage,false));
-            if(openingImage!=null && confirmation.Marker.Matches(openingImage))
-                throw new InvalidOperationException("The chosen Revive dialog text also appears before opening it. Select text distinctive to the dialog.");
-            validateDead();
-            new RevivalProfile(1,world.ClientHash,confirmationImage.Width,confirmationImage.Height,opening,confirmation).Save();
-            RefreshRevivalSettings();message=revivalStatus.Text="Revival setup saved. Leave the dialog open and choose Test revival · 5s to verify it.";
-            TraceLog.Record("revival setup saved",new{Width=confirmationImage.Width,Height=confirmationImage.Height,OpeningStep=opening!=null,Client=world.ClientHash});
-        }
-        finally{openingImage?.Dispose();}
+        const string instruction="Open the Revive dialog manually without confirming revival. After OK, switch to the game within 5 seconds and move the pointer away from the dialog and button. Setup reads the screen only. Opening clicks always use the game-window centre.";
+        if(MessageBox.Show(this,instruction,"Capture revival setup",MessageBoxButtons.OKCancel,MessageBoxIcon.Information)!=DialogResult.OK)
+            throw new OperationCanceledException();
+        await RepairCountdown("Capturing revival setup: switch to the game",token);validateDead();
+        using var image=RepairScreen.Capture(world);Activate();
+        using var editor=RepairSetupForm.ForRevival(image,false,UiWindow,UiText);
+        using var cancelled=token.Register(()=>{if(editor.IsHandleCreated&&!editor.IsDisposed)editor.BeginInvoke((Action)(()=>{if(!editor.IsDisposed)editor.DialogResult=DialogResult.Cancel;}));});
+        token.ThrowIfCancellationRequested();
+        if(editor.ShowDialog(this)!=DialogResult.OK || editor.Selection is not {} selection)throw new OperationCanceledException();
+        token.ThrowIfCancellationRequested();validateDead();
+        var confirmation=RevivalStep.From(selection);
+        new RevivalProfile(1,world.ClientHash,image.Width,image.Height,null,confirmation).Save();
+        RefreshRevivalSettings();message=revivalStatus.Text="Revival setup saved. Leave the dialog open and choose Test revival · 5s to verify it.";
+        TraceLog.Record("revival setup saved",new{Width=image.Width,Height=image.Height,OpeningStep=false,Client=world.ClientHash});
     }
-
     void CheckRevivalSetupUi()
     {
         foreach(var hp in new Health[]{default,new(100,100)})

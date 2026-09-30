@@ -25,8 +25,9 @@ adapted into PoteHunter and the remaining verification limits.
   active minutes, and retry. A second death preserves this pending cycle.
 - Visual revival requires known dead HP and recognizes the centered Revive
   button using the supplied template. It permits at most three popup-opening
-  clicks after a minimum three-second death wait, with a minimum 250 ms gap
+  centre clicks after a minimum two-second death wait, with a minimum one-second gap
   and a screen/HP check between clicks, then one recognized confirmation.
+  After confirmation HP is checked every 200 ms for up to 15 seconds.
   Longer saved route delays take precedence. Positive HP
   is required before repair or return. Turning off Recognize Revive button
   retains the configured key method.
@@ -37,7 +38,8 @@ adapted into PoteHunter and the remaining verification limits.
   Stops retain the real reason, and occupied-spot waiting reports missing
   compatible alternative routes.
 - Custom revival setup can replace the included detector with local paired
-  dialog/button patches and an optional recognized death-screen opening click.
+  dialog/button patches. Opening clicks always use the game-window centre;
+  older saved opening coordinates are ignored.
   It shares repair's capture editor, binds the profile to the client/window,
   and saves only after all selections validate. Test revival performs one real
   revive without starting farming; Use automatic backs up the custom profile

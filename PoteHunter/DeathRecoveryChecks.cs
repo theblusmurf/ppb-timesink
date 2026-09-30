@@ -26,8 +26,8 @@ internal static class DeathRecoveryChecks
         recovery.Observe(default,1200);
         if(!recovery.Pending || recovery.ReadyAt(10)!=11000 || recovery.ReadyAt(0)!=1500)
             throw new Exception("Unreadable health changed the pending revive delay.");
-        if(recovery.ReadyAt(0,true)!=4000 || recovery.ReadyAt(10,true)!=11000)
-            throw new Exception("Visual revival countdown did not use the three-second minimum or respect a longer saved delay.");
+        if(recovery.ReadyAt(0,true)!=3000 || recovery.ReadyAt(10,true)!=11000)
+            throw new Exception("Visual revival countdown did not use the two-second minimum or respect a longer saved delay.");
         recovery.Observe(new(100,100),1600);
         if(!recovery.Pending)throw new Exception("Manual revival incorrectly bypassed return to the anchor.");
         if(!recovery.Observe(new(0,100),2000) || recovery.ReadyAt(5)!=7000)
