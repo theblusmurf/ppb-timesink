@@ -548,7 +548,7 @@ public sealed partial class HunterForm : Form
             if(beforeZone!=navigationZone) {navigation.Clear();if(working)Stop("Map zone changed; stopped.");return;}
             navigation.Observe(world.NavigationContext(self),pos,self.Height);
             if(working && runZone.HasValue && navigationZone!=runZone) Stop("Map zone changed; stopped.");
-            navigationLabel.Text=$"Zone {navigationZone} · {navigation.Status}\nGreen: observed movement · Orange: temporary blocked · Blue: route · Gold: treasure boxes (live) · Amber: remembered";
+            navigationLabel.Text=$"Zone {navigationZone} · {navigation.Status}\nGreen: observed movement · Orange: temporary blocked · {(showNavigationRoutes.Checked ? "Blue: route" : "Routes hidden")} · Gold: treasure boxes (live) · Amber: remembered";
             RefreshNavigationRecordingControls();
             navigationCanvas.Invalidate();
             guardSelfId=self.Id;
@@ -628,7 +628,7 @@ public sealed partial class HunterForm : Form
                 lastEvidence = Environment.TickCount64;
                 RecordObservations(self, level, health);
                 var targetState=world.TargetState();
-                WriteState(new { TimeUtc = DateTime.UtcNow, Connected = true, Working = working, Calibrated = movement != null, Player = self.Name, PlayerHP = selfHealth, PlayerMP = selfMana, ManaRecoveryStatus=manaRecoveryStatus, CameraSupported=world.CameraSupported, CameraStatus=world.CameraStatus, TargetState=new {targetState.Available,targetState.Status,TargetIds=targetState.Ids.Select(id=>$"0x{id:X8}").ToArray()}, Level = level, Position = pos, Hotbar = currentHotbar, DetectedHealingItems = currentHotbar.Slots.Where(RecoveryItems.Recognized), DetectedManaItems=currentHotbar.Slots.Where(ManaRecovery.Recognized), Radar=new{Enabled=showNavigationOverlay.Checked,Visible=navigationOverlay is {Visible:true},Size=(int)navigationOverlaySize.Value}, LootTrackerOverlay=new{Enabled=showLootTrackerOverlay.Checked,Visible=lootTrackerOverlay is {Visible:true},Position=lootTrackerOverlay?.Location}, LootTracker=lootTracker.Snapshot(), Healer = HealerState(), Recording = new { Enabled = true, ObjectCount = entities.Count, Error = recordingError }, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot(), Gamekeepers=entities.Where(Targeting.IsGamekeeper).Select(e=>new {
+                WriteState(new { TimeUtc = DateTime.UtcNow, Connected = true, Working = working, Calibrated = movement != null, Player = self.Name, PlayerHP = selfHealth, PlayerMP = selfMana, ManaRecoveryStatus=manaRecoveryStatus, CameraSupported=world.CameraSupported, CameraStatus=world.CameraStatus, TargetState=new {targetState.Available,targetState.Status,TargetIds=targetState.Ids.Select(id=>$"0x{id:X8}").ToArray()}, Level = level, Position = pos, Hotbar = currentHotbar, DetectedHealingItems = currentHotbar.Slots.Where(RecoveryItems.Recognized), DetectedManaItems=currentHotbar.Slots.Where(ManaRecovery.Recognized), Radar=new{Enabled=showNavigationOverlay.Checked,Visible=navigationOverlay is {Visible:true},RoutesVisible=showNavigationRoutes.Checked,Size=(int)navigationOverlaySize.Value}, LootTrackerOverlay=new{Enabled=showLootTrackerOverlay.Checked,Visible=lootTrackerOverlay is {Visible:true},Position=lootTrackerOverlay?.Location}, LootTracker=lootTracker.Snapshot(), Healer = HealerState(), Recording = new { Enabled = true, ObjectCount = entities.Count, Error = recordingError }, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot(), Gamekeepers=entities.Where(Targeting.IsGamekeeper).Select(e=>new {
                     e.Id,e.Position,HP=health.GetValueOrDefault(e.Id),Distance=(e.Position-pos).Length,
                     AnchorDistance=(e.Position-(activeHuntAnchor ?? pos)).Length,
                     ResponseRadius=Targeting.ResponseRadius((double)(activeGuardOptions?.HuntRadius ?? radius.Value),(double)(activeGuardOptions?.GamekeeperResponseRadius ?? gamekeeperRadius.Value)),
@@ -778,20 +778,23 @@ public sealed partial class HunterForm : Form
         var trail=navigation.Trail.Where(p=>(p-navigationPosition).Length<span*2).Select(Project).ToArray();if(trail.Length>1)g.DrawLines(trailPen,trail);
         foreach(var obstacle in navigation.Blocked) {var p=Project(obstacle.Center);float r=(float)obstacle.Radius*scale;g.DrawEllipse(obstaclePen,p.X-r,p.Y-r,r*2,r*2);}
         foreach(var zone in avoidZones) {var p=Project(zone.Center);float r=(float)(zone.Radius+1)*scale;g.DrawEllipse(avoidPen,p.X-r,p.Y-r,r*2,r*2);}
-        var savedPens=new[]{new Pen(Color.MediumPurple,2),new Pen(Color.Gold,2),new Pen(Color.Coral,2)};
-        var savedBrushes=new[]{new SolidBrush(Color.MediumPurple),new SolidBrush(Color.Gold),new SolidBrush(Color.Coral)};
-        try
+        if(showNavigationRoutes.Checked)
         {
-            foreach(var (slot,saved) in navigation.SavedRoutesForZone(navigationZone))
+            var savedPens=new[]{new Pen(Color.MediumPurple,2),new Pen(Color.Gold,2),new Pen(Color.Coral,2)};
+            var savedBrushes=new[]{new SolidBrush(Color.MediumPurple),new SolidBrush(Color.Gold),new SolidBrush(Color.Coral)};
+            try
             {
-                var savedPoints=saved.Points.Where(point=>(point-navigationPosition).Length<span*2).Select(Project).ToArray();
-                if(savedPoints.Length>1)g.DrawLines(savedPens[slot],savedPoints);
-                var marker=Project(saved.Anchor);
-                g.FillEllipse(savedBrushes[slot],marker.X-4,marker.Y-4,8,8);
+                foreach(var (slot,saved) in navigation.SavedRoutesForZone(navigationZone))
+                {
+                    var savedPoints=saved.Points.Where(point=>(point-navigationPosition).Length<span*2).Select(Project).ToArray();
+                    if(savedPoints.Length>1)g.DrawLines(savedPens[slot],savedPoints);
+                    var marker=Project(saved.Anchor);
+                    g.FillEllipse(savedBrushes[slot],marker.X-4,marker.Y-4,8,8);
+                }
             }
+            finally { foreach(var pen in savedPens)pen.Dispose(); foreach(var brush in savedBrushes)brush.Dispose(); }
+            var route=new[]{navigationPosition}.Concat(navigation.Route).Select(Project).ToArray();if(route.Length>1)g.DrawLines(routePen,route);
         }
-        finally { foreach(var pen in savedPens)pen.Dispose(); foreach(var brush in savedBrushes)brush.Dispose(); }
-        var route=new[]{navigationPosition}.Concat(navigation.Route).Select(Project).ToArray();if(route.Length>1)g.DrawLines(routePen,route);
 
         DrawDirectionCone(g,canvasSize);
         DrawRadarMonsters(g,canvasSize);

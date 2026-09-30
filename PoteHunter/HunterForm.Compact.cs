@@ -84,7 +84,12 @@ public sealed partial class HunterForm
         CompactAdd(advanced,CompactRow("Healing",Caption("Charge (ms)"),healCharge,Caption("Extra keys"),healthConditionKeys));
         CompactAdd(advanced,CompactRow("Skill targeting",smartSkillTargeting,centerAreaSkills,retargetSkillTargets));
         CompactAdd(advanced,CompactRow("Group limits",Caption("Attack radius"),groupAttack,Caption("Follow limit"),groupLimit));
-        foreach(int oldRow in new[]{6,7,8,9,12,13})
+        // Rows 12 and 13 are the legacy healing/skill-targeting controls. They
+        // already have dedicated compact rows above; reusing them here would
+        // reparent the same controls a second time and leave the first rows
+        // empty or misplaced. Keep only the older automation rows that do not
+        // have a compact replacement.
+        foreach(int oldRow in new[]{6,7,8,9})
         {
             var fields=old.Where(f=>f.Row==oldRow).Select(f=>f.Control).ToArray();
             if(fields.Length>0)CompactAdd(advanced,CompactRow(fields.OfType<Label>().FirstOrDefault()?.Text??"Automation",fields.Where(c=>c is not Label).ToArray()));
@@ -180,4 +185,3 @@ public sealed partial class HunterForm
         FormClosing+=(_,_)=>{if(compactSaveTimer.Enabled)SaveCompactSettings();};FormClosed+=(_,_)=>compactSaveTimer.Dispose();
     }
 }
-

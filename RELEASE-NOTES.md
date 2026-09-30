@@ -1,5 +1,18 @@
 # Release notes
 
+## Release1.49
+
+- Added a persisted **Show routes on radar** option to the Navigation controls.
+  It hides or reveals saved route geometry, anchor markers, and the active
+  route while leaving targets, obstacles, movement trail, and treasure markers
+  available.
+- Exposed route visibility in `live-status.json` as `Radar.RoutesVisible` and
+  updated the Navigation status text when routes are hidden.
+- Removed the stale compact-shell reparenting of legacy healing and skill
+  targeting rows. Their dedicated modern rows remain the single visible source
+  for those settings.
+- Validation: .NET 10 Release build and the offline PoteHunter self-test pass.
+
 ## Release1.48
 
 - Corrected gold pile accounting to use the ground record's quantity field.

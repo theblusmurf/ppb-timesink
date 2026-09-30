@@ -6,6 +6,7 @@ public sealed partial class HunterForm
 {
     const int NavigationOverlayMargin = 24;
     readonly CheckBox showNavigationOverlay = new() { Text = "Show radar overlay", AutoSize = true };
+    readonly CheckBox showNavigationRoutes = new() { Text = "Show routes on radar", AutoSize = true, Checked = true };
     readonly CheckBox showLootTrackerOverlay = new() { Text = "Show loot tracker", AutoSize = true, Checked = true };
     readonly CheckBox guideTreasureChests = new() { Text = "Guide to treasure chests", AutoSize = true, Checked = true };
     readonly CheckBox showTreasureChestMarkers = new() { Text = "Show treasure boxes on map", AutoSize = true, Checked = true };
@@ -48,6 +49,7 @@ public sealed partial class HunterForm
         {
             var options = Options.Read();
             showNavigationOverlay.Checked = options.ShowNavigationOverlay;
+            showNavigationRoutes.Checked = options.ShowNavigationRoutes;
             showLootTrackerOverlay.Checked = options.ShowLootTrackerOverlay;
             navigationOverlaySize.Value = Math.Clamp(options.NavigationOverlaySize,
                 (int)navigationOverlaySize.Minimum, (int)navigationOverlaySize.Maximum);
@@ -62,6 +64,7 @@ public sealed partial class HunterForm
         catch
         {
             showNavigationOverlay.Checked = false;
+            showNavigationRoutes.Checked = true;
             showLootTrackerOverlay.Checked = true;
             navigationOverlaySize.Value = 450;
             navigationViewRadius.Value = 150;
@@ -75,6 +78,7 @@ public sealed partial class HunterForm
 
         var sizeLabel = new Label { Text = "Size:", AutoSize = true, Padding = new Padding(5, 5, 0, 0) };
         navControls.Controls.Add(showNavigationOverlay);
+        navControls.Controls.Add(showNavigationRoutes);
         navControls.Controls.Add(showLootTrackerOverlay);
         navControls.Controls.Add(guideTreasureChests);
         navControls.Controls.Add(showTreasureChestMarkers);
@@ -99,6 +103,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(resetLootTimer);
 
         showNavigationOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
+        showNavigationRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showLootTrackerOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
         guideTreasureChests.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showTreasureChestMarkers.CheckedChanged += (_, _) => OverlaySettingsChanged();
@@ -168,6 +173,7 @@ public sealed partial class HunterForm
     Options WithOverlaySettings(Options options)
     {
         options.ShowNavigationOverlay = showNavigationOverlay.Checked;
+        options.ShowNavigationRoutes = showNavigationRoutes.Checked;
         options.ShowLootTrackerOverlay = showLootTrackerOverlay.Checked;
         options.NavigationOverlaySize = (int)navigationOverlaySize.Value;
         options.NavigationViewRadius = (int)navigationViewRadius.Value;

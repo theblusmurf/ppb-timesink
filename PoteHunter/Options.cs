@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace PoteHunter;
 
@@ -61,6 +61,9 @@ public sealed class Options
     public decimal ManaDelaySeconds { get; set; } = 5;
     public int ManaReservePercent { get; set; }
     public bool ShowNavigationOverlay { get; set; }
+    // Keep radar route geometry optional so the overlay can stay focused on
+    // nearby targets, chests, and the character while a route is running.
+    public bool ShowNavigationRoutes { get; set; } = true;
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
     public bool ShowLootTrackerOverlay { get; set; } = true;
