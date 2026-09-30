@@ -120,7 +120,7 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
         }
         token.ThrowIfCancellationRequested();if(!Dead())return false;
         if(RepairScreen.Bounds(world)!=bounds)return Retry("game window moved before the opening click");
-        if(!Input.AlignPointer(click,token))return Retry("pointer could not align for the opening click",new{Expected=click,Actual=Input.Cursor()});
+        if(!Input.AlignOpeningPointer(bounds,token))return Retry("pointer is not stable near the game centre for the opening click",new{Expected=click,Actual=Input.Cursor()});
         if(!Dead() || RepairScreen.Bounds(world)!=bounds)return false;
         await Input.Click(false,token);
         TraceLog.Record("revival popup opening click",new{Visual=true,Custom=custom!=null});

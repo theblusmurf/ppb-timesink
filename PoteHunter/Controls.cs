@@ -54,6 +54,28 @@ public static class Input
         TraceLog.Record("revival pointer alignment",new{Expected=screen,Before=before,Actual=Cursor(),Aligned=aligned,Method="Windows screen coordinates"});
         return aligned;
     }
+    // Opening the death dialog is a click on the central background, not on a
+    // recognised button. Some clients constrain/recentre the pointer 50 pixels
+    // above the requested centre. Accept only a stable, nearby central point.
+    internal static bool OpeningPointerAllowed(Rectangle client,Point before,Point after)
+    {
+        if(client.Width<=0 || client.Height<=0 || !client.Contains(before) || !client.Contains(after))return false;
+        int centerX=client.Left+client.Width/2,centerY=client.Top+client.Height/2;
+        int toleranceX=Math.Clamp(client.Width/20,2,64),toleranceY=Math.Clamp(client.Height/20,2,64);
+        return Math.Abs(after.X-centerX)<=toleranceX && Math.Abs(after.Y-centerY)<=toleranceY &&
+            Math.Abs(before.X-after.X)<=2 && Math.Abs(before.Y-after.Y)<=2;
+    }
+    internal static bool AlignOpeningPointer(Rectangle client,CancellationToken token)
+    {
+        Point center=new(client.Left+client.Width/2,client.Top+client.Height/2);
+        if(AlignPointer(center,token))return true;
+        Check(token);Point before=Cursor();
+        Check(token);Point actual=Cursor();
+        bool accepted=OpeningPointerAllowed(client,before,actual);
+        TraceLog.Record("revival central opening alignment",new{Client=client,Expected=center,Before=before,
+            Actual=actual,Accepted=accepted,MaximumTolerancePixels=64});
+        return accepted;
+    }
     public static Point Cursor()
     {
         if(!GetCursorPos(out var p))throw new InvalidOperationException($"Windows could not read the mouse position (error {Marshal.GetLastWin32Error()}).");
@@ -231,6 +253,22 @@ public static class Input
         try{AlignPointer(desired,()=>new(1720,670),_=>true,()=>{if(++validations==3)throw new OperationCanceledException();});}
         catch(OperationCanceledException){cancelled=true;}
         if(!cancelled)throw new Exception("Pointer correction ignored focus/cancellation revalidation.");
+        var gameClient=new Rectangle(0,0,3440,1440);
+        if(!OpeningPointerAllowed(gameClient,new(1720,670),new(1720,670)) ||
+            !OpeningPointerAllowed(gameClient,desired,desired) ||
+            OpeningPointerAllowed(gameClient,new(1720,600),new(1720,600)) ||
+            OpeningPointerAllowed(gameClient,new(1720,670),new(1720,675)) ||
+            OpeningPointerAllowed(new(1600,700,240,40),new(1720,670),new(1720,670)) ||
+            OpeningPointerAllowed(Rectangle.Empty,desired,desired))
+            throw new Exception("Central opening policy mishandled the live 50-pixel offset, drift, or client bounds.");
+        var shiftedClient=new Rectangle(-3440,120,3440,1440);
+        if(!OpeningPointerAllowed(shiftedClient,new(-1720,790),new(-1720,790)) ||
+            OpeningPointerAllowed(new(0,0,400,300),new(200,100),new(200,100)))
+            throw new Exception("Opening tolerance ignored desktop origins or small-window scaling.");
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"revival-center-pointer-checks.json"),
+            System.Text.Json.JsonSerializer.Serialize(new{Passed=true,ObservedOffsetPixels=50,MaximumTolerancePixels=64,
+                StableCentralOpeningAccepted=true,FarAndDriftingPointersRejected=true,OutsideClientRejected=true,
+                ButtonAlignmentRemainsPrecise=true}));
         var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
         var packets=new List<Packet>();selfTestSink=packets.Add;Allowed=()=>true;Preflight=null;PickupHoldProvider=null;
         try

@@ -1,5 +1,22 @@
 # Release notes
 
+## Release1.63
+
+- Fixed revival opening clicks blocked by a stable cursor 50 pixels above the
+  requested game centre, confirmed in the running Release1.61 death logs.
+  Exact positioning is still attempted first. Opening the death dialog can
+  use a stable point within 5% of each client dimension, capped at 64 pixels
+  from centre and always inside the game client. Distant or drifting pointers
+  remain blocked. This tolerance applies only to opening the death dialog.
+- Recognised Revive-button confirmation retains precise pointer alignment,
+  paired visual recognition, known zero HP, window/character/focus checks,
+  one confirmation, and living-HP verification. The two-second wait, at most
+  three openings one second apart, repair and saved-route return are retained.
+- Added bounded-centre alignment logs and regressions for the observed offset,
+  exact centre, drift, far/outside pointers, shifted desktop and small windows.
+  Local build, offline recovery/input checks and UI checks passed without
+  live game input. Full live revival/repair/return still needs verification.
+
 ## Release1.62
 
 - Fixed a missed-loot attribution path: enemies killed as part of an engaged
