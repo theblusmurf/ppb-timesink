@@ -24,10 +24,10 @@ public sealed partial class HunterForm
     readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when a player occupies the primary spot", AutoSize = true, Checked = true };
     readonly ComboBox savedNavigationSlot = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly Label savedNavigationRoutesStatus = new() { AutoSize = true, ForeColor = Color.Silver };
-    readonly Button startNavigationRecording = new() { Text = "Start route recording", AutoSize = true };
+    readonly Button startNavigationRecording = new() { Text = "Start route · Home", AutoSize = true };
     readonly Label navigationRecordingStatus = new() { AutoSize = true, ForeColor = Color.Silver };
     readonly Button saveNavigationSpot = new() { Text = "Save current spot", AutoSize = true };
-    readonly Button saveNavigationRoute = new() { Text = "Finish route & save spot", AutoSize = true };
+    readonly Button saveNavigationRoute = new() { Text = "Finish & save · End", AutoSize = true };
     readonly Button clearSavedNavigationRoute = new() { Text = "Clear selected", AutoSize = true };
     readonly Button clearAllSavedNavigationRoutes = new() { Text = "Clear all routes", AutoSize = true };
     readonly Button resetLootTracker = new() { Text = "Reset loot", AutoSize = true };
@@ -138,9 +138,15 @@ public sealed partial class HunterForm
     {
         if (busy || working) { message="Stop the hunt before recording a route manually."; return; }
         if (!connected || !navigationPosition.Finite) { message="Connect to the game before starting route recording."; return; }
-        navigation.BeginRecording(navigationPosition);
-        message=$"Route recording started at zone {navigationZone}. Walk to the destination, then finish and save the route.";
-        TraceLog.Record("manual navigation route recording started",new {Zone=navigationZone,Anchor=navigationPosition,Heading=connected?world.PlayerHeading():0});
+        if (navigation.Recording) { message="A route is already recording. Press End to finish and save it."; return; }
+        try
+        {
+            double heading=world.PlayerHeading();
+            navigation.BeginRecording(navigationPosition);
+            message=$"Route recording started at zone {navigationZone}. Walk to the destination, then press End to finish and save.";
+            TraceLog.Record("manual navigation route recording started",new {Zone=navigationZone,Anchor=navigationPosition,Heading=heading});
+        }
+        catch(Exception ex) { message="Could not start navigation route: "+ex.Message; }
         RefreshNavigationRecordingControls();navigationCanvas.Invalidate();
     }
 
@@ -152,10 +158,10 @@ public sealed partial class HunterForm
         saveNavigationRoute.Enabled=manualAvailable && navigation.Recording;
         saveNavigationSpot.Enabled=manualAvailable;
         navigationRecordingStatus.Text=navigation.Recording
-            ? $"Recording {navigation.RecordingTrail.Count} point(s)"
+            ? $"Recording {navigation.RecordingTrail.Count} point(s) · End saves"
             : navigation.RecordingCancelled
                 ? "Recording cancelled; start again"
-                : "Ready to record";
+                : "Ready · Home starts";
         navigationRecordingStatus.ForeColor=navigation.RecordingCancelled ? Color.Orange : Color.Silver;
     }
 
@@ -198,6 +204,8 @@ public sealed partial class HunterForm
     {
         try
         {
+            if(busy || working) { message="Stop the hunt before saving a route manually."; return; }
+            if(!connected || !navigationPosition.Finite) { message="Connect to the game before saving a route."; return; }
             if(finishRecording && !navigation.Recording)
             {
                 message=navigation.RecordingCancelled ? "Route recording was cancelled after an unsafe movement gap; start again." : "Start route recording before finishing a route.";
@@ -210,10 +218,7 @@ public sealed partial class HunterForm
                 navigation.EndRecording();RefreshNavigationRecordingControls();return;
             }
             int slot=SelectedSavedNavigationSlot();
-            // The primary slot follows the immutable hunt anchor while a run
-            // is active. Alternative slots intentionally capture the current
-            // position so they can be separate fallback farming locations.
-            Vec anchor=slot==0 && activeHuntAnchor is Vec runningAnchor ? runningAnchor : navigationPosition;
+            Vec anchor=navigationPosition;
             double heading=connected ? world.PlayerHeading() : 0;
             Options routeOptions=Options.Read();
             string routeCharacter=routeOptions.Player;
@@ -239,6 +244,7 @@ public sealed partial class HunterForm
             }
             else message="Save the current position or walk a route first; no valid navigation point was found.";
             RefreshSavedNavigationRouteStatus();
+            RefreshNavigationRecordingControls();
             navigationCanvas.Invalidate();
         }
         catch(Exception ex){message="Could not save navigation route: "+ex.Message;RefreshNavigationRecordingControls();}

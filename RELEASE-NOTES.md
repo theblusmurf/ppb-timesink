@@ -1,5 +1,20 @@
 # Release notes
 
+## Release1.51
+
+- Added **Home** to start route recording and **End** to finish and save the
+  route, destination, and facing to the selected Primary or Alternative slot.
+- Added shortcut labels to Navigation's route buttons and recording status.
+  Stop hunting before recording; the game or PoteHunter must be in the foreground.
+- Pressing Home again preserves the active recording. End cannot overwrite a
+  route while disconnected, hunting, or without an active recording.
+- Route shortcuts use no-repeat registration, release their keys on close, and
+  cannot be assigned as the automatic revive key. A route-shortcut registration
+  conflict is reported without disabling the existing hunt hotkeys.
+- Validation: .NET 10 Release build, offline self-tests, and UI checks passed,
+  including shortcut dispatch and preservation of unfinished recordings. No live
+  game input was used during validation.
+
 ## Release1.50
 
 - Fixed the Release1.48 gold regression that recorded **one gold per pile**.

@@ -154,6 +154,9 @@ public sealed partial class HunterForm : Form
     bool connected, busy, working, hotkeys;
     bool deathRecoveryActive, deathRecoveryRequested;
     sealed record HotkeyRegistration(string Key, int Id, bool Registered, int WindowsError);
+    const int StartRouteHotkeyId=10, FinishRouteHotkeyId=11;
+    static readonly (int Id, Keys Key)[] HotkeyBindings =
+        [(6,Keys.F6),(8,Keys.F8),(9,Keys.F9),(StartRouteHotkeyId,Keys.Home),(FinishRouteHotkeyId,Keys.End)];
     readonly List<HotkeyRegistration> hotkeyRegistrations = new();
     string? hotkeyFailure;
     CancellationTokenSource? cancel;
@@ -379,7 +382,7 @@ public sealed partial class HunterForm : Form
             { nextCharacterReconnect=Environment.TickCount64+5000; await Connect(); }
         };
         if(!offlinePreview)Shown += async (_, _) => { RegisterKeys(); timer.Start(); await Connect(); };
-        FormClosing += (_, e) => { Stop("Closed."); if (busy || working) { e.Cancel = true; message = "Stopping. Close again when the current operation has finished."; return; } timer.Stop(); DisposeNavigationOverlay(); zoneMapBackground.Dispose(); world.Dispose(); for (int i = 6; i <= 9; i++) Input.UnregisterHotKey(Handle, i); };
+        FormClosing += (_, e) => { Stop("Closed."); if (busy || working) { e.Cancel = true; message = "Stopping. Close again when the current operation has finished."; return; } timer.Stop(); DisposeNavigationOverlay(); zoneMapBackground.Dispose(); world.Dispose(); foreach(var registration in hotkeyRegistrations.Where(result=>result.Registered)) Input.UnregisterHotKey(Handle, registration.Id); };
         Input.Allowed = () => connected && world.CheckInputWindow().Allowed;
         FormClosed += (_,_)=>{DisposeNavigationOverlay();zoneMapBackground.Dispose();};
         WindowsClientInput.Bind(world);
@@ -388,7 +391,7 @@ public sealed partial class HunterForm : Form
     void RegisterKeys()
     {
         hotkeyRegistrations.Clear();
-        foreach (var (id, key) in new[] { (6, Keys.F6), (8, Keys.F8), (9, Keys.F9) })
+        foreach (var (id, key) in HotkeyBindings)
         {
             bool registered = Input.RegisterHotKey(Handle, id, 0x4000, (uint)key);
             int error = registered ? 0 : System.Runtime.InteropServices.Marshal.GetLastWin32Error();
@@ -396,8 +399,9 @@ public sealed partial class HunterForm : Form
             hotkeyRegistrations.Add(registration);
             TraceLog.Record("hotkey registration", registration);
         }
-        hotkeys = hotkeyRegistrations.All(result => result.Registered);
-        hotkeyFailure = hotkeys ? null : "Hotkeys unavailable: " +
+        // A route-shortcut conflict must not disable the existing hunt controls.
+        hotkeys = hotkeyRegistrations.Where(result => result.Id is 6 or 8 or 9).All(result => result.Registered);
+        hotkeyFailure = hotkeyRegistrations.All(result=>result.Registered) ? null : "Hotkeys unavailable: " +
             string.Join(", ", hotkeyRegistrations.Where(result => !result.Registered)
                 .Select(result => $"{result.Key} (Windows error {result.WindowsError})")) +
             ". Close other bot or hotkey apps, then reopen this bot.";
@@ -415,12 +419,23 @@ public sealed partial class HunterForm : Form
         if (m.Msg == 0x312)
         {
             int id = m.WParam.ToInt32();
-            TraceLog.Record("hotkey received",new {Key=$"F{id}",Connected=connected,Working=working,Busy=busy});
-            if (id == 9 || id == 8 && working) Stop("Stopped by hotkey.");
-            else if (id == 6) _ = Calibrate();
-            else if (id == 8) _ = StartHunting();
+            bool routeKey=id is StartRouteHotkeyId or FinishRouteHotkeyId;
+            IntPtr foreground=routeKey ? Input.GetForegroundWindow() : IntPtr.Zero;
+            if(!routeKey || foreground==Handle || connected && foreground==world.Window)
+                HandleHotkey(id);
         }
         base.WndProc(ref m);
+    }
+    void HandleHotkey(int id)
+    {
+        Keys key=HotkeyBindings.FirstOrDefault(binding=>binding.Id==id).Key;
+        if(key==Keys.None)return;
+        TraceLog.Record("hotkey received",new {Key=key.ToString(),Connected=connected,Working=working,Busy=busy});
+        if (id == 9 || id == 8 && working) Stop("Stopped by hotkey.");
+        else if (id == 6) _ = Calibrate();
+        else if (id == 8) _ = StartHunting();
+        else if (id == StartRouteHotkeyId) StartNavigationRouteRecording();
+        else if (id == FinishRouteHotkeyId) SaveNavigationRouteFromNavigationTab(false,true);
     }
     Options CurrentOptions()
     {
@@ -437,7 +452,7 @@ public sealed partial class HunterForm : Form
         string keys = new(skillKeys.Text.Where(c => !char.IsWhiteSpace(c) && c != ',').ToArray());
         string healingKeys = new(healingSkillKeys.Text.Where(c => !char.IsWhiteSpace(c) && c != ',').ToArray());
         string configuredReviveKey=reviveKey.Text.Trim();
-        if(!Enum.TryParse<Keys>(configuredReviveKey,true,out var parsedReviveKey) || parsedReviveKey is Keys.Escape or Keys.F9 or Keys.F8)
+        if(!Enum.TryParse<Keys>(configuredReviveKey,true,out var parsedReviveKey) || parsedReviveKey==Keys.Escape || HotkeyBindings.Any(binding=>binding.Key==parsedReviveKey))
             throw new InvalidOperationException("Revive key must be a valid keyboard key other than Escape or the bot hotkeys.");
         configuredReviveKey=parsedReviveKey.ToString();
         // The connected client supplies the character name; no typed name is required.

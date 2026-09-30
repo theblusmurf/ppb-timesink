@@ -17,6 +17,7 @@ public sealed partial class HunterForm
             using var form = new HunterForm(offlinePreview:true);
             try
             {
+                form.CheckNavigationRouteHotkeys();
                 form.ranged.Checked = false;
                 form.InvokeOnClick(form.ranged,EventArgs.Empty);
                 form.rangedPullEnabled.Checked = true;
@@ -120,7 +121,7 @@ public sealed partial class HunterForm
                     throw new Exception("Radar preview activated or lost its passive window styles: "+System.Text.Json.JsonSerializer.Serialize(radarState));
                 File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"ranged-ui-check.json"),
                     System.Text.Json.JsonSerializer.Serialize(new {Passed=true,Connected=form.connected,Working=form.working,
-                        Checks=new[]{"real control values persisted and reloaded","offscreen ranged tab rendered","live startup handler omitted"}}));
+                        Checks=new[]{"real control values persisted and reloaded","offscreen ranged tab rendered","live startup handler omitted","Home/End route guards preserve active recordings"}}));
                 return 0;
             }
             finally {form.timer.Dispose();form.world.Dispose();}
@@ -134,6 +135,52 @@ public sealed partial class HunterForm
         {
             if(existing!=null)File.WriteAllBytes(Options.PathName,existing);
             else if(File.Exists(Options.PathName))File.Delete(Options.PathName);
+        }
+    }
+
+    void CheckNavigationRouteHotkeys()
+    {
+        // Exercise the production dispatcher without registering global keys,
+        // connecting to a client, writing routes, or emitting game input.
+        int startId=HotkeyBindings.Single(binding=>binding.Key==Keys.Home).Id;
+        int finishId=HotkeyBindings.Single(binding=>binding.Key==Keys.End).Id;
+        var savedBefore=navigation.SavedRoutes.ToArray();
+        string oldReviveKey=reviveKey.Text;
+        try
+        {
+            HandleHotkey(startId);
+            if(navigation.Recording || !message.StartsWith("Connect to the game",StringComparison.Ordinal))
+                throw new Exception("Home must not start a route while disconnected.");
+            connected=true;
+            HandleHotkey(finishId);
+            if(!message.StartsWith("Start route recording",StringComparison.Ordinal))
+                throw new Exception("End must not overwrite a saved route before recording starts.");
+            navigation.Observe("hotkey-check",new(0,0),0);
+            navigation.BeginRecording(new(0,0));
+            navigation.Observe("hotkey-check",new(2,0),0);
+            var points=navigation.RecordingTrail.ToArray();
+            HandleHotkey(startId);
+            if(!navigation.Recording || !navigation.RecordingTrail.SequenceEqual(points) || !message.Contains("already recording",StringComparison.Ordinal))
+                throw new Exception("Pressing Home twice erased the active route.");
+            foreach(bool activeHunt in new[]{true,false})
+            {
+                working=activeHunt;connected=activeHunt;
+                HandleHotkey(finishId);
+                if(!navigation.Recording || !navigation.RecordingTrail.SequenceEqual(points) || !navigation.SavedRoutes.SequenceEqual(savedBefore))
+                    throw new Exception("End must preserve an unfinished route while hunting or disconnected.");
+            }
+            foreach(Keys key in new[]{Keys.Home,Keys.End})
+            {
+                reviveKey.Text=key.ToString();
+                bool rejected=false;
+                try { CurrentOptions(); } catch(InvalidOperationException) { rejected=true; }
+                if(!rejected)throw new Exception("A route shortcut was accepted as an automatic revive key.");
+            }
+        }
+        finally
+        {
+            connected=false;working=false;reviveKey.Text=oldReviveKey;
+            navigation.Clear();RefreshNavigationRecordingControls();
         }
     }
 
