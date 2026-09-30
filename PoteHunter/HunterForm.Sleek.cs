@@ -9,23 +9,28 @@ public sealed partial class HunterForm
     {
         var card = CompactTable();
         card.BackColor = UiSurface;
-        card.Padding = new Padding(16, 12, 16, 7);
-        card.Margin = new Padding(0, 0, 0, 12);
+        card.Padding = new Padding(12, 10, 12, 7);
+        card.Margin = new Padding(0, 0, 0, 8);
         CompactAdd(card, new Label
         {
             Text = title, AutoSize = true, ForeColor = UiAccent, UseMnemonic = false,
-            Font = new Font("Segoe UI Semibold", 8f),
-            Margin = new Padding(0, 0, 0, 10)
+            Font = new Font("Consolas", 9f, FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 8)
         });
         card.Paint += (_, e) =>
         {
             e.Graphics.Clear(UiWindow);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var outline = RoundedPath(card.Width - 1, card.Height - 1, 10);
+            using var outline = RoundedPath(card.Width - 1, card.Height - 1, 4);
             using var fill = new SolidBrush(UiSurface);
             using var border = new Pen(UiBorder);
             e.Graphics.FillPath(fill, outline);
             e.Graphics.DrawPath(border, outline);
+        };
+        card.SizeChanged += (_, _) =>
+        {
+            foreach(var label in card.Controls.OfType<Label>())
+                label.MaximumSize = new Size(Math.Max(1,card.ClientSize.Width-card.Padding.Horizontal-label.Margin.Horizontal),0);
         };
         return card;
     }

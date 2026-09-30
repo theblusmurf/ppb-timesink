@@ -1,64 +1,70 @@
-# Compact UI update
+# Field Console interface
 
-Based on the latest healbot + potion build. The original application ZIP,
-source ZIP, and extracted application folder were backed up before editing.
+The selected Field Console style uses forest surfaces, brass accents, compact
+controls and top navigation. The default window is 1040 x 760; the minimum is
+960 x 680. Long settings remain accessible by scrolling.
 
-## Start
+## Start and update
 
-Extract the entire new ZIP into its own folder. Copy your previous settings.json
-and any calibration/maps you want to retain, then run Start-Fixed-Detection.cmd.
-The runtime is included. F8 starts; F9 stops. Existing game connection and
-administrator requirements remain unchanged.
+Install the official Windows setup package or extract the entire portable ZIP
+and run PoteHunter.exe. Native read/input is enabled at ordinary startup; the
+existing client, focus and Windows input guards still apply. Setup > Updates
+checks the public PoteHunter-Releases feed without an account or token.
+
+Preserve settings.json, navigation-routes.json, repair-profile.json and
+revival-profile.json when moving from a portable folder to an installation.
+Existing installed upgrades preserve these files. See packaging/README.txt
+for recovery and installation details.
 
 ## Layout
 
-- Setup: one mode selector (Solo, Group combat, Healer, Group healer).
-  Only the relevant target, tank, combat and healing rows are shown.
-- Group healer: choose the tank in Setup, set follow distance, healing skills,
-  Heal below and healing range. Keep follow distance within healing range.
-- Recovery: HP and MP item thresholds together; mana reserve remains visible.
-- Support: skill buffs, attack potions and defense potions plus detected status.
-- Monitor: select Targets, Ground loot, Hotbar or Group from the sidebar list.
-- Advanced: protection, navigation and ranged-pack pages. Setup also has an
-  Advanced settings expander for item delays, follow limit, priorities, pickup,
-  positioning and other tuning.
+- Setup places operating mode, targets and skills on the left; HP/MP items,
+  self-heal conditions, mana reserve and death recovery are on the right.
+  Advanced settings and Updates are below the operating mode card.
+- Group healer shows tank, follow distance, healing keys, threshold and range.
+  Combat and death recovery controls appear only in combat modes.
+- Support contains skill buffs and attack/defense potions.
+- Monitor selects Targets, Ground loot, Hotbar or Group beside the heading.
+- Navigation opens directly from the top bar and contains routes, radar,
+  treasure guidance and loot overlay options.
+- Advanced selects Protection or Ranged packs beside the heading.
+- Index lists every global hotkey and explains route/recovery prerequisites.
+- The status strip shows operation feedback, existing HP/MP readings and
+  F8/F9 reminders. Unknown or disconnected vitals remain unknown. Hover the
+  HP/MP bars for character/location details when connected.
 
-Navigation stores three local route slots: Primary hunt route, Alternative
-route 1, and Alternative route 2. Save each location from the Navigation page.
-Use **Start route recording** at the start point and **Finish route & save
-spot** at the destination; use **Save current spot** for a stationary anchor.
-Each slot stores its character, floor/height, farming radius, revival delay,
-farm-on-arrival policy, facing, and observed waypoints. A movement gap over 8
-map units cancels recording. When the primary saved point is occupied by
-another recognized player, the first free alternative with a matching
-character and floor is selected using that slot's farming radius. Recovery
-uses a saved path only when the nearest waypoint is within 20 map units, then
-restores the saved facing. The single-route `navigation-route.json` file from
-earlier releases is migrated to the primary slot; the new slots are stored in
-`navigation-routes.json`. Death recovery honors the saved or profile revival
-delay before sending the revive key.
+Settings save automatically after a short pause; text edits save on leaving
+ the field. Saved or Check settings indicates the result. Invalid edits retain
+ the previous valid configuration. Settings inherit the running-state lock.
+Changing the healer threshold updates both existing healing thresholds.
+Switching away from Solo disables incompatible ranged-pack mode.
 
-Changes save automatically after a short pause. Text edits save after leaving
-the field; the Setup status shows Saved or Check settings. Invalid edits do
-not replace the last valid saved configuration. Separate Save buttons are gone.
+## Saved routes and recovery
 
-The healer's Heal below control displays the effective threshold from existing
-settings. Old configurations with different party and skill thresholds retain
-their behavior until edited. Editing Heal below updates both numeric thresholds
-so a hidden lower skill threshold cannot silently block the configured heal.
-Switching away from Solo disables ranged packs to avoid an incompatible mode.
+In Navigation select Primary or either Alternative slot. With the game or
+PoteHunter foreground, connected and hunting stopped, Home starts recording.
+Walk to the anchor, face the targets and press End to save the route and facing.
+Repeated Home preserves an active recording. A spot without waypoints is not
+ a return route.
 
-Window: 980 x 700 by default, 900 x 640 minimum. Existing settings keys remain
-compatible; combat, group-follow, potion and healer policies are unchanged.
+In solo mode Start/F8 can join a compatible route within 10 map units of its
+path, follow it to the anchor and continue hunting. The selected compatible
+slot is preferred. Activation near its endpoint preserves the exact activation
+location and facing; outside the corridor ordinary activation hunting applies.
+
+Enable Revive + return to anchor and Resume farming on arrival for automatic
+death recovery. Record alternatives from the same revival start for occupied
+spot fallback. Optional repair runs after confirmed revival and before return.
+Recognition/focus/identity failures stop recovery. Test revival and Test repair
+perform their named actions and leave hunting stopped.
 
 ## Validation
 
-Release build and portable publish passed. Offline self-tests, including the
-healer/group and potion policies, passed. UI checks cover all four persisted
-modes, the unified healing threshold, actual delayed autosave, invalid-edit
-protection, inherited running-state locks and page rendering. All nine pages
-were inspected, plus Group healer at minimum size and expanded settings.
+Release1.67 has an offline build and self-tests, plus rendered UI checks for all
+navigation destinations, grouped page selectors, minimum-size controls, four
+persisted modes, autosave, invalid-edit protection, inherited settings locks,
+repair/revival controls and unknown/zero/full HP/MP formatting. All pages,
+expanded settings and the minimum-size Group healer layout were inspected.
 
-The elevated packaged EXE and live gameplay were not tested in this environment.
-The original extracted app was left in place; the updated build is delivered
-separately so you can switch back using the backup.
+No live game input was used for this UI update. Existing combat and recovery
+behavior was retained; offline checks do not establish live gameplay success.

@@ -31,7 +31,7 @@ public sealed partial class HunterForm
     static TableLayoutPanel CompactRow(string label,params Control[] controls)
     {
         var row=new TableLayoutPanel{AutoSize=true,AutoSizeMode=AutoSizeMode.GrowAndShrink,Dock=DockStyle.Top,ColumnCount=2,RowCount=1,Margin=new Padding(0,0,0,5)};
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,122));row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,102));row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         row.Controls.Add(new Label{Text=label,AutoSize=true,ForeColor=UiMuted,Margin=new Padding(0,6,8,0)},0,0);
         var content=CompactFlow(controls);row.Controls.Add(content,1,0);
         row.RowStyles.Add(new RowStyle(SizeType.Absolute,34));
@@ -41,7 +41,7 @@ public sealed partial class HunterForm
             if(measuring)return;measuring=true;
             try
             {
-                int height=Math.Max(31,content.GetPreferredSize(new Size(Math.Max(1,row.ClientSize.Width-122),0)).Height);
+                int height=Math.Max(31,content.GetPreferredSize(new Size(Math.Max(1,row.ClientSize.Width-102),0)).Height);
                 if(row.RowStyles[0].Height!=height)row.RowStyles[0].Height=height;
             }
             finally{measuring=false;}
@@ -62,6 +62,9 @@ public sealed partial class HunterForm
         CompactAdd(settings,operating);CompactAdd(settings,recovery);
         CompactAdd(operating,CompactRow("Mode",compactMode,compactSaved));
         tankPicker.Width=170;filter.Width=170;skillKeys.Width=135;healingSkillKeys.Width=135;
+        ranged.Text="Ranged";archerClass.Text="Archer";
+        priorityHint.SetToolTip(ranged,"Use bow/crossbow attack range.");
+        priorityHint.SetToolTip(archerClass,"Archer class uses the 24-unit engine attack range.");
         var tankRow=CompactRow("Tank",tankPicker,Caption("Follow"),groupFollow);
         var targetRow=CompactRow("Targets",filter,Caption("Radius"),radius);
         var combatRow=CompactRow("Combat",ranged,archerClass,Caption("Range"),melee);
@@ -69,14 +72,15 @@ public sealed partial class HunterForm
         var healingRow=CompactRow("Healing skills",autoHealingSkills,healingSkillKeys);
         var thresholdRow=CompactRow("Heal below",compactHealBelow,Caption("%   Range"),partyHealRange);
         foreach(var row in new[]{tankRow,targetRow,combatRow,skillRow,healingRow,thresholdRow})CompactAdd(operating,row);
-        autoHeal.Text="HP items";autoMana.Text="MP items";
+        autoHeal.Text="HP";autoMana.Text="MP";
         CompactAdd(recovery,CompactRow("Items",autoHeal,healBelow,Caption("%"),autoMana,manaBelow,Caption("%")));
         healthSkillCondition.Text="Use at HP ≤";
         var selfRow=CompactRow("Self-heal skills",healthSkillCondition,healthSkillPercent,Caption("%"));CompactAdd(recovery,selfRow);
         manaReserve.Width=170;manaReserve.TickStyle=TickStyle.None;
+        manaReserveValue.Padding=Padding.Empty;
         CompactAdd(recovery,CompactRow("Mana reserve",manaReserve,manaReserveValue));
         var deathSettings=CompactCard("DEATH RECOVERY");CompactAdd(settings,deathSettings);
-        autoRevive.Text="Auto revive + return along saved route";farmOnArrival.Text="Resume farming on arrival";
+        autoRevive.Text="Revive + return to anchor";farmOnArrival.Text="Resume farming on arrival";
         CompactAdd(deathSettings,CompactRow("On death",autoRevive));
         CompactAdd(deathSettings,CompactRow("Revival",Caption("Delay (s)"),revivalDelaySeconds,Caption("Key"),reviveKey));
         CompactAdd(deathSettings,CompactRow("After return",farmOnArrival));
@@ -105,6 +109,18 @@ public sealed partial class HunterForm
         bool expanded=false;toggle.Click+=(_,_)=>{expanded=!expanded;advanced.Visible=expanded;toggle.Text=expanded?"−  Advanced settings":"+  Advanced settings";};
         var updates=new Button{Text="Updates",AutoSize=true};updates.Click+=(_,_)=>OpenUpdates();
         var actions=CompactFlow(toggle,updates);actions.Name="setupActions";CompactAdd(settings,actions);CompactAdd(settings,advanced);
+        // Retain every bound control and the settings lock; arrange the same
+        // cards into independent columns so hidden healer rows leave no gap.
+        settings.Controls.Clear();settings.RowStyles.Clear();settings.ColumnStyles.Clear();
+        settings.ColumnCount=2;settings.RowCount=1;
+        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
+        settings.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var combatColumn=CompactTable();combatColumn.Name="fieldCombatColumn";combatColumn.Margin=new Padding(0,0,5,0);
+        var recoveryColumn=CompactTable();recoveryColumn.Name="fieldRecoveryColumn";recoveryColumn.Margin=new Padding(5,0,0,0);
+        CompactAdd(combatColumn,operating);CompactAdd(combatColumn,actions);CompactAdd(combatColumn,advanced);
+        CompactAdd(recoveryColumn,recovery);CompactAdd(recoveryColumn,deathSettings);
+        settings.Controls.Add(combatColumn,0,0);settings.Controls.Add(recoveryColumn,1,0);
         healerMode.Visible=false;groupEnabled.Visible=false;
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } layout)
         {if(layout.Controls.OfType<FlowLayoutPanel>().FirstOrDefault() is { } header)header.Visible=false;layout.RowStyles[0]=new RowStyle(SizeType.Absolute,0);}

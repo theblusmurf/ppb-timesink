@@ -1,5 +1,17 @@
 # Release notes
 
+## Release1.67
+
+- Applied the selected Field Console interface: deep forest surfaces, brass
+  accents, compact square controls, and horizontal navigation.
+- Setup now places combat controls beside recovery and reserve settings.
+  Navigation has its own top-level button; Monitor and Advanced retain page
+  selectors. Existing settings, recovery setup and running-state locks remain.
+- Added compact HP/MP bars to the status strip using the existing health and
+  mana readings. Unknown or disconnected values display as unknown.
+- Updated the hotkey index and verified all navigation destinations, compact
+  modes, saved settings, minimum-size layout and offline regression checks.
+
 ## Release1.66
 
 - Setup > Updates now reads the public theblusmurf/PoteHunter-Releases feed.

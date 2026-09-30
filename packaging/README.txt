@@ -1,4 +1,8 @@
-PoteHunter - Compact Healbot UI
+PoteHunter - Field Console
+
+Forest-and-brass theme with top navigation, side-by-side Setup cards, and
+HP/MP status bars. Navigation now has its own top-level button. Monitor and
+Advanced use page selectors beside the page heading. Hover HP/MP for details.
 
 Extract the entire folder and run PoteHunter.exe or Start-Fixed-Detection.cmd.
 Normal executable and packaged launcher starts enable verified native read/input.
@@ -23,7 +27,7 @@ See COMPACT-UI.md for details and validation limits.
 
 Death recovery (Setup, combat modes):
 - Confirmed 0 HP is death. Auto recovery also interrupts resting when HP hits 0.
-- Auto revive + return along saved route: on revives and returns; off stops on death.
+- Revive + return to anchor: on revives and returns; off stops on death.
 - Recognize Revive button is on by default. It clicks only a recognized button,
   then waits for living HP. Turn it off to use the configured revival key.
 - Visual revival waits at least 2 seconds after death, then sends up to three centre opening

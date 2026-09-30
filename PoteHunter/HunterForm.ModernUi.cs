@@ -16,18 +16,17 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    // 1970s-inspired palette: plum shadows, avocado surfaces, mustard
-    // controls, burnt-orange actions, and warm paper text.
-    static readonly Color UiWindow = Color.FromArgb(40, 31, 38);
-    static readonly Color UiSidebar = Color.FromArgb(55, 42, 43);
-    static readonly Color UiSurface = Color.FromArgb(73, 58, 46);
-    static readonly Color UiRaised = Color.FromArgb(96, 78, 48);
-    static readonly Color UiBorder = Color.FromArgb(137, 111, 62);
-    static readonly Color UiText = Color.FromArgb(249, 233, 190);
-    static readonly Color UiMuted = Color.FromArgb(205, 177, 122);
-    static readonly Color UiAccent = Color.FromArgb(219, 133, 53);
-    static readonly Color UiAccentDark = Color.FromArgb(111, 89, 38);
-    static readonly Color UiDanger = Color.FromArgb(177, 73, 67);
+    // Field Console: forest surfaces, brass accents and quiet status colors.
+    static readonly Color UiWindow = Color.FromArgb(17, 28, 24);
+    static readonly Color UiSidebar = Color.FromArgb(26, 41, 34);
+    static readonly Color UiSurface = Color.FromArgb(26, 41, 34);
+    static readonly Color UiRaised = Color.FromArgb(34, 54, 43);
+    static readonly Color UiBorder = Color.FromArgb(55, 80, 62);
+    static readonly Color UiText = Color.FromArgb(227, 235, 218);
+    static readonly Color UiMuted = Color.FromArgb(169, 185, 165);
+    static readonly Color UiAccent = Color.FromArgb(201, 183, 121);
+    static readonly Color UiAccentDark = Color.FromArgb(65, 76, 43);
+    static readonly Color UiDanger = Color.FromArgb(215, 137, 115);
 
     /// <summary>
     /// Rehomes the constructor-built controls in the compact application shell.
@@ -41,8 +40,8 @@ public sealed partial class HunterForm
         Font = new Font("Segoe UI", 10f);
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
-        MinimumSize = new Size(900, 640);
-        Size = new Size(980, 700);
+        MinimumSize = new Size(960, 680);
+        Size = new Size(1040, 760);
         BackColor = UiWindow;
         ForeColor = UiText;
         Padding = Padding.Empty;
@@ -72,7 +71,7 @@ public sealed partial class HunterForm
         tabs.SelectedIndex = 0;
         var indexPage=new TabPage("Index"){AutoScroll=true,Padding=new Padding(16)};
         indexPage.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(620,0),Text=
-            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PoteHunter in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nIn Advanced > Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Auto revive + return along saved route and Resume farming on arrival. Enable alternatives in Navigation and record them from the same revival start for occupied-spot fallback. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
+            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PoteHunter in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nIn Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Revive + return to anchor and Resume farming on arrival. Enable alternatives in Navigation and record them from the same revival start for occupied-spot fallback. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
         tabs.TabPages.Add(indexPage);
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } groupLayout &&
             groupLayout.Controls.OfType<FlowLayoutPanel>().FirstOrDefault() is { } groupHeader)
@@ -83,158 +82,104 @@ public sealed partial class HunterForm
 
         var shell = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            RowCount = 1,
-            ColumnCount = 2,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty,
+            Name = "fieldConsoleShell", Dock = DockStyle.Fill, RowCount = 5, ColumnCount = 1,
+            Margin = Padding.Empty, Padding = new Padding(14, 0, 14, 10), BackColor = UiWindow
+        };
+        shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        foreach(int height in new[]{46, 40, 68})shell.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
+        shell.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        shell.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
+
+        var masthead = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty,
             BackColor = UiWindow
         };
-        shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 164));
-        shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        var sidebar = new TableLayoutPanel
+        masthead.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        masthead.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,130));
+        masthead.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,92));
+        masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        masthead.Controls.Add(new Label
         {
-            Dock = DockStyle.Fill,
-            RowCount = 3,
-            ColumnCount = 1,
-            Padding = new Padding(10, 18, 10, 14),
-            BackColor = UiSidebar
-        };
-        sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-        sidebar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        sidebar.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
-        sidebar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-
-        var brand = new Label
+            Text = "POTEHUNTER  /  FIELD CONSOLE", Dock = DockStyle.Fill,
+            Font = new Font("Consolas",13f,FontStyle.Bold), ForeColor = UiAccent,
+            TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
+        },0,0);
+        masthead.Controls.Add(new Label
         {
-            Text = "PoteHunter",
-            AutoSize = false,
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 13),
-            ForeColor = UiText,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(8, 0, 0, 0)
+            Text = AppUpdates.CurrentVersion, Dock = DockStyle.Fill,
+            Font = new Font("Consolas",9f), ForeColor = UiMuted,
+            TextAlign = ContentAlignment.MiddleRight, Margin = new Padding(0,0,14,0)
+        },1,0);
+        var connectionBadge = new Label
+        {
+            Name = "fieldConnectionStatus", Size = new Size(92,26), Anchor = AnchorStyles.Right,
+            TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Consolas",9f),
+            BackColor = UiRaised, ForeColor = UiMuted, Text = "Offline", Margin = Padding.Empty
         };
-        sidebar.Controls.Add(brand, 0, 0);
+        masthead.Controls.Add(connectionBadge,2,0);shell.Controls.Add(masthead,0,0);
 
         var nav = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            AutoScroll = true,
-            Padding = new Padding(0, 8, 0, 8),
-            Margin = Padding.Empty,
-            BackColor = UiSidebar
+            Name = "fieldNavigation", Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Margin = Padding.Empty, BackColor = UiWindow
         };
-        sidebar.Controls.Add(nav, 0, 1);
-
-        var shortcut = new Label
-        {
-            Text = "F8   START\nF9   STOP",
-            Dock = DockStyle.Fill,
-            ForeColor = UiMuted,
-            Font = new Font("Segoe UI", 8.5f),
-            Padding = new Padding(8, 7, 0, 0)
-        };
-        sidebar.Controls.Add(shortcut, 0, 2);
-
-        var main = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            RowCount = 3,
-            ColumnCount = 1,
-            Padding = new Padding(18, 14, 18, 12),
-            BackColor = UiWindow
-        };
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 66));
-        main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-
+        shell.Controls.Add(nav,0,1);
         var header = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
-            Margin = new Padding(0, 0, 0, 10),
-            BackColor = UiWindow
+            Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1,
+            Margin = new Padding(0,6,0,8), BackColor = UiWindow
         };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,180));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.RowStyles.Add(new RowStyle(SizeType.Percent,100));
-
-        var heading = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Margin = Padding.Empty };
-        heading.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
-        heading.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        var heading = new TableLayoutPanel {Dock=DockStyle.Fill,RowCount=2,ColumnCount=1,Margin=Padding.Empty};
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
-        var pageTitle = new Label { Dock = DockStyle.Fill, Text = "Hunt setup", Font = new Font("Segoe UI Semibold", 18), ForeColor = UiText, TextAlign = ContentAlignment.BottomLeft };
-        var pageSubtitle = new Label { Dock = DockStyle.Fill, Text = "Choose targets, ranges and automatic actions.", Font = new Font("Segoe UI", 9), ForeColor = UiMuted, TextAlign = ContentAlignment.TopLeft };
-        heading.Controls.Add(pageTitle, 0, 0);
-        heading.Controls.Add(pageSubtitle, 0, 1);
-        header.Controls.Add(heading, 0, 0);
-
-        var connectionBadge = new Label
-        {
-            AutoSize = false,
-            Size = new Size(78, 28),
-            Margin = new Padding(8, 13, 8, 0),
-            TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI Semibold", 8),
-            BackColor = UiRaised,
-            ForeColor = UiMuted,
-            Text = "Offline"
-        };
-        header.Controls.Add(connectionBadge, 1, 0);
-
-        var actions = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            Anchor = AnchorStyles.Right,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Margin = new Padding(0, 6, 0, 0)
-        };
-        actions.Controls.AddRange([connect, start, stop]);
-        connect.Text="Connect";start.Text="Start";stop.Text="Stop";
-        foreach(var action in new[]{connect,start,stop}){action.AutoSize=false;action.Size=new Size(92,34);action.Margin=new Padding(4,0,0,0);}
-        header.Controls.Add(actions, 2, 0);
-        main.Controls.Add(header, 0, 0);
-        main.Controls.Add(tabs, 0, 1);
+        heading.RowStyles.Add(new RowStyle(SizeType.Percent,55));
+        heading.RowStyles.Add(new RowStyle(SizeType.Percent,45));
+        var pageTitle = new Label {Dock=DockStyle.Fill,Text="Setup",Font=new Font("Segoe UI Semibold",17f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
+        var pageSubtitle = new Label {Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=UiMuted,TextAlign=ContentAlignment.TopLeft,Margin=Padding.Empty};
+        heading.Controls.Add(pageTitle,0,0);heading.Controls.Add(pageSubtitle,0,1);header.Controls.Add(heading,0,0);
+        var pagePickers = new Panel {Dock=DockStyle.Fill,Margin=new Padding(4,12,8,0),BackColor=UiWindow};
+        header.Controls.Add(pagePickers,1,0);
+        var actions = new FlowLayoutPanel {AutoSize=true,Anchor=AnchorStyles.Right,WrapContents=false,Margin=Padding.Empty};
+        actions.Controls.AddRange([connect,start,stop]);connect.Text="Connect";start.Text="Start";stop.Text="Stop";
+        foreach(var action in new[]{connect,start,stop})
+        {action.AutoSize=false;action.Size=new Size(82,32);action.Margin=new Padding(5,0,0,0);}
+        header.Controls.Add(actions,2,0);shell.Controls.Add(header,0,2);shell.Controls.Add(tabs,0,3);
 
         var footer = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
-            Margin = new Padding(0, 8, 0, 0),
-            Padding = new Padding(12, 0, 12, 0),
-            BackColor = UiSurface
+            Dock=DockStyle.Fill,ColumnCount=5,RowCount=1,Margin=new Padding(0,6,0,0),
+            Padding=new Padding(9,0,9,0),BackColor=UiSurface
         };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 34));
-        status.Dock = DockStyle.Fill;
-        status.ForeColor = UiText;
-        status.TextAlign = ContentAlignment.MiddleLeft;
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,156));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,156));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,144));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute,24));
+        footer.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        status.Dock=DockStyle.Fill;status.ForeColor=UiMuted;status.TextAlign=ContentAlignment.MiddleLeft;
+        status.Font=new Font("Segoe UI",9f);status.AutoEllipsis=true;
         if(string.IsNullOrWhiteSpace(status.Text))status.Text="Connect the game to begin.";
-        status.AutoEllipsis=true;
-        position.Dock = DockStyle.Fill;
-        position.ForeColor = UiMuted;
-        position.TextAlign = ContentAlignment.MiddleRight;
-        position.AutoEllipsis=true;
-        var help = new Label { Text = "?", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI Semibold", 11), ForeColor = UiMuted, Cursor = Cursors.Help };
-        priorityHint.SetToolTip(help, SanitizeDisplayText(hint.Text));
-        footer.Controls.Add(status, 0, 0);
-        footer.Controls.Add(position, 1, 0);
-        footer.Controls.Add(help, 2, 0);
-        main.Controls.Add(footer, 0, 2);
-
-        shell.Controls.Add(sidebar, 0, 0);
-        shell.Controls.Add(main, 1, 0);
-
+        var hpMeter=new FieldVitalMeter("HP",Color.FromArgb(179,109,91));
+        var mpMeter=new FieldVitalMeter("MP",Color.FromArgb(110,150,159));
+        footer.Controls.Add(status,0,0);footer.Controls.Add(hpMeter,1,0);footer.Controls.Add(mpMeter,2,0);
+        footer.Controls.Add(new Label{Text="F8 START / F9 STOP",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=UiMuted,Font=new Font("Consolas",8f)},3,0);
+        var help=new Label{Text="?",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=UiAccent,Cursor=Cursors.Help};
+        priorityHint.SetToolTip(help,SanitizeDisplayText(hint.Text));footer.Controls.Add(help,4,0);shell.Controls.Add(footer,0,4);
+        // Keep the original reading label alive for the existing tick handler.
+        // Meters only format these readings; they never query or control the game.
+        position.Visible=false;footer.Controls.Add(position,0,0);
+        void RefreshVitals()
+        {
+            hpMeter.SetReading(connected?position.Text:"");mpMeter.SetReading(connected?position.Text:"");
+            string details=connected?priorityHint.GetToolTip(position)??"":"Connect the game to read vitals.";
+            priorityHint.SetToolTip(hpMeter,hpMeter.ReadingText+"\n"+details);
+            priorityHint.SetToolTip(mpMeter,mpMeter.ReadingText+"\n"+details);
+        }
+        position.TextChanged+=(_,_)=>RefreshVitals();
         var subtitles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Hunt setup"] = "Choose targets, ranges and automatic actions.",
@@ -248,21 +193,21 @@ public sealed partial class HunterForm
             ["Ranged packs"] = "Tag several monsters, gather them, then clear."
         };
         var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
-        var advancedPages = new[]{protectionPage,navigationPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Advanced",advancedPages),("Index",new[]{indexPage})};
+        var advancedPages = new[]{protectionPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
+        var sections=new[]{("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Navigation",new[]{navigationPage}),("Advanced",advancedPages),("Index",new[]{indexPage})};
         var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
         foreach(var (name,pages) in sections)
         {
             var button=new Button{Text=name,Tag=pages[0],FlatStyle=FlatStyle.Flat,BackColor=UiSidebar,ForeColor=UiMuted,
-                TextAlign=ContentAlignment.MiddleLeft,Size=new Size(138,40),Margin=new Padding(0,2,0,2),Padding=new Padding(10,0,0,0)};
+                Name="fieldNav"+name,TextAlign=ContentAlignment.MiddleCenter,Size=new Size(112,34),Margin=new Padding(0,0,5,0),Padding=Padding.Empty,Font=new Font("Consolas",10f)};
             button.FlatAppearance.BorderSize=0;button.Cursor=Cursors.Hand;
             button.FlatAppearance.MouseOverBackColor=UiRaised;
-            RoundControl(button,8);nav.Controls.Add(button);
+            RoundControl(button,4);nav.Controls.Add(button);
             ComboBox? picker=null;
             if(pages.Length>1)
             {
-                picker=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="Text",Width=138,Visible=false,Margin=new Padding(0,4,0,12)};
-                picker.Items.AddRange(pages);picker.SelectedIndex=0;nav.Controls.Add(picker);
+                picker=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="Text",Name="fieldPicker"+name,Width=166,Visible=false,Dock=DockStyle.Top,Margin=Padding.Empty};
+                picker.Items.AddRange(pages);picker.SelectedIndex=0;pagePickers.Controls.Add(picker);
                 picker.SelectionChangeCommitted+=(_,_)=>{if(picker.SelectedItem is TabPage page)tabs.SelectedTab=page;};
             }
             button.Click+=(_,_)=>tabs.SelectedTab=picker?.SelectedItem as TabPage??pages[0];
@@ -286,8 +231,8 @@ public sealed partial class HunterForm
         StyleActionButton(connect, UiRaised, UiText);
         StyleActionButton(start, UiAccent, UiWindow);
         start.Font=new Font("Segoe UI Semibold",9f);
-        RoundControl(connectionBadge,10);
-        RoundControl(footer,8);
+        RoundControl(connectionBadge,4);
+        RoundControl(footer,4);
         setupPage.BackColor=UiWindow;
         supportPage.BackColor=UiWindow;
         StyleActionButton(stop, UiRaised, UiDanger);
@@ -303,6 +248,7 @@ public sealed partial class HunterForm
         timer.Tick += (_, _) =>
         {
             compactMode.Enabled = !working && !busy;
+            RefreshVitals();
             if (working)
             {
                 connectionBadge.Text = "Hunting";
@@ -312,7 +258,7 @@ public sealed partial class HunterForm
             else if (busy)
             {
                 connectionBadge.Text = "Working";
-                connectionBadge.BackColor = Color.FromArgb(116, 88, 36);
+                connectionBadge.BackColor = Color.FromArgb(87, 76, 42);
                 connectionBadge.ForeColor = Color.White;
             }
             else if (connected)
@@ -368,7 +314,7 @@ public sealed partial class HunterForm
                 combo.FlatStyle = FlatStyle.Flat;
                 if(combo.DropDownStyle==ComboBoxStyle.DropDownList)
                 {
-                    combo.DrawMode=DrawMode.OwnerDrawFixed;combo.ItemHeight=24;
+                    combo.DrawMode=DrawMode.OwnerDrawFixed;combo.ItemHeight=22;
                     combo.DrawItem+=(_,e)=>
                     {
                         using var brush=new SolidBrush((e.State&DrawItemState.Selected)!=0?UiRaised:UiSurface);
@@ -460,11 +406,11 @@ public sealed partial class HunterForm
         button.BackColor = background;
         button.ForeColor = foreground;
         button.Padding = new Padding(6, 2, 6, 2);
-        button.MinimumSize = new Size(0, 34);
+        button.MinimumSize = new Size(0, 30);
         button.Cursor = Cursors.Hand;
         button.FlatAppearance.MouseOverBackColor=ControlPaint.Light(background,0.12f);
         button.FlatAppearance.MouseDownBackColor=ControlPaint.Dark(background,0.10f);
-        RoundControl(button,7);
+        RoundControl(button,4);
     }
 
     static string SanitizeDisplayText(string text) => text
