@@ -1,5 +1,23 @@
 # Release notes
 
+## Release1.62
+
+- Fixed a missed-loot attribution path: enemies killed as part of an engaged
+  group were removed from the encounter without notifying the loot tracker.
+  Confirmed zero HP now reports every enemy with our attack/damage evidence,
+  including collateral kills, before removing it. Unknown, unrelated,
+  defensive-only, ambiguous, or replaced identities are not credited as kills.
+- Deduplicate kill events by zone/id/generation across the loot session, so the
+  encounter and selected-target paths cannot count the same death twice.
+  Drops seen just before a collateral death can now be matched from the buffer.
+- Added per-pile gold credit logs with identity, amount, source and running
+  total to support live reconciliation. Gold remains detected-drop estimates;
+  the reader does not yet provide confirmed wallet or pickup-message data.
+- User reported 6,154 gained versus 5,743 tracked (411 short). That exact live
+  difference cannot be reconstructed from the one-second observation log.
+  Offline checks reproduce a 411-gold buffered collateral scenario, duplicate
+  callbacks and identity/unknown-health exclusions. Live accuracy remains unverified.
+
 ## Release1.61
 
 - Added an independent Show route overlay toggle in Advanced > Navigation.

@@ -28,6 +28,7 @@ public sealed class LootTracker
     readonly List<PendingKill> pending=[];
     readonly List<LootTrackerDropSummary> recent=[];
     readonly HashSet<LootIdentity> known=[];
+    readonly HashSet<(int Zone,uint Id,uint Generation)> recordedKills=[];
     readonly Dictionary<LootIdentity,UnmatchedDrop> unmatched=[];
     readonly DateTime sessionStartedUtc;
     readonly Dictionary<string,long> rateBaseline=TrackedLootOrder.ToDictionary(name=>name,_=>0L,StringComparer.OrdinalIgnoreCase);
@@ -134,7 +135,7 @@ public sealed class LootTracker
         {
             if(zone!=targetZone)ResetLocked(targetZone);
             DateTime now=DateTime.UtcNow;
-            if(pending.Any(k=>k.Source==source && k.Id==target.Id && k.Generation==target.Generation && now-k.SeenUtc<TimeSpan.FromSeconds(5)))return;
+            if(!recordedKills.Add((targetZone,target.Id,target.Generation)))return;
             sources[source].Kills++;
             var kill=new PendingKill(source,target.Id,target.Generation,position,now,targetZone);
             pending.Add(kill);
@@ -236,6 +237,11 @@ public sealed class LootTracker
         if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
         known.Add(key);
         unmatched.Remove(key);
+        if(trackedName=="Gold")
+        {
+            try{TraceLog.Record("loot tracker gold credited",new{key.Zone,key.KeyA,key.KeyB,Amount=amount,Source=match.Source,KillId=match.Id,KillGeneration=match.Generation,Total=trackedLoot["Gold"]});}
+            catch(IOException){}catch(UnauthorizedAccessException){}
+        }
     }
 
     public LootTrackerSnapshot Snapshot()
@@ -289,7 +295,7 @@ public sealed class LootTracker
         foreach(SourceState state in sources.Values){state.Kills=0;state.Drops=0;state.Items.Clear();}
         if(resetSession)
         {
-            known.Clear();
+            known.Clear();recordedKills.Clear();
             foreach(string name in TrackedLootOrder)trackedLoot[name]=0;
             ResetRateWindowLocked(DateTime.UtcNow);
         }
@@ -332,6 +338,7 @@ public sealed class LootTracker
         if(amountTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
             throw new Exception("Gold amount was not accumulated from the special-drop id.");
         GoldRecordSelfTest(mimic);
+        GroupDeathSelfTest(mimic);
         var baselineGold=new GroundItem(30,30,unchecked((int)(0x80000000u|115u)),"Special drop",new(0,0),0);
         var dedupeTracker=new LootTracker();
         dedupeTracker.ObserveDrops([baselineGold],8,new(0,0),10);
@@ -390,6 +397,58 @@ public sealed class LootTracker
         var resetTimed=timerTracker.Snapshot();
         if(resetTimed.TrackedLoot.First(item=>item.Name=="Gold").Count!=115 || resetTimed.HourlyLoot.Any(item=>item.PerHour!=0))
             throw new Exception("Resetting the loot timer changed totals or retained the old rate window.");
+    }
+
+    static void GroupDeathSelfTest(Entity mimic)
+    {
+        var tracker=new LootTracker();
+        tracker.ObserveDrops([],8,new(0,0),40);
+        tracker.RecordKill(mimic with {Position=new(20,0)},new(20,0),8);
+        var piles=new[] {100,103,99,109}.Select((amount,index)=>new GroundItem((uint)(100+index),1,
+            unchecked((int)(0x80000000u|(uint)amount)),"Special drop",new(0,0),0)).ToArray();
+        tracker.ObserveDrops(piles,8,new(0,0),40);
+        long Gold()=>tracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count;
+        if(Gold()!=0)throw new Exception("Unattributed collateral piles were prematurely credited.");
+        var collateral=mimic with {Generation=5};
+        var encounter=new Encounter();encounter.Begin();
+        encounter.Observe([collateral],new Dictionary<uint,Health>{{collateral.Id,new(100,100)}},new(0,0),10,
+            (_,_)=>true,mayClaimCollateral:_=>true,attackHeld:true,attackReach:6);
+        encounter.Observe([collateral],new Dictionary<uint,Health>{{collateral.Id,new(90,100)}},new(0,0),10,
+            (_,_)=>true,mayClaimCollateral:_=>true,attackHeld:true,attackReach:6);
+        if(!encounter.IsEngaged(collateral))throw new Exception("Collateral damage did not establish ownership.");
+        void Register(Entity entity)=>tracker.RecordKill(entity,entity.Position,8);
+        encounter.Observe([collateral],new Dictionary<uint,Health>{{collateral.Id,new(0,100)}},new(0,0),10,
+            (_,_)=>true,confirmedKill:Register);
+        if(Gold()!=411)throw new Exception("Confirmed collateral death did not credit all 411 buffered gold.");
+        tracker.pending.Clear(); // Simulate an expired attribution window without a wall-clock wait.
+        tracker.RecordKill(collateral,collateral.Position,8);
+        tracker.ObserveDrops(piles,8,new(0,0),40);
+        if(Gold()!=411 || tracker.Snapshot().Sources.First(item=>item.Source=="Mimic").Kills!=2)
+            throw new Exception("A repeated kill event changed session counts.");
+        tracker.RecordKill(collateral with {Generation=6},collateral.Position,8);
+        if(tracker.Snapshot().Sources.First(item=>item.Source=="Mimic").Kills!=3)
+            throw new Exception("A fresh generation was suppressed as a duplicate kill.");
+
+        int callbacks=0;
+        void Observe(Encounter fight,Entity[] entities,Health hp)=>fight.Observe(entities,
+            new Dictionary<uint,Health>{{collateral.Id,hp}},new(0,0),10,(_,_)=>true,confirmedKill:_=>callbacks++);
+        var defensive=new Encounter();defensive.MarkDefensive(collateral,new(100,100));
+        defensive.MarkAttack(collateral,default);
+        Observe(defensive,[collateral],new(0,100));
+        if(callbacks!=0)throw new Exception("Defensive-only or unknown-HP attack credited a kill.");
+        var owned=new Encounter();owned.MarkAttack(collateral,new(100,100));
+        Observe(owned,[collateral],default);
+        if(callbacks!=0)throw new Exception("Unknown HP credited a kill.");
+        Observe(owned,[],new(0,100));Observe(owned,[],new(0,100));
+        if(callbacks!=1)throw new Exception("A confirmed missing owned target was not credited exactly once.");
+        var replaced=new Encounter();replaced.MarkAttack(collateral,new(100,100));
+        Observe(replaced,[collateral with {Generation=6}],new(0,100));
+        var ambiguous=new Encounter();ambiguous.MarkAttack(collateral,new(100,100));
+        Observe(ambiguous,[collateral,collateral with {Generation=6}],new(0,100));
+        if(callbacks!=1)throw new Exception("Replaced or ambiguous identities credited a kill.");
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"loot-group-death-checks.json"),
+            System.Text.Json.JsonSerializer.Serialize(new {Passed=true,BufferedGold=411,DuplicateProtected=true,
+                UnknownHealthExcluded=true,DefensiveOnlyExcluded=true,ReplacedIdentityExcluded=true,AmbiguousIdentityExcluded=true}));
     }
 
     static void GoldRecordSelfTest(Entity mimic)

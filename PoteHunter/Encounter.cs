@@ -48,7 +48,7 @@ public sealed class Encounter
 
     public void Observe(IEnumerable<Entity> entities, IReadOnlyDictionary<uint, Health> health, Vec player, double radius,
         Func<Entity, Health, bool> mayJoin, Func<Entity, Health, bool>? mayRemainEngaged = null, bool clearNearby = true,
-        Func<Entity, bool>? mayClaimCollateral = null, bool attackHeld = false, double attackReach = 0)
+        Func<Entity, bool>? mayClaimCollateral = null, bool attackHeld = false, double attackReach = 0,Action<Entity>? confirmedKill=null)
     {
         ArgumentNullException.ThrowIfNull(entities);
         ArgumentNullException.ThrowIfNull(health);
@@ -83,7 +83,12 @@ public sealed class Encounter
             }
             if (visible.Keys.Any(other => other.Id == identity.Id && other != identity))
             { members.Remove(identity); continue; }
-            if (health.GetValueOrDefault(identity.Id).Dead) { members.Remove(identity); continue; }
+            if (health.GetValueOrDefault(identity.Id).Dead)
+            {
+                if(member.Engaged && (member.AttackSent || member.MayHaveReceivedOurDamage))
+                    confirmedKill?.Invoke(visible.GetValueOrDefault(identity) ?? member.Entity);
+                members.Remove(identity);continue;
+            }
             member.Visible = false;
             member.SafeToAttack = false;
             if (!clearNearby) member.LegacyEligible = false;
@@ -175,7 +180,12 @@ public sealed class Encounter
     public bool IsEngaged(Entity entity) => members.TryGetValue(Identity.Of(entity), out var member) && member.Engaged;
 
     // Call only after our attack input succeeds against the freshly validated target.
-    public void MarkAttack(Entity entity, Health health) => EnrollEngaged(entity,health);
+    public void MarkAttack(Entity entity, Health health)
+    {
+        if (!entity.Monster || entity.PriorityLootObject || !entity.Position.Finite || !health.Known || health.Dead) return;
+        EnrollEngaged(entity,health);
+        if(members.TryGetValue(Identity.Of(entity),out var member))member.AttackSent=true;
+    }
 
     // The caller has measured incoming player damage and selected a permitted
     // defensive candidate. Enrollment keeps that fight ahead of fresh hunting;
@@ -254,6 +264,7 @@ public sealed class Encounter
         public Health Health = health;
         public bool ObservedFullHealth;
         public bool MayHaveReceivedOurDamage;
+        public bool AttackSent;
         public bool Engaged;
         public bool Visible;
         public bool Nearby;
@@ -527,4 +538,3 @@ public sealed class Encounter
             throw new Exception("Reset retained combat engagement state.");
     }
 }
-

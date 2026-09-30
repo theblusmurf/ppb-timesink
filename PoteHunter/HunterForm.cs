@@ -1071,7 +1071,8 @@ public sealed partial class HunterForm : Form
             mayRemainEngaged:(entity,hp)=>WithinBoundary(entity,true) && TargetGuardReason(entity,hp,position,options)==null,
             clearNearby:options.ClearNearbyEnemies && !healingRestPending && !(options.LeaveAreaWhenEmpty && completionReturnPending),
             mayClaimCollateral:entity=>(!RangedPullEnabled(options) || !rangedTagging) && CombatCourtesy.PlayerNear(entity.Position,entities,guardSelfId,Math.Max(6,(double)options.OtherPlayerRadius))==null,
-            attackHeld:Input.BasicAttackHeld,attackReach:Encounter.CollateralReach(RangedPullEnabled(options) ? (double)options.RangedMeleeAttackRange : (double)options.MeleeRange));
+            attackHeld:Input.BasicAttackHeld,attackReach:Encounter.CollateralReach(RangedPullEnabled(options) ? (double)options.RangedMeleeAttackRange : (double)options.MeleeRange),
+            confirmedKill:entity=>lootTracker.RecordKill(entity,entity.Position,runZone??navigationZone));
         string state=$"{encounter.EngagedCount}:{encounter.HasUnresolvedEngaged}:"+string.Join(",",encounter.EngagedCandidates.OrderBy(e=>e.Id).Select(e=>$"{e.Id}:{e.Generation}:{e.Address}"));
         if(state!=lastEngagementState)
         {
