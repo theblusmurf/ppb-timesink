@@ -44,6 +44,7 @@ try {
         throw "Build.ps1 failed with exit code $LASTEXITCODE."
     }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'packaging/README.txt') -Destination (Join-Path $applicationRoot 'README.txt')
+    Set-Content -LiteralPath (Join-Path $applicationRoot 'release-version.txt') -Value $Version -Encoding utf8
 
     New-Item -ItemType Directory -Path (Split-Path -Parent $testRoot) | Out-Null
     Copy-Item -LiteralPath $applicationRoot -Destination $testRoot -Recurse
@@ -127,4 +128,3 @@ finally {
         Remove-Item -LiteralPath $resolvedTemporaryRoot -Recurse -Force
     }
 }
-

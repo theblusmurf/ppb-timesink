@@ -1,5 +1,29 @@
 # Release notes
 
+## Release1.65
+
+- Added a Windows x64 installer with Start menu/optional desktop shortcuts and
+  an uninstaller. Installation/upgrades preserve existing settings; user-created
+  routes, repair/revival profiles and logs remain. Portable ZIP is still offered.
+- Added Setup > Updates for the private theblusmurf/PoteHunter GitHub releases.
+  Save a repository-scoped Contents read token once in Windows Credential Manager.
+  Optional startup checks report newer official releases; download/install is
+  user-initiated while hunting and setup/tests are stopped. Installer byte size
+  and GitHub SHA256 digest are verified before launch; settings/tokens never ship
+  in release packages. No unattended restarts or live input during checks.
+- Added numeric-version/stable-release/digest selection tests and Windows CI
+  install, repeat-upgrade and uninstall tests with existing user-data sentinels.
+  Live authenticated updater access still needs the user's locally configured token.
+- Normal PoteHunter.exe launches now enable verified native input and read,
+  matching Start-Fixed-Detection.cmd and Start-PoteHunter.ps1. No launch flags
+  are needed when opening the executable directly. Client connection/signature,
+  Windows export, foreground window and identity checks still gate input.
+- Explicit read-only launches and bounded diagnostic modes retain their existing
+  opt-in rules. Added startup-policy regressions for normal launches, both
+  launcher flag orders, read-only, incomplete/unknown flags and diagnostics.
+  Updated packaged startup instructions. Local build, offline/input checks and
+  UI checks passed without live game input; GitHub packaged checks also apply.
+
 ## Release1.64
 
 - Fixed repair setup being delayed behind full-screen automatic recognition.

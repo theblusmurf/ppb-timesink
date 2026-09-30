@@ -1,6 +1,18 @@
 PoteHunter - Compact Healbot UI
 
-Extract the entire folder and run Start-Fixed-Detection.cmd.
+Extract the entire folder and run PoteHunter.exe or Start-Fixed-Detection.cmd.
+Normal executable and packaged launcher starts enable verified native read/input.
+Client connection and Windows export validation are still required before input.
+Or download PoteHunter-Release1.x-Setup.exe for an installed copy with shortcuts
+and an uninstaller. Setup preserves existing settings and saved route/profile files.
+Setup > Updates connects to the private theblusmurf/PoteHunter release feed.
+Create a fine-grained GitHub token restricted to that repository with Contents:
+Read-only. Save it once in Updates; Windows Credential Manager stores it.
+Checks run at startup when enabled; download/install is offered for newer official
+releases. Stop hunting/tests first. Installer downloads are verified against the
+GitHub SHA256 digest before launch. No token is shipped in the app or logs.
+For first migration, close the app and copy settings.json, navigation-routes.json,
+repair-profile.json and revival-profile.json to the installed app folder if present.
 Copy your old settings.json before starting if you want to keep your preferences.
 Also preserve navigation-routes.json, repair-profile.json, and revival-profile.json
 (if configured).

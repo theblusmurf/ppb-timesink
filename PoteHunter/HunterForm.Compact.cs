@@ -103,7 +103,8 @@ public sealed partial class HunterForm
         }
         var toggle=new Button{Name="advancedSettingsToggle",Text="+  Advanced settings",AutoSize=true,Anchor=AnchorStyles.Left,Margin=new Padding(0,4,0,8)};
         bool expanded=false;toggle.Click+=(_,_)=>{expanded=!expanded;advanced.Visible=expanded;toggle.Text=expanded?"−  Advanced settings":"+  Advanced settings";};
-        var actions=CompactFlow(toggle);actions.Name="setupActions";CompactAdd(settings,actions);CompactAdd(settings,advanced);
+        var updates=new Button{Text="Updates",AutoSize=true};updates.Click+=(_,_)=>OpenUpdates();
+        var actions=CompactFlow(toggle,updates);actions.Name="setupActions";CompactAdd(settings,actions);CompactAdd(settings,advanced);
         healerMode.Visible=false;groupEnabled.Visible=false;
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } layout)
         {if(layout.Controls.OfType<FlowLayoutPanel>().FirstOrDefault() is { } header)header.Visible=false;layout.RowStyles[0]=new RowStyle(SizeType.Absolute,0);}

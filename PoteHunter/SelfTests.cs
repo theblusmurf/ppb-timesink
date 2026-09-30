@@ -14,6 +14,7 @@ static class SelfTests
             SkillHealthRuleChecks.Run(); SkillTargeting.SelfTest();
             GameWindow.SelfTest();
             CompatibilityChecks.Run();
+            AppUpdates.Checks();
             if (Math.Abs(Movement.Angle(new Vec(1, 0), new Vec(0, 1)) - Math.PI / 2) > 1e-9) throw new Exception("Quarter-turn angle");
             if (Math.Abs(Movement.Angle(new Vec(0, 1), new Vec(1, 0)) + Math.PI / 2) > 1e-9) throw new Exception("Reverse angle");
             if ((Movement.Rotate(new Vec(1, 0), Math.PI / 2) - new Vec(0, 1)).Length > 1e-9) throw new Exception("Rotation");

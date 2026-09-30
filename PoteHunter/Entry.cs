@@ -2,14 +2,17 @@ namespace PoteHunter;
 
 static class Entry
 {
+    internal static bool NativeInputForGui(string[] args)=>args.Length==0 ||
+        args.Length==2 && args.Contains("--native-read-compat") && args.Contains("--native-input-compat");
     [STAThread]
     static int Main(string[] args)
     {
         if (CommandLine.Run(args) is int exitCode) return exitCode;
 
-        // A separate, user-started GUI launch opts into the same verified reader.
+        // Normal executable launches use the same verified compatibility path
+        // as the packaged CMD/PowerShell launchers.
         // Diagnostic modes above keep their existing bounded-test opt-in rules.
-        bool inputCompatibility = args.Length == 2 && args.Contains("--native-read-compat") && args.Contains("--native-input-compat");
+        bool inputCompatibility = NativeInputForGui(args);
         PoteMemoryProbe.WindowsClientRead.Enabled = (args.Length == 1 && args[0] == "--native-read-compat") || inputCompatibility;
         WindowsClientInput.Enabled = inputCompatibility;
         void Startup(string step) => File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "startup-trace.txt"), DateTime.UtcNow.ToString("O") + " " + step + Environment.NewLine);
@@ -20,7 +23,7 @@ static class Entry
         ApplicationConfiguration.Initialize();
         Startup("Constructing hunter window");
         Application.ThreadException += (_, e) => { Input.Release(); MessageBox.Show(e.Exception.Message, "POTE Hunter"); };
-        var form = new HunterForm(); Startup("Running hunter window");
+        var form = new HunterForm();form.ConfigureUpdates(); Startup("Running hunter window");
         Application.Run(form); return 0;
     }
 }

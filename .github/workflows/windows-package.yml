@@ -70,6 +70,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+      - name: Build and test installer
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: ./Installer.ps1 -Version $env:PACKAGE_VERSION
+
       - name: Upload Windows package
         uses: actions/upload-artifact@v6
         with:
@@ -141,6 +147,6 @@ jobs:
             '--title', $releaseTitle,
             '--notes-file', $notesPath
           )
-          $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|sha256)$' } | ForEach-Object { $_.FullName })
+          $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|exe|sha256)$' } | ForEach-Object { $_.FullName })
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { throw "Release publishing failed with exit code $LASTEXITCODE." }

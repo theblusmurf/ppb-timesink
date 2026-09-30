@@ -46,6 +46,12 @@ internal static class CompatibilityChecks
 
     internal static void Run()
     {
+        if(!Entry.NativeInputForGui([]) || !Entry.NativeInputForGui(["--native-read-compat","--native-input-compat"]) ||
+            !Entry.NativeInputForGui(["--native-input-compat","--native-read-compat"]) ||
+            Entry.NativeInputForGui(["--native-read-compat"]) || Entry.NativeInputForGui(["--native-input-compat"]) ||
+            Entry.NativeInputForGui(["--self-test"]) || Entry.NativeInputForGui(["--connection-test"]) ||
+            Entry.NativeInputForGui(["--native-read-compat","--native-input-compat","--unknown"]))
+            throw new Exception("GUI compatibility defaults changed diagnostic or explicit read-only launch modes.");
         string current=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Guid.NewGuid().ToByteArray()));
         if(ClientCompatibility.SupportsRead(current) || WindowsClientInput.ConnectionBlockReason(true,true,current)==null)
             throw new Exception("An undiscovered patch was admitted without validation.");
