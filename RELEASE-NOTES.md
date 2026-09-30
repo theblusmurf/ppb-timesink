@@ -1,5 +1,17 @@
 # Release notes
 
+## Release1.66
+
+- Setup > Updates now reads the public theblusmurf/PoteHunter-Releases feed.
+  Checking, downloading and installing updates no longer require a GitHub token
+  or account. Token entry/storage code has been removed; previously saved Windows
+  credentials are left unused. Development source remains in the private repository.
+- Startup checks now work without credentials. Official-release selection,
+  installer byte-size/SHA256 verification and stopped-state installation remain.
+  Public feed outages/rate limits report a retry message without affecting hunting.
+- Added anonymous-client/feed checks and public distribution instructions.
+  Release files and patch notes are mirrored separately from the private source.
+
 ## Release1.65
 
 - Added a Windows x64 installer with Start menu/optional desktop shortcuts and

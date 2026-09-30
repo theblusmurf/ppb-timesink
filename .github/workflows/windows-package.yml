@@ -150,3 +150,11 @@ jobs:
           $arguments += (Get-ChildItem -LiteralPath 'release-assets' -File | Where-Object { $_.Name -match '\.(zip|exe|sha256)$' } | ForEach-Object { $_.FullName })
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { throw "Release publishing failed with exit code $LASTEXITCODE." }
+
+      - name: Mirror public update downloads
+        if: ${{ github.ref == 'refs/heads/main' }}
+        shell: pwsh
+        env:
+          PUBLIC_RELEASE_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          RELEASE_TAG: ${{ needs.package.outputs.package_version }}
+        run: ./Publish-PublicRelease.ps1 -Version $env:RELEASE_TAG
