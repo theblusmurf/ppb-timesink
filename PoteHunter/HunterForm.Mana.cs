@@ -1,4 +1,4 @@
-﻿namespace PoteHunter;
+namespace PoteHunter;
 
 public sealed partial class HunterForm
 {
@@ -81,7 +81,7 @@ public sealed partial class HunterForm
         var self=world.LocalPlayer();var hp=world.TargetHealth(self.Id);
         if(!hp.Known || hp.Dead)
         {
-            if(options.AutoReviveAfterDeath && hp.Dead){deathRecoveryRequested=true;return false;}
+            if(options.AutoReviveAfterDeath && hp.Dead){ObserveDeath(hp);return false;}
             throw new InvalidOperationException("Cannot use an MP item while character health is unavailable or dead.");
         }
         var mana=world.ReadMana();

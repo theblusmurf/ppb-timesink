@@ -152,7 +152,9 @@ public sealed partial class HunterForm : Form
     readonly TableLayoutPanel settings = new() { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 4, Padding = new Padding(0, 8, 0, 12) };
     readonly Dictionary<Threat, CheckBox> difficultyBoxes = new();
     bool connected, busy, working, hotkeys;
-    bool deathRecoveryActive, deathRecoveryRequested;
+    bool deathRecoveryActive, deathReturnInProgress;
+    readonly DeathRecoveryState deathRecovery = new();
+    long recoveryReadFailureAt;
     sealed record HotkeyRegistration(string Key, int Id, bool Registered, int WindowsError);
     const int StartRouteHotkeyId=10, FinishRouteHotkeyId=11;
     static readonly (int Id, Keys Key)[] HotkeyBindings =
@@ -452,7 +454,7 @@ public sealed partial class HunterForm : Form
         string keys = new(skillKeys.Text.Where(c => !char.IsWhiteSpace(c) && c != ',').ToArray());
         string healingKeys = new(healingSkillKeys.Text.Where(c => !char.IsWhiteSpace(c) && c != ',').ToArray());
         string configuredReviveKey=reviveKey.Text.Trim();
-        if(!Enum.TryParse<Keys>(configuredReviveKey,true,out var parsedReviveKey) || parsedReviveKey==Keys.Escape || HotkeyBindings.Any(binding=>binding.Key==parsedReviveKey))
+        if(!TryParseReviveKey(configuredReviveKey,out var parsedReviveKey))
             throw new InvalidOperationException("Revive key must be a valid keyboard key other than Escape or the bot hotkeys.");
         configuredReviveKey=parsedReviveKey.ToString();
         // The connected client supplies the character name; no typed name is required.
@@ -533,7 +535,8 @@ public sealed partial class HunterForm : Form
     void UpdateDetectedCharacter(Entity self)
     {
         bool changed=detectedCharacter!=null && !LocalCharacter.Same(detectedCharacter,self);
-        if(changed)
+        bool revivedBody=changed && deathRecovery.Pending && RecoveryRouting.SameCharacter(detectedCharacter!,self);
+        if(changed && !revivedBody)
         {
             movement=null;
             if(working)Stop("Character changed. Press F8 to start with "+self.Name+".");
@@ -551,8 +554,17 @@ public sealed partial class HunterForm : Form
         {
             if (working && !Input.Allowed()) Stop("Stopped: switched away from the game. Recalibrate before starting again.");
             int beforeZone=world.ActiveZone();
-            entities = world.Poll();
-            var self = world.LocalPlayer();
+            Entity self;
+            try { entities=world.Poll();self=world.LocalPlayer();recoveryReadFailureAt=0; }
+            catch(InvalidOperationException) when(working && deathRecovery.Pending && !deathReturnInProgress && cancel?.IsCancellationRequested==false)
+            {
+                Input.Release();
+                long now=Environment.TickCount64;
+                if(recoveryReadFailureAt==0)recoveryReadFailureAt=now;
+                if(now-recoveryReadFailureAt>15000)throw;
+                message="Waiting for the character to reappear after death";
+                return;
+            }
             UpdateDetectedCharacter(self);
             Vec pos = self.Position;
             var health = world.HealthSnapshot();
@@ -570,13 +582,9 @@ public sealed partial class HunterForm : Form
             UpdateParty(self);
             avoidZones=Avoidance.BuildZones(avoidRules,entities,self.Id);
             int level = world.PlayerLevel();
-            if(working && activeGuardOptions?.GroupMode==true)RefreshGroupDecision();
-            if(working && activeGuardOptions is {GroupMode:false} combatOptions) ObserveEncounter(combatOptions,health,pos,level);
-            if (working && health.GetValueOrDefault(self.Id).Dead)
-            {
-                SaveLootLog("Death");
-                Stop("Character died; stopped.");
-            }
+            if(working)ObserveDeath(health.GetValueOrDefault(self.Id));
+            if(working && !deathRecovery.Pending && !deathReturnInProgress && activeGuardOptions?.GroupMode==true)RefreshGroupDecision();
+            if(working && !deathRecovery.Pending && !deathReturnInProgress && activeGuardOptions is {GroupMode:false} combatOptions) ObserveEncounter(combatOptions,health,pos,level);
             var selfHealth = health.GetValueOrDefault(self.Id);
             var selfMana = world.ReadMana();
             int chestCount = entities.Count(e => Targeting.IsChest(e) && !health.GetValueOrDefault(e.Id).Dead);
@@ -678,6 +686,8 @@ public sealed partial class HunterForm : Form
     }
     object ProtectionState() => new { AntiKillSteal=activeGuardOptions?.AntiKillSteal ?? antiKillSteal.Checked,
         OtherPlayerRadius=activeGuardOptions?.OtherPlayerRadius ?? playerBuffer.Value, AvoidNames=avoidRules, ActiveAvoidZones=avoidZones,
+        DeathRecovery=new {Enabled=activeGuardOptions?.AutoReviveAfterDeath ?? autoRevive.Checked,deathRecovery.Pending,
+            Phase=deathReturnInProgress?"Returning":deathRecoveryActive?"Reviving":deathRecovery.Pending?"Waiting":"Inactive"},
         Recovery=new {Enabled=true,Phase=retreatRecovery?.Phase.ToString() ?? "Inactive",retreatRecovery?.HealthTarget,ClearanceBeyondRule=RetreatPlanner.Clearance,
             world.RestSupported,RestPosture=world.RestSupported?world.RestState().Posture.ToString():"Unavailable"},
         OtherPlayers=entities.Where(e=>CombatCourtesy.IsOtherPlayer(e,guardSelfId)).Select(e=>new {e.Id,e.Name,e.Model,e.Position}).ToArray() };
@@ -770,6 +780,24 @@ public sealed partial class HunterForm : Form
         bool saved = lootTrackerLog.TrySave(lootTracker.Snapshot(), reason);
         if (!saved) message = $"Loot event could not be saved ({reason}).";
         return saved;
+    }
+    static bool TryParseReviveKey(string value,out Keys key)
+    {
+        if(!Enum.TryParse(value,true,out key) || !Enum.IsDefined(key) || (int)key<8 || (int)key>254 || key==Keys.Escape)return false;
+        Keys parsed=key;
+        return !HotkeyBindings.Any(binding=>binding.Key==parsed);
+    }
+
+    void ObserveDeath(Health health)
+    {
+        if(deathRecovery.Observe(health,Environment.TickCount64))
+        {
+            SaveLootLog("Death");
+            Input.PickupHoldProvider=null;ReleaseCombatPickup();movement?.StopApproach();Input.Release();
+            message="Death detected. Preparing recovery to the saved anchor.";
+            TraceLog.Record("character death detected",new{Anchor=activeHuntAnchor,Zone=runZone,HP=health,RecordedRoutesPreserved=true});
+        }
+        if(health.Dead && (activeGuardOptions?.AutoReviveAfterDeath!=true || activeGuardOptions.HealerMode))Stop("Character died; stopped.");
     }
     void PaintNavigation(object? sender,PaintEventArgs e)
     {
@@ -1206,7 +1234,7 @@ public sealed partial class HunterForm : Form
     bool WantsNearbyPickup()
     {
         var options=activeGuardOptions;
-        if(!working || !connected || options==null || deathRecoveryActive || !options.AutoPickupNearbyLoot || cancel?.IsCancellationRequested!=false || returningFromPriority)return false;
+        if(!working || !connected || options==null || deathRecovery.Pending || deathReturnInProgress || !options.AutoPickupNearbyLoot || cancel?.IsCancellationRequested!=false || returningFromPriority)return false;
         if(RangedPullEnabled(options) && rangedPull.Active && encounter.HasEngaged)return false;
         var self=world.LocalPlayer();
         if(runCharacter==null || !LocalCharacter.Same(runCharacter,self) || runZone!=world.ActiveZone())
@@ -1214,7 +1242,7 @@ public sealed partial class HunterForm : Form
         var hp=world.TargetHealth(self.Id);
         if(!hp.Known || hp.Dead)
         {
-            if(options.AutoReviveAfterDeath && hp.Dead){deathRecoveryRequested=true;return false;}
+            if(options.AutoReviveAfterDeath && hp.Dead){ObserveDeath(hp);return false;}
             throw new InvalidOperationException("Ground pickup stopped: player health is unavailable or dead.");
         }
         long now=Environment.TickCount64;
@@ -1255,22 +1283,32 @@ public sealed partial class HunterForm : Form
                 TargetGuardReason(aimed,world.TargetHealth(aimed.Id),world.PlayerPosition(),o)!=null)
                 ClearRangedPending();
         }
-        if(runCharacter!=null && !LocalCharacter.Same(runCharacter,world.LocalPlayer()))throw new OperationCanceledException("Character changed during the hunt.");
+        if(runCharacter!=null && !LocalCharacter.Same(runCharacter,world.LocalPlayer()) &&
+            !(deathRecovery.Pending && RecoveryRouting.SameCharacter(runCharacter,world.LocalPlayer())))
+            throw new OperationCanceledException("Character changed during the hunt.");
         if(runZone.HasValue && world.ActiveZone()!=runZone) throw new InvalidOperationException("Map zone changed; stopped.");
         if(Environment.TickCount64-guardRefreshedAt>=100) RefreshGuardScene();
         Vec position=world.PlayerPosition();
         var playerHealth=world.TargetHealth(guardSelfId);
         if(!playerHealth.Known || playerHealth.Dead)
         {
-            if(o.AutoReviveAfterDeath && playerHealth.Dead){deathRecoveryRequested=true;return;}
+            if(o.AutoReviveAfterDeath && playerHealth.Dead){ObserveDeath(playerHealth);throw new DeathRecoveryRequiredException();}
             throw new InvalidOperationException("Player health is unavailable or the character died; stopped.");
+        }
+        if(deathReturnInProgress)
+        {
+            // Recovery owns movement until the destination and facing are
+            // restored. Combat priority must not interrupt this route.
+            string? blocked=Avoidance.BlockedPoint(position,avoidZones);
+            if(blocked!=null)throw new RouteUnavailableException("Recovery route blocked: "+blocked);
+            return;
         }
         if(gamekeeperTransition)
         {
             var standingHealth=world.TargetHealth(guardSelfId);
             if(!standingHealth.Known || standingHealth.Dead)
             {
-                if(o.AutoReviveAfterDeath && standingHealth.Dead){deathRecoveryRequested=true;return;}
+                if(o.AutoReviveAfterDeath && standingHealth.Dead){ObserveDeath(standingHealth);throw new DeathRecoveryRequiredException();}
                 throw new InvalidOperationException("Cannot stand for Gamekeeper: player health is unavailable or dead.");
             }
             _=CheckedHotbar();return;
@@ -1290,7 +1328,7 @@ public sealed partial class HunterForm : Form
             var hp=world.TargetHealth(guardSelfId);
             if(!hp.Known || hp.Dead)
             {
-                if(o.AutoReviveAfterDeath && hp.Dead){deathRecoveryRequested=true;return;}
+                if(o.AutoReviveAfterDeath && hp.Dead){ObserveDeath(hp);throw new DeathRecoveryRequiredException();}
                 throw new InvalidOperationException("Retreat stopped: player HP is unavailable or the character died.");
             }
             if(!o.GroupMode && combatPressure.Observe(hp,Environment.TickCount64) && !HasActiveFight())defensePending=true;
@@ -1539,7 +1577,7 @@ public sealed partial class HunterForm : Form
         }
         catch(OperationCanceledException){TraceLog.Record("healer stopped",new {Reason="Stop/focus/cancellation"});Stop("Healer stopped. Press F8 to start again.");}
         catch(Exception ex){TraceLog.Record("healer failed",new {Error=ex.Message});Stop(ex.Message);}
-        finally{healerFollowing=false;healerCasting=false;healerRecipientKey=null;movement?.StopApproach();if(movement!=null)movement.CanAdvance=previousAdvance;Input.PickupHoldProvider=null;nearbyPickupCount=0;working=false;settings.Enabled=true;protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true;connect.Enabled=true;start.Enabled=true;Input.Release();Input.Preflight=null;activeHealTarget=null;lastHealingSkill=null;runCharacter=null;activeHuntAnchor=null;activeGuardOptions=null;runHotbarPage=null;runZone=null;cancel?.Dispose();cancel=null;}
+        finally{deathRecovery.Reset();healerFollowing=false;healerCasting=false;healerRecipientKey=null;movement?.StopApproach();if(movement!=null)movement.CanAdvance=previousAdvance;Input.PickupHoldProvider=null;nearbyPickupCount=0;working=false;settings.Enabled=true;protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true;connect.Enabled=true;start.Enabled=true;Input.Release();Input.Preflight=null;activeHealTarget=null;lastHealingSkill=null;runCharacter=null;activeHuntAnchor=null;activeGuardOptions=null;runHotbarPage=null;runZone=null;cancel?.Dispose();cancel=null;}
     }
     async Task Hunt()
     {
@@ -1568,8 +1606,7 @@ public sealed partial class HunterForm : Form
             Vec activationLocation = world.PlayerPosition();
             Vec anchor = activationLocation;
             double savedHuntHeading=runCharacter.Heading;
-            Vec originalActivationLocation=activationLocation;
-            double originalHuntHeading=savedHuntHeading;
+            double savedHuntHeight=runCharacter.Height;
             SavedNavigationRoute? selectedSavedRoute=null;
             int selectedSavedRouteSlot=-1;
             int activeSavedRouteSlot=0;
@@ -1584,8 +1621,7 @@ public sealed partial class HunterForm : Form
             guardSelfId=runCharacter.Id;
             var primarySavedRoute=navigation.GetSavedRoute(0);
             bool RouteCompatible(SavedNavigationRoute route) =>
-                (string.IsNullOrWhiteSpace(route.Character) || string.Equals(route.Character,runCharacter.Name,StringComparison.OrdinalIgnoreCase)) &&
-                (route.Height<=0 || Math.Abs(route.Height-runCharacter.Height)<2);
+                RecoveryRouting.Compatible(route,runZone.Value,runCharacter.Name,savedHuntHeight);
             bool RouteHasProfile(SavedNavigationRoute route) =>
                 !string.IsNullOrWhiteSpace(route.Character) || route.Height>0 || route.HuntRadius>0 ||
                 route.RevivalDelaySeconds>0 || !route.FarmOnArrival || route.RepairAfterDeath;
@@ -1596,12 +1632,10 @@ public sealed partial class HunterForm : Form
             {
                 activeRouteProfile=route;
                 activeRevivalDelaySeconds=Math.Clamp(route is not null && RouteHasProfile(route) ? route.RevivalDelaySeconds : o.RevivalDelaySeconds,0,600);
-                activeFarmOnArrival=route?.FarmOnArrival ?? o.FarmOnArrival;
+                activeFarmOnArrival=route is not null && RouteHasProfile(route) ? route.FarmOnArrival : o.FarmOnArrival;
             }
-            NavigationRouteProfile CurrentRouteProfile() => new(
-                runCharacter?.Name ?? o.Player,runCharacter?.Height ?? 0,activeRouteProfile is {HuntRadius:>0} ? activeRouteProfile.HuntRadius : (double)o.HuntRadius,
-                activeRevivalDelaySeconds,activeFarmOnArrival,false);
-            ApplyRouteProfile(primarySavedRoute is {Zone:var savedZone} && savedZone==runZone.Value && RouteCompatible(primarySavedRoute) ? primarySavedRoute : null);
+            ApplyRouteProfile(primarySavedRoute!=null && RouteCompatible(primarySavedRoute) &&
+                (primarySavedRoute.Anchor-anchor).Length<=2.5 ? primarySavedRoute : null);
             // A saved anchor is a standing location, so use a small floor
             // radius even when anti-kill-steal is configured narrowly. Prefer
             // the route's farming radius so occupancy follows the saved tab.
@@ -1609,16 +1643,11 @@ public sealed partial class HunterForm : Form
             if(!o.GroupMode && o.UseAlternativeHuntRoutes && primarySavedRoute is {Zone:var primaryZone} &&
                 primaryZone==runZone.Value && (activationLocation-primarySavedRoute.Anchor).Length<=20 &&
                 RouteCompatible(primarySavedRoute) &&
-                CombatCourtesy.PlayerNear(primarySavedRoute.Anchor,entities,runCharacter.Id,savedRouteOccupancyRadius)!=null)
+                RecoveryRouting.Occupied(primarySavedRoute.Anchor,savedHuntHeight,savedRouteOccupancyRadius,entities,runCharacter.Id))
             {
-                foreach(var (slot,routeCandidate) in navigation.SavedRoutesForZone(runZone.Value).Where(item=>item.Slot>0))
-                {
-                    if((routeCandidate.Anchor-primarySavedRoute.Anchor).Length<=.5)continue;
-                    if(!RouteCompatible(routeCandidate))continue;
-                    double candidateRadius=routeCandidate.HuntRadius>0 ? Math.Max(3,routeCandidate.HuntRadius) : Math.Max(3,(double)o.HuntRadius);
-                    if(CombatCourtesy.PlayerNear(routeCandidate.Anchor,entities,runCharacter.Id,candidateRadius)!=null)continue;
-                    selectedSavedRoute=routeCandidate;selectedSavedRouteSlot=slot;break;
-                }
+                selectedSavedRouteSlot=RecoveryRouting.FreeAlternative(navigation.SavedRoutes,runZone.Value,runCharacter.Name,
+                    savedHuntHeight,primarySavedRoute.Anchor,new HashSet<int>(),entities,runCharacter.Id,(double)o.HuntRadius);
+                selectedSavedRoute=navigation.GetSavedRoute(selectedSavedRouteSlot);
                 if(selectedSavedRoute!=null)
                 {
                     ApplyRouteProfile(selectedSavedRoute);
@@ -1631,14 +1660,15 @@ public sealed partial class HunterForm : Form
                 }
                 else
                 {
-                    message="Primary hunt spot is occupied; no free alternative route is available.";
                     TraceLog.Record("all alternative hunt routes occupied",new{Primary=primarySavedRoute.Anchor,OccupancyRadius=savedRouteOccupancyRadius,Zone=runZone});
+                    throw new RouteUnavailableException("Primary hunt spot is occupied; save a free alternative route before starting.");
                 }
             }
             activeHuntAnchor=activationLocation;
             activeExcursion=o.GroupMode ? null : new HuntExcursion(anchor,(double)o.HuntRadius);
             navigation.Observe(world.NavigationContext(runCharacter),runCharacter.Position,runCharacter.Height);
-            navigation.BeginRecording(anchor);
+            // Manual Home/End recordings own the persistent route slots.
+            navigation.EndRecording();deathRecovery.Reset();deathReturnInProgress=false;
             pendingPriorityGamekeeper=null;gamekeeperTransition=false;priorityInterruptibleActivity=false;returningFromPriority=false;deathRecoveryActive=false;
             rangedPull.Reset(); rangedTagging=false;
             combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;nextEngagementObservation=0;
@@ -1672,9 +1702,7 @@ public sealed partial class HunterForm : Form
               Vec gamekeeperReturnLocation=anchor;
               double gamekeeperReturnHeading=savedHuntHeading;
               bool stationaryAssistReturnPending=false;
-              long deathObservedAt=0;
-              long deathRecoveryReadyAt=0;
-              bool deathRecoveryRunning=false;
+              bool stopAfterDeathReturn=false;
             async Task RestoreSavedHuntFacing(CancellationToken restoreToken)
             {
                 if(!double.IsFinite(gamekeeperReturnHeading))return;
@@ -1689,54 +1717,11 @@ public sealed partial class HunterForm : Form
                 }
                 throw new TurnUnresponsiveException(world.PlayerPosition(),desiredForward);
             }
-            async Task MoveToSelectedHuntAnchor(CancellationToken routeToken)
-            {
-                if(selectedSavedRoute is null || selectedSavedRouteSlot<1)return;
-                Vec current=world.PlayerPosition();
-                if((current-anchor).Length<=2.5)return;
-                ReleaseCombatPickup();Input.HoldMouse(false,false,routeToken);Input.PickupHoldProvider=null;drive.StopApproach();
-                double routeBoundary=Math.Max((double)o.HuntRadius,
-                    Math.Max((current-anchor).Length+2,navigation.SavedRouteRadius(selectedSavedRouteSlot,anchor)+2));
-                double previousBoundary=activeMovementBoundary;
-                activeMovementBoundary=routeBoundary;
-                navigation.BeginGoal($"alternative hunt route {selectedSavedRouteSlot}");
-                message=$"Moving to alternative hunt route {selectedSavedRouteSlot}";
-                try
-                {
-                    bool usedSavedRoute=false;
-                    if(o.UseSavedRecoveryRoute && navigation.TryGetRouteToSavedAnchor(runZone!.Value,current,selectedSavedRouteSlot,out var waypoints))
-                    {
-                        usedSavedRoute=true;
-                        foreach(var waypoint in waypoints)
-                        {
-                            if((world.PlayerPosition()-waypoint).Length<=.6)continue;
-                            await NavigateTo(drive,waypoint,anchor,o,routeToken,boundaryRadius:routeBoundary);
-                        }
-                    }
-                    await NavigateTo(drive,anchor,anchor,o,routeToken,boundaryRadius:routeBoundary);
-                    drive.StopApproach();
-                    await RestoreSavedHuntFacing(routeToken);
-                    TraceLog.Record("alternative hunt route reached",new{Slot=selectedSavedRouteSlot,Location=anchor,Heading=savedHuntHeading,UsedSavedRoute=usedSavedRoute,RouteBoundary=routeBoundary,Zone=runZone});
-                }
-                catch(RouteUnavailableException ex)
-                {
-                    drive.StopApproach();
-                    TraceLog.Record("alternative hunt route unavailable",new{Slot=selectedSavedRouteSlot,Reason=ex.Message,Location=anchor,Zone=runZone});
-                    activationLocation=originalActivationLocation;anchor=originalActivationLocation;savedHuntHeading=originalHuntHeading;
-                    activeHuntAnchor=anchor;activeExcursion=o.GroupMode?null:new HuntExcursion(anchor,(double)o.HuntRadius);
-                    selectedSavedRoute=null;selectedSavedRouteSlot=-1;activeSavedRouteSlot=0;
-                    ApplyRouteProfile(primarySavedRoute is {Zone:var fallbackZone} && fallbackZone==runZone.Value && RouteCompatible(primarySavedRoute) ? primarySavedRoute : null);
-                    message="Alternative route was blocked; using the activation point.";
-                }
-                finally
-                {
-                    activeMovementBoundary=previousBoundary;StartNearbyPickup(o);
-                }
-            }
             if(selectedSavedRoute!=null)
             {
-                await MoveToSelectedHuntAnchor(token);
-                if(!activeFarmOnArrival)
+                try { await MoveToSavedHuntAnchor(token,false); }
+                catch(DeathRecoveryRequiredException) { /* Continue into the recovery loop below. */ }
+                if(!deathRecovery.Pending && !activeFarmOnArrival)
                 {
                     message="Saved route reached; farming on arrival is disabled.";
                     TraceLog.Record("saved route reached without farming",new{Slot=selectedSavedRouteSlot,Location=anchor,Zone=runZone});
@@ -1895,128 +1880,181 @@ public sealed partial class HunterForm : Form
                 }
                 finally { returningFromPriority=false; if(!arrived)drive.StopApproach(); }
             }
-            async Task ReturnToSavedHuntPointAfterDeath(CancellationToken returnToken)
+            async Task MoveToSavedHuntAnchor(CancellationToken returnToken,bool afterDeath)
             {
-                Vec current=world.PlayerPosition();
-                double routeBoundary=Math.Max((double)o.HuntRadius,
-                    Math.Max((current-anchor).Length+2,navigation.SavedRouteRadius(activeSavedRouteSlot,anchor)+2));
                 double previousBoundary=activeMovementBoundary;
-                activeMovementBoundary=routeBoundary;
+                deathReturnInProgress=true;
                 returningFromPriority=true;
-                navigation.BeginGoal("return to saved hunt anchor after death");
+                Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();
+                drive.ResetTurnResponse();
+                var occupiedSlots=new HashSet<int>();
+                RecoveryPath? path=null;
                 bool usedSavedRoute=false;
+                long nextOccupancyCheck=0,progressAt=Environment.TickCount64;
+                int progressIndex=-1;
+                double bestDistance=double.PositiveInfinity;
+                bool ChooseFreeDestination()
+                {
+                    if(o.GroupMode || !o.UseAlternativeHuntRoutes)return false;
+                    double radius=activeRouteProfile is {HuntRadius:>0} ? activeRouteProfile.HuntRadius : (double)o.HuntRadius;
+                    if(!RecoveryRouting.Occupied(anchor,savedHuntHeight,radius,entities,guardSelfId))return false;
+                    occupiedSlots.Add(activeSavedRouteSlot);
+                    int slot=RecoveryRouting.FreeAlternative(navigation.SavedRoutes,runZone!.Value,runCharacter!.Name,
+                        savedHuntHeight,anchor,occupiedSlots,entities,guardSelfId,(double)o.HuntRadius);
+                    if(slot<0)throw new RouteUnavailableException("Saved hunt spot is occupied; no compatible free alternative is saved. Recovery stopped.");
+                    var route=navigation.GetSavedRoute(slot)!;
+                    Vec previousAnchor=anchor;
+                    anchor=activationLocation=gamekeeperReturnLocation=route.Anchor;
+                    savedHuntHeading=gamekeeperReturnHeading=route.Heading;
+                    if(route.Height>0)savedHuntHeight=route.Height;
+                    activeSavedRouteSlot=slot;selectedSavedRouteSlot=slot;selectedSavedRoute=route;
+                    ApplyRouteProfile(route);
+                    activeHuntAnchor=anchor;activeExcursion=new HuntExcursion(anchor,(double)o.HuntRadius);
+                    path=null;progressIndex=-1;bestDistance=double.PositiveInfinity;progressAt=Environment.TickCount64;
+                    drive.StopApproach();
+                    TraceLog.Record("recovery alternative selected",new{Slot=slot,PreviousAnchor=previousAnchor,Anchor=anchor,Heading=savedHuntHeading,AfterDeath=afterDeath});
+                    return true;
+                }
                 try
                 {
-                    message="Returning to saved hunt anchor after death";
-                    if(o.UseSavedRecoveryRoute && navigation.TryGetRecoveryRoute(navigationZone,current,anchor,out var waypoints))
+                    while(true)
                     {
-                        usedSavedRoute=true;
-                        foreach(var waypoint in waypoints)
+                        await Input.Delay(0,returnToken);
+                        long now=Environment.TickCount64;
+                        bool checkedOccupancy=now>=nextOccupancyCheck;
+                        if(checkedOccupancy)
                         {
-                            if((world.PlayerPosition()-waypoint).Length<=.6)continue;
-                            await NavigateTo(drive,waypoint,anchor,o,returnToken,boundaryRadius:routeBoundary);
+                            RefreshGuardScene();ChooseFreeDestination();nextOccupancyCheck=now+250;
                         }
+                        Vec current=world.PlayerPosition();
+                        if(path==null)
+                        {
+                            IReadOnlyList<Vec> waypoints=[];
+                            usedSavedRoute=false;
+                            if(o.UseSavedRecoveryRoute && activeRouteProfile is {HasRecordedRoute:true} saved &&
+                                RouteCompatible(saved) && (saved.Anchor-anchor).Length<=2.5)
+                            {
+                                usedSavedRoute=navigation.TryGetRouteToSavedAnchor(runZone!.Value,current,activeSavedRouteSlot,out waypoints);
+                                if(!usedSavedRoute && (current-anchor).Length>2.5)
+                                    throw new RouteUnavailableException("Revived too far from the saved route. Record the route from the revival point with Home and End.");
+                            }
+                            path=new RecoveryPath(waypoints,anchor);
+                            activeMovementBoundary=Math.Max((double)o.HuntRadius,Math.Max((current-anchor).Length+2,
+                                waypoints.Select(p=>(p-anchor).Length+2).DefaultIfEmpty(0).Max()));
+                            navigation.BeginGoal(afterDeath?"return to saved hunt anchor after death":$"alternative hunt route {activeSavedRouteSlot}");
+                        }
+                        Vec? goal=path.Next(current);
+                        if(goal==null)
+                        {
+                            drive.StopApproach();
+                            // Check again when the destination comes into object-loading range.
+                            if(!checkedOccupancy){nextOccupancyCheck=0;continue;}
+                            await RestoreSavedHuntFacing(returnToken);
+                            RefreshGuardScene();
+                            if(ChooseFreeDestination())continue;
+                            if((world.PlayerPosition()-anchor).Length>.5){path=null;continue;}
+                            message="Returned to saved anchor and facing";
+                            TraceLog.Record("saved hunt anchor reached",new{Position=world.PlayerPosition(),Anchor=anchor,Heading=gamekeeperReturnHeading,
+                                Slot=activeSavedRouteSlot,AfterDeath=afterDeath,UsedSavedRoute=usedSavedRoute,Zone=runZone});
+                            return;
+                        }
+                        double distance=(goal.Value-current).Length;
+                        if(path.Index!=progressIndex || distance<bestDistance-.15)
+                        {
+                            progressIndex=path.Index;bestDistance=distance;progressAt=now;
+                        }
+                        else if(now-progressAt>20000)
+                            throw new RouteUnavailableException("Recovery made no progress toward the next waypoint. Check the saved route for a blocked path.");
+                        message=$"Returning to {(activeSavedRouteSlot==0?"primary":"alternative "+activeSavedRouteSlot)} anchor · {distance:F1} to waypoint";
+                        await NavigateTo(drive,goal.Value,anchor,o,returnToken,boundaryRadius:activeMovementBoundary,watchTurns:true);
+                        await Input.Delay(25,returnToken);
                     }
-                    await NavigateTo(drive,anchor,anchor,o,returnToken,boundaryRadius:routeBoundary);
-                    drive.StopApproach();
-                    await RestoreSavedHuntFacing(returnToken);
-                    message=usedSavedRoute?"Returned to saved anchor using the recorded route":"Returned to saved anchor";
-                    TraceLog.Record("returned to saved hunt anchor after death",new{Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone,UsedSavedRoute=usedSavedRoute,RouteBoundary=routeBoundary});
                 }
                 finally
                 {
-                    returningFromPriority=false;activeMovementBoundary=previousBoundary;drive.StopApproach();
+                    deathReturnInProgress=false;returningFromPriority=false;activeMovementBoundary=previousBoundary;drive.StopApproach();
+                    if(!deathRecovery.Pending)StartNearbyPickup(o);
                 }
             }
-            static Keys ParseReviveKey(string value)
+            async Task<bool> TryRecoverAfterDeath(CancellationToken recoveryToken)
             {
-                return Enum.TryParse<Keys>(value,true,out var key) && key is not (Keys.Escape or Keys.F8 or Keys.F9) ? key : Keys.R;
-            }
-            async Task<bool> TryRecoverAfterDeath(Movement recoverDrive,Vec recoverAnchor,Options options,CancellationToken recoveryToken)
-            {
-                if(!options.AutoReviveAfterDeath || deathRecoveryRunning)return false;
+                if(!o.AutoReviveAfterDeath)return false;
                 Entity self;Health hp;
-                try{self=world.LocalPlayer();hp=world.TargetHealth(self.Id);}
-                catch
+                try {self=world.LocalPlayer();hp=world.TargetHealth(self.Id);}
+                catch(InvalidOperationException) when(deathRecovery.Pending)
                 {
-                    // Some clients briefly hide the local entity while the
-                    // death screen is being built. Preserve the request and
-                    // retry instead of allowing the normal hunt loop to move
-                    // on with combat input still released.
-                    if(deathRecoveryRequested){await Task.Delay(100,recoveryToken);return true;}
-                    return false;
+                    Input.Release();message="Waiting for the character after death";
+                    await Task.Delay(100,recoveryToken);return true;
                 }
-                if(!hp.Known)
-                {
-                    if(deathRecoveryRequested){await Task.Delay(100,recoveryToken);return true;}
-                    return false;
-                }
-                if(!hp.Dead)
-                {
-                    deathObservedAt=0;deathRecoveryReadyAt=0;deathRecoveryRequested=false;return false;
-                }
-                deathRecoveryActive=true;deathRecoveryRequested=true;
-                ReleaseCombatPickup();recoverDrive.StopApproach();Input.Release(preserveNearbyPickup:true);Input.PickupHoldProvider=null;
-                long now=Environment.TickCount64;
-                if(deathObservedAt==0)
-                {
-                    deathObservedAt=now;
-                    deathRecoveryReadyAt=now+activeRevivalDelaySeconds*1000L;
-                    bool routeSaved=navigation.SaveCurrentRoute(navigationZone,recoverAnchor,gamekeeperReturnHeading,activeSavedRouteSlot,profile:CurrentRouteProfile());
-                    message=routeSaved?"Death detected. Saved the current navigation route; preparing revive":"Death detected. Preparing revive at the saved anchor";
-                    TraceLog.Record("character death detected",new{Position=world.PlayerPosition(),Anchor=recoverAnchor,Zone=runZone,RouteSaved=routeSaved});
-                    await Input.Delay(100,recoveryToken);
-                    return true;
-                }
-                if(now-deathObservedAt<500)
-                {
-                    message="Death detected. Waiting for the revive screen";
-                    await Input.Delay(100,recoveryToken);
-                    return true;
-                }
-                if(now<deathRecoveryReadyAt)
-                {
-                    message=$"Death detected. Waiting {Math.Ceiling((deathRecoveryReadyAt-now)/1000d):0}s before revive";
-                    await Input.Delay(Math.Min(250,Math.Max(50,(int)(deathRecoveryReadyAt-now))),recoveryToken);
-                    return true;
-                }
-                deathRecoveryRunning=true;
+                ObserveDeath(hp);
+                if(!deathRecovery.Pending)return false;
+                Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();lockedTarget=null;
+                // Keep this request through manual revival and unreadable HP.
+                deathRecoveryActive=true;
                 try
                 {
-                    Keys reviveKey=ParseReviveKey(options.ReviveKey);
-                    bool revived=false;
+                    if(!hp.Known)
+                    {
+                        message="Waiting for health confirmation after death";
+                        await Input.Delay(100,recoveryToken);return true;
+                    }
+                    long remaining=deathRecovery.ReadyAt(activeRevivalDelaySeconds)-Environment.TickCount64;
+                    if(hp.Dead && remaining>0)
+                    {
+                        message=$"Death detected. Waiting {Math.Ceiling(remaining/1000d):0}s before revive";
+                        await Input.Delay((int)Math.Min(250,remaining),recoveryToken);return true;
+                    }
+                    Keys revive=TryParseReviveKey(o.ReviveKey,out var configured)?configured:Keys.R;
+                    bool revived=hp.Known && !hp.Dead;
+                    bool ReadRevivalHealth()
+                    {
+                        try {self=world.LocalPlayer();hp=world.TargetHealth(self.Id);return hp.Known;}
+                        catch(InvalidOperationException) {hp=default;return false;}
+                    }
                     for(int attempt=0;attempt<3 && !revived;attempt++)
                     {
                         message=$"Reviving character (attempt {attempt+1}/3)";
-                        TraceLog.Record("revive key input",new{Key=reviveKey.ToString(),Attempt=attempt+1,Position=world.PlayerPosition()});
-                        await Input.Key(reviveKey,100,recoveryToken);
+                        TraceLog.Record("revive key input",new{Key=revive.ToString(),Attempt=attempt+1});
+                        await Input.Key(revive,100,recoveryToken);
                         await Input.Delay(450,recoveryToken);
-                        try{self=world.LocalPlayer();hp=world.TargetHealth(self.Id);revived=hp.Known&&!hp.Dead&&hp.Current>0;}catch{revived=false;}
-                        if(!revived && reviveKey!=Keys.Enter)
+                        if(!ReadRevivalHealth())return true;
+                        revived=!hp.Dead;
+                        // Do not send confirmation into the living character's chat.
+                        if(hp.Dead && revive!=Keys.Enter)
                         {
                             TraceLog.Record("revive fallback input",new{Key=Keys.Enter.ToString(),Attempt=attempt+1});
                             await Input.Key(Keys.Enter,100,recoveryToken);
                             await Input.Delay(450,recoveryToken);
-                            try{self=world.LocalPlayer();hp=world.TargetHealth(self.Id);revived=hp.Known&&!hp.Dead&&hp.Current>0;}catch{revived=false;}
+                            if(!ReadRevivalHealth())return true;
+                            revived=!hp.Dead;
                         }
                     }
-                    if(!revived)throw new InvalidOperationException("The configured revive key did not restore the character. Check the death-screen key in Death recovery settings.");
-                    self=world.LocalPlayer();
-                    runCharacter=self;guardSelfId=self.Id;runZone=world.ActiveZone();navigationZone=runZone.Value;navigationPosition=self.Position;
+                    if(!revived)throw new InvalidOperationException("Revival was not confirmed. Check the revive key under Setup → Death recovery.");
+                    if(world.ActiveZone()!=runZone || !RecoveryRouting.SameCharacter(runCharacter!,self))
+                        throw new InvalidOperationException("Revival changed the map or character; the saved anchor cannot be used here.");
+                    runCharacter=detectedCharacter=self;guardSelfId=self.Id;navigationZone=runZone!.Value;navigationPosition=self.Position;
                     navigation.Observe(world.NavigationContext(self),self.Position,self.Height);
-                    encounter.Reset();lockedTarget=null;deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;encounterQuietSince=0;encounterUnknownSince=0;
-                    pendingPriorityGamekeeper=null;gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;completionReturnPending=false;
-                    rangedPull.Reset();rangedTagging=false;defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;healingRestPending=false;healingWarning=null;
-                    deathObservedAt=0;deathRecoveryReadyAt=0;deathRecoveryRequested=false;deathRecoveryActive=false;StartNearbyPickup(options);
-                    TraceLog.Record("character revived",new{Position=self.Position,Anchor=recoverAnchor,Zone=runZone,HP=hp});
-                    await ReturnToSavedHuntPointAfterDeath(recoveryToken);
+                    deathRecovery.Observe(hp,Environment.TickCount64);deathRecoveryActive=false;
+                    encounter.Reset();courtesy.Reset();deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;encounterQuietSince=0;encounterUnknownSince=0;
+                    pendingPriorityGamekeeper=null;gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;completionReturnPending=false;stationaryAssistReturnPending=false;
+                    gamekeeperReturnLocation=anchor;gamekeeperReturnHeading=savedHuntHeading;
+                    rangedPull.Reset();rangedTagging=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;healingRestPending=false;healingWarning=null;
+                    retreatRecovery=null;retreatDrive=null;lootGuardPosition=null;buffInProgress=false;gamekeeperTransition=false;priorityInterruptibleActivity=false;
+                    runHotbarPage=world.Hotbar().PageBase;
+                    TraceLog.Record("character revived",new{Position=self.Position,Anchor=anchor,Zone=runZone,HP=hp});
+                    await MoveToSavedHuntAnchor(recoveryToken,true);
+                    deathRecovery.Reset();
+                    stopAfterDeathReturn=!activeFarmOnArrival;
+                    if(stopAfterDeathReturn)message="Saved anchor reached; Resume farming is disabled.";
+                    else StartNearbyPickup(o);
                     return true;
                 }
-                finally
+                catch(DeathRecoveryRequiredException)
                 {
-                    deathRecoveryActive=false;deathRecoveryRunning=false;
-                    if(deathObservedAt!=0)StartNearbyPickup(options);
+                    message="Died while returning. Preparing revival again.";
+                    return true;
                 }
+                finally {deathRecoveryActive=false;}
             }
             void RememberGamekeeperReturn(Vec current)
             {
@@ -2030,7 +2068,11 @@ public sealed partial class HunterForm : Form
             {
                 try
                 {
-                if(await TryRecoverAfterDeath(drive,anchor,o,token))continue;
+                if(await TryRecoverAfterDeath(token))
+                {
+                    if(stopAfterDeathReturn)return;
+                    continue;
+                }
                 await Input.Delay(rangedPull.Active?15:encounter.Active?25:100, token);
                 var gamekeeper=PriorityGamekeeper(o);
                 if(gamekeeper!=null)RememberGamekeeperReturn(world.PlayerPosition());
@@ -2045,9 +2087,9 @@ public sealed partial class HunterForm : Form
                     continue;
                 }
                 if (await TryHeal(drive, o, token)) continue;
-                if (deathRecoveryRequested)continue;
+                if (deathRecovery.Pending)continue;
                 if (await TryRestoreMana(o,token)) continue;
-                if (deathRecoveryRequested)continue;
+                if (deathRecovery.Pending)continue;
                 if(gamekeeper==null)
                 {
                     if(defensePending && !HasActiveFight())
@@ -2056,7 +2098,7 @@ public sealed partial class HunterForm : Form
                         continue;
                     }
                     if(!(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
-                    if(deathRecoveryRequested)continue;
+                    if(deathRecovery.Pending)continue;
                 }
                 var pos = world.PlayerPosition();
                 entities = world.Poll();
@@ -2277,7 +2319,7 @@ public sealed partial class HunterForm : Form
                 while (true)
                 {
                     token.ThrowIfCancellationRequested();
-                    if(deathRecoveryRequested)
+                    if(deathRecovery.Pending)
                     {
                         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);lockedTarget=null;
                         break;
@@ -2288,13 +2330,13 @@ public sealed partial class HunterForm : Form
                         if(groupDecision.Tank!=null)anchor=groupDecision.Tank.Position;
                     }
                     if (await TryHeal(drive, o, token)) continue;
-                    if(deathRecoveryRequested)
+                    if(deathRecovery.Pending)
                     {
                         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);
                         break;
                     }
                     if (await TryRestoreMana(o,token)) continue;
-                    if(deathRecoveryRequested)
+                    if(deathRecovery.Pending)
                     {
                         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);
                         break;
@@ -2941,7 +2983,8 @@ public sealed partial class HunterForm : Form
                     RememberGamekeeperReturn(world.PlayerPosition());
                     ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);lockedTarget=null;
                     pendingPriorityGamekeeper=ex.Target;healingRestPending=false;healingWarning=null;
-                    await StandForGamekeeper(token);
+                    try {await StandForGamekeeper(token);}
+                    catch(DeathRecoveryRequiredException) {Input.Release();continue;}
                     message="Gamekeeper first: interrupting the current activity.";
                     TraceLog.Record("activity interrupted for Gamekeeper",new {PriorityId=ex.Target.Id,Engaged=encounter.EngagedCount,PendingLoot=deferredLoot.Count,HP=world.TargetHealth(world.LocalPlayer().Id)});
                 }
@@ -2972,15 +3015,21 @@ public sealed partial class HunterForm : Form
                     message="Incoming damage: staying upright and looking for a nearby enemy to defend against.";
                     TraceLog.Record("recovery resumed under incoming damage",new {HP=world.TargetHealth(guardSelfId),Engaged=encounter.EngagedCount});
                 }
+                catch(DeathRecoveryRequiredException)
+                {
+                    Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();lockedTarget=null;
+                    message="Death detected. Preparing revival.";
+                }
                 catch(RetreatRequiredException ex)
                 {
-                    await RetreatAndRecover(drive,anchor,o,token,ex.Message);
+                    try {await RetreatAndRecover(drive,anchor,o,token,ex.Message);}
+                    catch(DeathRecoveryRequiredException) {Input.Release();message="Death detected during retreat. Preparing revival.";}
                 }
             }
         }
         catch (OperationCanceledException) { TraceLog.Record("hunt stopped", new { Reason = "Stop/focus/cancellation" }); Stop("Stopped. Press F8 to calibrate and start again."); }
         catch (Exception ex) { TraceLog.Record("hunt failed", new { Error = ex.Message }); Stop(ex.Message); }
-        finally { navigation.EndRecording();deathRecoveryActive=false;deathRecoveryRequested=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
+        finally { navigation.EndRecording();deathRecoveryActive=false;deathRecovery.Reset();deathReturnInProgress=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
     }
 
     async Task RecoverUnresponsiveTurn(Movement drive,Entity target,Vec anchor,Options options,double boundary,int attempt,
@@ -3158,7 +3207,7 @@ public sealed partial class HunterForm : Form
     }
     async Task CollectLoot(Movement drive, Vec deathPosition, Vec anchor, Options options, CancellationToken token, int pickupHoldMs, bool priorityObject,HashSet<(uint,uint)> existingDrops)
     {
-        if(deathRecoveryRequested)return;
+        if(deathRecovery.Pending)return;
         double lootRadius=options.LeaveAreaWhenEmpty && !options.GroupMode && completionReturnPending && encounter.Active ? activeCompletionBoundary : (double)options.HuntRadius;
         bool EligibleDrop(GroundItem i) => (!options.AntiKillSteal || !existingDrops.Contains((i.KeyA,i.KeyB))) && (i.Position-deathPosition).Length<=5 && (i.Position-anchor).Length<=lootRadius;
         List<GroundItem> ReadDrops()
@@ -3174,17 +3223,17 @@ public sealed partial class HunterForm : Form
         if (drops.Count == 0) { TraceLog.Record("no nearby drops", new { Position = deathPosition }); return; }
         for (int attempt = 0; attempt < 3 && drops.Count > 0; attempt++)
         {
-            if(deathRecoveryRequested)return;
+            if(deathRecovery.Pending)return;
             await TryHeal(drive, options, token);
-            if(deathRecoveryRequested)return;
+            if(deathRecovery.Pending)return;
             var item = drops.OrderBy(i => (i.Position-world.PlayerPosition()).Length).First();
             lootGuardPosition=item.Position;
             long started = Environment.TickCount64;
             while ((item.Position-world.PlayerPosition()).Length > 2.5 && Environment.TickCount64-started < 5000)
             {
-                if(deathRecoveryRequested)return;
+                if(deathRecovery.Pending)return;
                 if (await TryHeal(drive, options, token)) continue;
-                if(deathRecoveryRequested)return;
+                if(deathRecovery.Pending)return;
                 var pos = world.PlayerPosition();
                 if ((pos-anchor).Length > lootRadius) break;
                 message = $"Approaching loot: {item.Name}";
@@ -3466,7 +3515,7 @@ public sealed partial class HunterForm : Form
         if (!hp.Known) throw new InvalidOperationException("Player HP is unavailable; auto-heal cannot be checked.");
         if(hp.Dead)
         {
-            if(options.AutoReviveAfterDeath){deathRecoveryRequested=true;return false;}
+            if(options.AutoReviveAfterDeath){ObserveDeath(hp);return false;}
             throw new InvalidOperationException("Character died; stopped.");
         }
         if(!recoveryTarget.HasValue && !healingRestPending && hp.Current>=hp.Maximum){healingWarning=null;return false;}

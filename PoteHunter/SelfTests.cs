@@ -85,6 +85,8 @@ static class SelfTests
             }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
             RoutePlanner.SelfTest();
             Navigation.SelfTest();
+            DeathRecoveryChecks.Run();
+            Input.CheckReviveInput().GetAwaiter().GetResult();
             ChestCatalog.SelfTest();
             RetreatRecovery.SelfTest();
             RestToggle.SelfTest();

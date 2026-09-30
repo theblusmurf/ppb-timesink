@@ -39,7 +39,7 @@ public sealed partial class HunterForm
         if(!hp.Known)return false;
         if(hp.Dead)
         {
-            if(o.AutoReviveAfterDeath)deathRecoveryRequested=true;
+            if(o.AutoReviveAfterDeath)ObserveDeath(hp);
             return false;
         }
         if(o.AutoHeal && hp.Current*100m<=hp.Maximum*o.HealBelowPercent)return false;

@@ -75,13 +75,14 @@ public static class Input
     public static Func<bool>? PickupHoldProvider;
     public static bool PickupHeld => keys.IsHeld(Keys.E);
     static Action<Packet>? selfTestSink;
-    public static bool Down(Keys key) => selfTestSink==null && (GetAsyncKeyState((int)key) & 0x8000) != 0;
+    static Func<Keys,bool>? selfTestDown;
+    public static bool Down(Keys key) => selfTestDown?.Invoke(key) ?? (selfTestSink==null && (GetAsyncKeyState((int)key) & 0x8000) != 0);
     static void Check(CancellationToken token)
     {
         try
         {
             token.ThrowIfCancellationRequested();
-            if (!Allowed() || Down(Keys.Escape) || Down(Keys.Enter) || Down(Keys.F9)) throw new OperationCanceledException("Stopped: focus changed or stop/chat key pressed.");
+            if (!Allowed() || Down(Keys.Escape) || Down(Keys.Enter) && !keys.IsHeld(Keys.Enter) || Down(Keys.F9)) throw new OperationCanceledException("Stopped: focus changed or stop/chat key pressed.");
             Preflight?.Invoke();
             // The nearby-loot decision owns E while enabled. Updating raw held
             // state here avoids recursively invoking Check through Hold.
@@ -138,6 +139,31 @@ public static class Input
     {
         try { Hold(key, true, token); await Delay(ms, token); }
         finally { Hold(key, false, token); }
+    }
+    internal static async Task CheckReviveInput()
+    {
+        var originalAllowed=Allowed;var originalPreflight=Preflight;var originalPickup=PickupHoldProvider;
+        var packets=new List<Packet>();selfTestSink=packets.Add;selfTestDown=key=>keys.IsHeld(key);
+        Allowed=()=>true;Preflight=null;PickupHoldProvider=null;
+        try
+        {
+            Release();packets.Clear();
+            await Key(Keys.Enter,25,default);
+            if(packets.Count!=2 || packets[0].Value.Keyboard.Flags!=8 || packets[1].Value.Keyboard.Flags!=10 || keys.IsHeld(Keys.Enter))
+                throw new Exception("Revive confirmation did not produce one complete Enter pulse.");
+            selfTestDown=key=>key==Keys.Enter;
+            bool stopped=false;try{await Delay(0,default);}catch(OperationCanceledException){stopped=true;}
+            if(!stopped)throw new Exception("Manual Enter no longer stops chat input.");
+            selfTestDown=key=>keys.IsHeld(key);
+            Preflight=()=>Allowed=()=>false;
+            stopped=false;try{await Key(Keys.Enter,25,default);}catch(OperationCanceledException){stopped=true;}
+            if(!stopped || keys.IsHeld(Keys.Enter))throw new Exception("Revive Enter did not release on focus loss.");
+        }
+        finally
+        {
+            Preflight=null;PickupHoldProvider=null;Release();selfTestSink=null;selfTestDown=null;
+            Allowed=originalAllowed;Preflight=originalPreflight;PickupHoldProvider=originalPickup;
+        }
     }
     public static void Hold(Keys key, bool down, CancellationToken token,Func<bool>? admitDown=null)
     {

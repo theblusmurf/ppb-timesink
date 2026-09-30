@@ -21,7 +21,7 @@ public sealed partial class HunterForm
     readonly NumericUpDown navigationViewRadius = new() { Minimum = 10, Maximum = 2000, Increment = 10, Value = 150, Width = 70 };
     readonly Button fitNavigationRadius = new() { Text = "Fit loaded", AutoSize = true };
     readonly CheckBox useSavedRecoveryRoute = new() { Text = "Use saved death route", AutoSize = true, Checked = true };
-    readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when a player occupies the primary spot", AutoSize = true, Checked = true };
+    readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when the saved spot is occupied", AutoSize = true, Checked = true };
     readonly ComboBox savedNavigationSlot = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly Label savedNavigationRoutesStatus = new() { AutoSize = true, ForeColor = Color.Silver };
     readonly Button startNavigationRecording = new() { Text = "Start route · Home", AutoSize = true };
@@ -90,6 +90,8 @@ public sealed partial class HunterForm
         navControls.Controls.Add(fitNavigationRadius);
         navControls.Controls.Add(useSavedRecoveryRoute);
         navControls.Controls.Add(useAlternativeHuntRoutes);
+        priorityHint.SetToolTip(useSavedRecoveryRoute,"Follow the saved route after revival. Record from the revival point to the farming destination with Home and End; death never overwrites it.");
+        priorityHint.SetToolTip(useAlternativeHuntRoutes,"Check the destination at startup, after revival, and during the return. Use the first free compatible Alternative 1 or 2; stop if none is available.");
         navControls.Controls.Add(new Label { Text = "Save slot:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
         navControls.Controls.Add(savedNavigationSlot);
         navControls.Controls.Add(startNavigationRecording);

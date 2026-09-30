@@ -1,5 +1,27 @@
 # Release notes
 
+## Release1.52
+
+- Fixed the UI stopping the hunt on death even when automatic revival was
+  enabled. Death is logged once, and recovery stays pending through manual
+  revival, temporary unreadable health, and a second death during the return.
+- Fixed recorded routes being overwritten by the current hunting trail on
+  death. Only explicit route/spot saves change the Primary and Alternative slots.
+- Return travel now waits for each waypoint and verifies arrival within 0.5
+  map units before restoring facing and resuming farming. Combat and pickup
+  wait until the return finishes; blocked routes report a reason and stop.
+- Occupied-spot fallback now runs after revival and while approaching the
+  destination. It chooses a free compatible Alternative 1 or 2, updates the
+  active anchor and facing, and stops if no free compatible route is available.
+- Fixed the bot's own Enter revival confirmation being mistaken for the
+  user's chat/stop key. Manual Enter, F9, focus loss, and cancellation still stop.
+- Restored **Death recovery** in compact Setup: Auto revive, delay, revive key,
+  and Resume farming on arrival. Navigation still holds the saved-route and
+  alternative-route toggles. Saved route profiles retain their arrival policy.
+- Validation: .NET 10 Release build, offline recovery/input regression tests,
+  settings persistence, and rendered UI checks. No live game input was used;
+  in-game revival and route completion still need verification.
+
 ## Release1.51
 
 - Added **Home** to start route recording and **End** to finish and save the
