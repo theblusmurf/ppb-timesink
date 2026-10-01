@@ -1,5 +1,15 @@
 # Release notes
 
+## Release1.73
+
+- Reduced the shared gap between successful combat skill casts from 5 seconds
+  to 1.5 seconds in stationary and moving combat. The timer remains shared
+  across target changes, and self-healing skills keep their timing exemption.
+- Existing five-target, below-80-percent group health requirements, per-skill
+  cooldowns, health conditions, mana checks and persistent basic swings remain.
+- Build and offline skill eligibility/input checks validate this timing update;
+  no live game input was used.
+
 ## Release1.72
 
 - Kept the public GitHub updater and manual Download and install option.

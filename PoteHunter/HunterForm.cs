@@ -1697,7 +1697,7 @@ public sealed partial class HunterForm : Form
             // Offensive combat skills are deliberately infrequent.  A cast is
             // permitted only for a wounded five-target pack; this timer is
             // shared across target switches so a retarget cannot bypass the
-            // five-second spacing requirement.
+            // 1.5-second spacing requirement.
             long nextCombatSkillAt=0;
             double responseRadius=Targeting.ResponseRadius((double)o.HuntRadius,(double)o.GamekeeperResponseRadius);
              bool gamekeeperReturnPending=false;
@@ -2760,7 +2760,7 @@ public sealed partial class HunterForm : Form
                         }
                         var stationarySkillGroup=CombatSkillGroup(current,hp,pos,o);
                         // The five-target gate applies to the combat pack, while
-                        // self-heals may bypass only the shared five-second timer.
+                        // self-heals may bypass only the shared 1.5-second timer.
                         bool stationarySkillGate=stationarySkillGroup.Ready;
                         int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 && stationarySkillGate ?
                             SkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
@@ -2906,7 +2906,7 @@ public sealed partial class HunterForm : Form
                     }
                     var combatSkillGroup=CombatSkillGroup(current,hp,pos,o);
                     // The five-target gate applies to the combat pack, while
-                    // self-heals may bypass only the shared five-second timer.
+                    // self-heals may bypass only the shared 1.5-second timer.
                     bool combatSkillGate=combatSkillGroup.Ready;
                     int readyIndex = !current.PriorityLootObject && now - combatStart >= 1200 && combatSkillGate ? SkillRotation.Choose(o.SkillKeys,
                         skillCursor,bar,skillDue,now,slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o) &&

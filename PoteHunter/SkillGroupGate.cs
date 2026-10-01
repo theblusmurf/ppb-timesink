@@ -10,7 +10,7 @@ public readonly record struct SkillGroupStatus(int InRangeTargets, decimal Highe
     public const int MinimumTargets = 5;
     public const decimal MaximumHighestHealthPercent = 80m;
     public const double DefaultRange = 6d;
-    public const long DelayMilliseconds = 5000;
+    public const long DelayMilliseconds = 1500;
 }
 
 public static class SkillGroupGate
