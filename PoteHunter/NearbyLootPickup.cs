@@ -7,7 +7,7 @@ public readonly record struct NearbyLootDecision(int NearbyCount)
 
 public static class NearbyLootPickup
 {
-    public const double AnchorRadius=4;
+    public const double AnchorRadius=10;
     public const double PickupReach=3;
     public const double AnchorArrivalTolerance=.15;
     public static bool InsideAnchor(Vec point,Vec anchor) => point.Finite && anchor.Finite &&
@@ -53,17 +53,17 @@ public static class NearbyLootPickup
         static GroundItem Drop(uint id,double x,double y=0)=>new(id,id,0,"Existing ground loot",new Vec(x,y),0);
         var origin=new Vec(0,0);
         var anchor=new Vec(100,100);
-        if(!InsideAnchor(new Vec(104,100),anchor) || InsideAnchor(new Vec(104.01,100),anchor) ||
-            !InsideAnchor(new Vec(102.4,103.2),anchor) || InsideAnchor(new Vec(103,103),anchor) ||
+        if(!InsideAnchor(new Vec(110,100),anchor) || InsideAnchor(new Vec(110.01,100),anchor) ||
+            !InsideAnchor(new Vec(106,108),anchor) || InsideAnchor(new Vec(107.1,107.1),anchor) ||
             InsideAnchor(new Vec(double.NaN,100),anchor))
-            throw new Exception("Anchor loot circle is not an inclusive four-unit map radius.");
-        if(EvaluateAnchor(new Vec(101.5,100),anchor,[Drop(20,104,100)]).NearbyCount!=1 ||
-            EvaluateAnchor(new Vec(103,100),anchor,[Drop(21,105,100)]).HoldLoot ||
-            EvaluateAnchor(new Vec(105,100),anchor,[Drop(22,104,100)]).HoldLoot ||
-            EvaluateAnchor(new Vec(103,100),anchor,[Drop(23,104,100),Drop(24,105,100)]).HoldLoot ||
-            EvaluateAnchor(anchor,anchor,[Drop(25,104,100)]).HoldLoot)
+            throw new Exception("Anchor loot circle is not an inclusive ten-unit map radius.");
+        if(EvaluateAnchor(new Vec(107.5,100),anchor,[Drop(20,110,100)]).NearbyCount!=1 ||
+            EvaluateAnchor(new Vec(109,100),anchor,[Drop(21,111,100)]).HoldLoot ||
+            EvaluateAnchor(new Vec(111,100),anchor,[Drop(22,110,100)]).HoldLoot ||
+            EvaluateAnchor(new Vec(109,100),anchor,[Drop(23,110,100),Drop(24,111,100)]).HoldLoot ||
+            EvaluateAnchor(anchor,anchor,[Drop(25,110,100)]).HoldLoot)
             throw new Exception("Anchor pickup followed the player radius, picked beyond home, or held E before reach.");
-        if(!MayPickupAt(anchor,anchor,[Drop(26,105,100)]) ||
+        if(!MayPickupAt(anchor,anchor,[Drop(26,111,100)]) ||
             EvaluateAnchor(anchor,anchor,[]).HoldLoot || !ArrivedAtAnchor(new Vec(100.1,100),anchor) ||
             ArrivedAtAnchor(new Vec(100.2,100),anchor) || ArrivedAtAnchor(new Vec(double.NaN,100),anchor))
             throw new Exception("Anchor pickup exclusion or exact-return tolerance failed.");

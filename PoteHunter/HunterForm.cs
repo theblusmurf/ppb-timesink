@@ -244,7 +244,7 @@ public sealed partial class HunterForm : Form
         var pickupOptions=new FlowLayoutPanel {AutoSize=true,WrapContents=true,Margin=Padding.Empty};
         pickupOptions.Controls.AddRange([nearbyLootPickup,combatPickup]);
         Field("Automatic pickup",pickupOptions,8,0); settings.SetColumnSpan(pickupOptions,3);
-        priorityHint.SetToolTip(nearbyLootPickup,"Solo hunting collects reachable loot within 4 map units of the saved anchor after enemies clear, then returns to the anchor and saved facing. Hold E only within pickup reach. Group/healer pickup stays near the character.");
+        priorityHint.SetToolTip(nearbyLootPickup,"Solo hunting collects reachable loot within 10 map units of the saved anchor after enemies clear, then returns to the anchor and saved facing. Hold E only within pickup reach. Group/healer pickup stays near the character.");
         priorityHint.SetToolTip(combatPickup,"Optional cooldown pickup when nearby-loot pickup is disabled.");
         Field("Hunting area",leaveAreaWhenEmpty,9,0); settings.SetColumnSpan(leaveAreaWhenEmpty,3);
         var deathRecoveryRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=Padding.Empty};
@@ -1192,7 +1192,7 @@ public sealed partial class HunterForm : Form
 
     async Task RunAnchorLoot(Movement drive,Vec anchor,Options options,CancellationToken token)
     {
-        navigation.BeginGoal("four-unit anchor loot sweep");
+        navigation.BeginGoal("ten-unit anchor loot sweep");
         var previousPickup=Input.PickupHoldProvider;
         Input.PickupHoldProvider=null;Input.Release();
         lootGuardPosition=anchor;lootBeforeFight=new();

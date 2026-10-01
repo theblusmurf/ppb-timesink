@@ -1,5 +1,10 @@
 # Release notes
 
+## Release1.77
+
+- Increase the solo loot pickup radius from 4 to 10 map units around the saved anchor. Automatic loot sweeps, timed pickup jobs, movement boundaries and out-of-circle pickup checks use the shared ten-unit radius.
+- Retain return to the saved anchor and facing after loot, the 0.15-unit arrival tolerance, pickup reach, retry interval and existing recovery/priority/protection guards. Update the UI hint and edge/diagonal/pickup-reach regressions for ten units. Existing settings and profiles remain compatible; live movement remains unverified.
+
 ## Release1.76
 
 - Solo automatic pickup now walks to reachable loot within an inclusive 4-map-unit circle centered on the saved anchor once the encounter clears. Timed loot jobs use the same boundary; hunting and enemy ranges stay independent.
