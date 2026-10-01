@@ -12,6 +12,11 @@ internal static class AppUpdates
 {
     internal const string Repository="theblusmurf/PoteHunter-Releases";
     static readonly string Preferences="Software\\PoteHunter\\Updates";
+    static string Preference(string name) { using var key=Registry.CurrentUser.OpenSubKey(Preferences); return key?.GetValue(name) as string ?? ""; }
+    static void Preference(string name,string value) { using var key=Registry.CurrentUser.CreateSubKey(Preferences); key.SetValue(name,value); }
+    public static bool AutoPatch { get=>Preference("AutoPatch")!="0"; set=>Preference("AutoPatch",value?"1":"0"); }
+    internal static string BlockedPatch { get=>Preference("BlockedPatch"); set=>Preference("BlockedPatch",value); }
+    internal static string PatchStatus { get=>Preference("PatchStatus"); set=>Preference("PatchStatus",value); }
     public static string CurrentVersion=>File.Exists(Path.Combine(AppContext.BaseDirectory,"release-version.txt"))
         ?File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"release-version.txt")).Trim():"Development";
     public static bool CheckOnStart
@@ -51,7 +56,7 @@ internal static class AppUpdates
             System.Net.HttpStatusCode.NotFound=>"No official release is available from the public PoteHunter update feed yet.",
             _=>$"GitHub returned HTTP {(int)code}. Try again later."});
     }
-    public static async Task<AvailableUpdate?> Check(CancellationToken token)
+    public static async Task<AvailableUpdate?> Check(CancellationToken token,string? current=null)
     {
         using var client=Client();
         using var response=await client.GetAsync($"https://api.github.com/repos/{Repository}/releases/latest",HttpCompletionOption.ResponseHeadersRead,token);
@@ -59,7 +64,7 @@ internal static class AppUpdates
         using var stream=await response.Content.ReadAsStreamAsync(token);
         using var memory=new MemoryStream();var buffer=new byte[8192];int count;
         while((count=await stream.ReadAsync(buffer,token))!=0){if(memory.Length+count>2*1024*1024)throw new InvalidOperationException("Release metadata exceeds the supported size.");memory.Write(buffer,0,count);}
-        using var document=JsonDocument.Parse(memory.ToArray());return SelectRelease(document.RootElement,CurrentVersion);
+        using var document=JsonDocument.Parse(memory.ToArray());return SelectRelease(document.RootElement,current??CurrentVersion);
     }
     public static async Task<string> Download(AvailableUpdate update,CancellationToken token)
     {
@@ -92,6 +97,7 @@ internal static class AppUpdates
         using var client=Client();
         if(Repository!="theblusmurf/PoteHunter-Releases" || client.DefaultRequestHeaders.Authorization!=null)
             throw new Exception("Public updater requires anonymous access to the distribution repository.");
+        AutoPatcher.Checks();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"updater-checks.json"),JsonSerializer.Serialize(new{Passed=true,NumericVersions=true,
             PrereleasesExcluded=true,InvalidDigestRejected=true,PublicFeed=true,NoAuthorizationHeader=true,NoNetworkOrCredentialsUsed=true}));
     }
@@ -99,28 +105,78 @@ internal static class AppUpdates
 
 public partial class HunterForm
 {
+    readonly System.Windows.Forms.Timer patchTimer=new(){Interval=10000};
+    readonly CancellationTokenSource patchCancellation=new();
+    bool checkingPatch;
+    DateTime nextPatchCheck=DateTime.MinValue;
+    AvailableUpdate? pendingPatch;
+    string? stagedPatch;
+    bool PatchIdle=>AutoPatcher.Idle(working,busy,navigation.Recording,Application.OpenForms.Cast<Form>().Any(f=>f.Modal));
     internal void ConfigureUpdates()
     {
-        Shown+=async(_,_)=>
+        Shown+=async(_,_)=>{patchTimer.Start();await CheckAutomaticPatch();};
+        patchTimer.Tick+=async(_,_)=>await CheckAutomaticPatch();
+        FormClosed+=(_,_)=>{patchTimer.Dispose();patchCancellation.Cancel();patchCancellation.Dispose();};
+    }
+    async Task CheckAutomaticPatch()
+    {
+        if(checkingPatch || IsDisposed || !PatchIdle)return;
+        if(!AppUpdates.AutoPatch && !AppUpdates.CheckOnStart)return;
+        checkingPatch=true;
+        try
         {
-            try{if(!AppUpdates.CheckOnStart)return;
-                var update=await AppUpdates.Check(CancellationToken.None);
+            if(DateTime.UtcNow>=nextPatchCheck)
+            {
+                nextPatchCheck=DateTime.UtcNow.AddMinutes(30);
+                var update=await AppUpdates.Check(patchCancellation.Token);
+                if(update!=pendingPatch){pendingPatch=update;stagedPatch=null;}
                 if(!IsDisposed && update!=null)message=$"{update.Version} available · Setup > Updates";
-            }catch { /* Offline/rate-limited access cannot interfere with hunting. Check manually for details. */ }
-        };
+            }
+            if(IsDisposed || !AppUpdates.AutoPatch || pendingPatch==null ||
+                pendingPatch.Version==AppUpdates.BlockedPatch || !PatchIdle)return;
+            if(stagedPatch==null)
+            {
+                message=$"Downloading and verifying {pendingPatch.Version} · applies when stopped";
+                stagedPatch=await AppUpdates.Download(pendingPatch,patchCancellation.Token);
+            }
+            if(IsDisposed || !AppUpdates.AutoPatch || !PatchIdle)return;
+            // Prevent a hotkey or setup task starting during worker handoff.
+            busy=true;start.Enabled=connect.Enabled=settings.Enabled=false;
+            try
+            {
+                CurrentOptions().Save();Input.Release();
+                string request=await AutoPatcher.Stage(stagedPatch,pendingPatch,patchCancellation.Token);
+                await AutoPatcher.Launch(request,patchCancellation.Token);
+                message=$"Applying {pendingPatch.Version} · reopening after installation";
+                busy=false;Close();
+            }
+            finally {if(!IsDisposed){busy=false;start.Enabled=connect.Enabled=settings.Enabled=true;}}
+        }
+        catch(OperationCanceledException) { }
+        catch(Exception ex)
+        {
+            if(!IsDisposed)message="Automatic patch deferred: "+ex.Message+" · Setup > Updates";
+            // No repeated downloads/handoffs after a local staging failure.
+            if(pendingPatch!=null)AppUpdates.BlockedPatch=pendingPatch.Version;
+        }
+        finally {checkingPatch=false;}
     }
     async void OpenUpdates()
     {
-        using var dialog=new Form{Text="PoteHunter updates",Width=570,Height=260,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false,MaximizeBox=false};
+        using var dialog=new Form{Text="PoteHunter updates",Width=570,Height=340,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false,MaximizeBox=false};
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new(16),AutoScroll=true};dialog.Controls.Add(layout);
         layout.Controls.Add(new Label{Text=$"Installed: {AppUpdates.CurrentVersion} · {AppUpdates.Repository}",AutoSize=true});
         layout.Controls.Add(new Label{Text="Public downloads · No GitHub sign-in or token required.",AutoSize=true});
         var check=new Button{Text="Check updates",AutoSize=true};layout.Controls.Add(check);
         var automatic=new CheckBox{Text="Check automatically at startup",Checked=AppUpdates.CheckOnStart,AutoSize=true};layout.Controls.Add(automatic);
+        var patch=new CheckBox{Text="Automatically patch when hunting and setup are stopped",Checked=AppUpdates.AutoPatch,AutoSize=true};layout.Controls.Add(patch);
+        layout.Controls.Add(new Label{Text="Checks every 30 minutes. Reopens with hunting stopped. Recording routes defers patches.",AutoSize=true,MaximumSize=new(510,0)});
+        if(AppUpdates.PatchStatus.Length>0)layout.Controls.Add(new Label{Text=AppUpdates.PatchStatus,AutoSize=true,MaximumSize=new(510,0)});
         var result=new Label{Text="Check updates to view the latest official release.",AutoSize=true,MaximumSize=new(510,0)};layout.Controls.Add(result);
         var install=new Button{Text="Download and install",AutoSize=true,Enabled=false};layout.Controls.Add(install);
         AvailableUpdate? available=null;using var cancellation=new CancellationTokenSource();dialog.FormClosing+=(_,_)=>cancellation.Cancel();
         automatic.CheckedChanged+=(_,_)=>AppUpdates.CheckOnStart=automatic.Checked;
+        patch.CheckedChanged+=(_,_)=>{AppUpdates.AutoPatch=patch.Checked;if(patch.Checked){AppUpdates.BlockedPatch="";stagedPatch=null;nextPatchCheck=DateTime.MinValue;}};
         check.Click+=async(_,_)=>
         {
             check.Enabled=false;install.Enabled=false;available=null;result.Text="Checking GitHub…";
@@ -130,12 +186,12 @@ public partial class HunterForm
         };
         install.Click+=async(_,_)=>
         {
-            if(working || busy){result.Text="Stop hunting and setup/tests before installing an update.";return;}
+            if(!AutoPatcher.Idle(working,busy,navigation.Recording,false)){result.Text="Stop hunting, route recording and setup/tests before installing an update.";return;}
             if(available==null)return;install.Enabled=check.Enabled=false;result.Text="Downloading and verifying installer…";
             try
             {
                 string path=await AppUpdates.Download(available,cancellation.Token);
-                if(working || busy || dialog.IsDisposed)return;
+                if(!AutoPatcher.Idle(working,busy,navigation.Recording,false) || dialog.IsDisposed)return;
                 if(MessageBox.Show(dialog,$"Install {available.Version}? PoteHunter will close. Your settings and saved routes stay in place.","Install update",MessageBoxButtons.OKCancel)!=DialogResult.OK)return;
                 var start=new ProcessStartInfo(path){UseShellExecute=true};start.ArgumentList.Add("/DIR="+AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
                 Process.Start(start);dialog.Close();Close();

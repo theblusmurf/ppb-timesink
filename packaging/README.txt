@@ -11,9 +11,14 @@ Or download PoteHunter-Release1.x-Setup.exe for an installed copy with shortcuts
 and an uninstaller. Setup preserves existing settings and saved route/profile files.
 Setup > Updates connects to the public theblusmurf/PoteHunter-Releases feed.
 No GitHub account or token is required; development source remains private.
-Checks run at startup when enabled; download/install is offered for newer official
-releases. Stop hunting/tests first. Installer size and GitHub SHA256 digest are
+Automatic patching checks at startup/every 30 minutes and applies newer releases
+only when hunting, setup/tests, dialogs and route recording are stopped.
+It preserves user data and reopens with hunting stopped. Manual download/install
+remains available. Installer size and GitHub SHA256 digest are
 verified before launch. Existing saved credentials are unused by this version.
+Failed patches retain local UpdateCache logs and stop automatic retries; toggle
+automatic patching off/on or use manual installation to retry. No game close or
+Windows reboot is requested. Install Release1.71 once to enable auto patching.
 For first migration, close the app and copy settings.json, navigation-routes.json,
 repair-profile.json and revival-profile.json to the installed app folder if present.
 Copy your old settings.json before starting if you want to keep your preferences.

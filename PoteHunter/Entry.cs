@@ -7,6 +7,11 @@ static class Entry
     [STAThread]
     static int Main(string[] args)
     {
+        // The copied patch worker must run before game access or the GUI mutex.
+        if (args.Length > 0 && args[0] == "--apply-patch")
+            return args.Length == 2 ? AutoPatcher.Run(args[1]).GetAwaiter().GetResult() : 2;
+        if (args.Length > 0 && args[0] == "--patch-install-check")
+            return AutoPatcherTestSupport.InstallCheck(args);
         if (CommandLine.Run(args) is int exitCode) return exitCode;
 
         // Normal executable launches use the same verified compatibility path

@@ -1,5 +1,24 @@
 # Release notes
 
+## Release1.71
+
+- Kept the public GitHub updater and manual Download and install option.
+  Added automatic patching, enabled by default in Setup > Updates. Checks at
+  startup and every 30 minutes; hunting, setup/tests, dialogs and manual route
+  recording defer installation. PoteHunter reopens with hunting stopped.
+- A staged worker acknowledges the original process before it closes, waits
+  for its exit, reserves the application instance and rechecks the latest
+  official release plus installer size and SHA256 before silent installation.
+  Settings, routes, repair/revival profiles and logs stay in place.
+  No forced game/app termination or Windows reboot is requested.
+- Failed patches retain local status and installer logs, stop automatic retries
+  for that version and leave manual updating available. Toggle automatic
+  patching off/on to retry. Administrator startup remains enabled.
+- Offline checks cover idle/recording guards, staging boundaries, tampered
+  installers and safe argument handling. Windows packaging exercises the
+  actual silent patch install routine with user-data preservation sentinels.
+  Automatic installation uses the complete release installer, not delta files.
+
 ## Release1.70
 
 - Applied the selected Runic Strip loot overlay: six resource icons, full
