@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.76
+
+- Solo automatic pickup now walks to reachable loot within an inclusive 4-map-unit circle centered on the saved anchor once the encounter clears. Timed loot jobs use the same boundary; hunting and enemy ranges stay independent.
+- Hold E only within actual pickup reach; refuse pickup beside drops outside the anchor circle. Respect avoidance, other-player protection, focus/health and Gamekeeper priority. Group/healer pickup remains local without a solo anchor excursion.
+- Return to within 0.15 units of the saved anchor and restore its saved facing before resuming normal hunting. Retain pending return across interrupted pickup, and stop if a blocked return cannot reach the anchor within the bounded attempt. Retry remaining ground loot on a 15-second interval rather than continuously retrying stuck drops.
+- Preserve loot tracker calculations, profiles, routes and existing swing/skill rules. Added circle-edge, diagonal, shifted-anchor, pickup-reach and outside-drop regressions. Validated offline; no game input or current-app replacement performed. Full live movement/pickup remains unverified.
+
 ## Release1.75
 
 - Repair recognition now checks stable inventory lettering and allows a bounded uniform color cast on the saved hammer image. This addresses the observed post-revival stop where inventory was visible but its strict background comparison failed. Coordinates, distinctive icon shape, paired question/Yes recognition, focus/health/client guards and single confirmation remain required.

@@ -108,7 +108,7 @@ public sealed partial class HunterForm : Form
     readonly NumericUpDown lootHold = Number(0, 3000);
     readonly NumericUpDown gamekeeperRadius = Number(10,150);
     readonly CheckBox combatPickup = new() {Text="Hold E during skill cooldowns",AutoSize=true,Checked=true};
-    readonly CheckBox nearbyLootPickup = new() {Text="Hold E for nearby loot",AutoSize=true,Checked=true};
+    readonly CheckBox nearbyLootPickup = new() {Text="Automatic ground loot",AutoSize=true,Checked=true};
     List<GroundItem> nearbyPickupSnapshot = new();
     int nearbyPickupCount;
     long nextNearbyPickupRead;
@@ -244,7 +244,7 @@ public sealed partial class HunterForm : Form
         var pickupOptions=new FlowLayoutPanel {AutoSize=true,WrapContents=true,Margin=Padding.Empty};
         pickupOptions.Controls.AddRange([nearbyLootPickup,combatPickup]);
         Field("Automatic pickup",pickupOptions,8,0); settings.SetColumnSpan(pickupOptions,3);
-        priorityHint.SetToolTip(nearbyLootPickup,"Hold E while any ground loot is inside Nearby enemy radius, measured from your character. Movement and attacks continue. This replaces timed E presses while enabled.");
+        priorityHint.SetToolTip(nearbyLootPickup,"Solo hunting collects reachable loot within 4 map units of the saved anchor after enemies clear, then returns to the anchor and saved facing. Hold E only within pickup reach. Group/healer pickup stays near the character.");
         priorityHint.SetToolTip(combatPickup,"Optional cooldown pickup when nearby-loot pickup is disabled.");
         Field("Hunting area",leaveAreaWhenEmpty,9,0); settings.SetColumnSpan(leaveAreaWhenEmpty,3);
         var deathRecoveryRow=new FlowLayoutPanel{AutoSize=true,WrapContents=false,Margin=Padding.Empty};
@@ -1169,11 +1169,9 @@ public sealed partial class HunterForm : Form
 
     async Task<bool> RunLootJob(LootJob job,Movement drive,Vec anchor,Options options,CancellationToken token)
     {
-        // Continuous pickup already handles every live drop. Historical corpse
-        // checks must not add another 600+ ms of waiting for each chained kill.
-        if(options.AutoPickupNearbyLoot)return true;
+        // Timed pickup uses the same anchor boundary as the automatic sweep.
         navigation.BeginGoal($"loot:{job.Target.Id}:{job.Target.Generation}");
-        lootGuardPosition=job.Position; lootBeforeFight=job.ExistingDrops;
+        lootGuardPosition=anchor; lootBeforeFight=job.ExistingDrops;
         try
         {
             TraceLog.Record("target loot started",new {job.Target.Id,job.Target.DisplayName,job.Target.PriorityLootObject,job.HoldMs});
@@ -1190,6 +1188,27 @@ public sealed partial class HunterForm : Form
         catch(TargetProtectionException ex) { message="Pickup skipped: "+ex.Message; TraceLog.Record("loot protection skip",new {job.Target.Id,Reason=ex.Message}); return true; }
         catch(RouteUnavailableException ex) {message="Pickup route unavailable: "+ex.Message;TraceLog.Record("loot navigation skip",new {job.Target.Id,Reason=ex.Message});return true;}
         finally {lootGuardPosition=null;lootBeforeFight=null;drive.StopApproach();Input.Release(preserveNearbyPickup:true);}
+    }
+
+    async Task RunAnchorLoot(Movement drive,Vec anchor,Options options,CancellationToken token)
+    {
+        navigation.BeginGoal("four-unit anchor loot sweep");
+        var previousPickup=Input.PickupHoldProvider;
+        Input.PickupHoldProvider=null;Input.Release();
+        lootGuardPosition=anchor;lootBeforeFight=new();
+        try
+        {
+            TraceLog.Record("anchor loot started",new{Anchor=anchor,Radius=NearbyLootPickup.AnchorRadius});
+            await CollectLoot(drive,anchor,anchor,options,token,Math.Max(600,(int)options.LootHoldMs),false,lootBeforeFight);
+        }
+        catch(EncounterInterruptedException){encounterQuietSince=0;TraceLog.Record("anchor loot paused for enemies",new{Anchor=anchor});}
+        catch(TargetProtectionException ex){TraceLog.Record("anchor loot protection skip",new{Reason=ex.Message});}
+        catch(RouteUnavailableException ex){TraceLog.Record("anchor loot route unavailable",new{Reason=ex.Message});}
+        finally
+        {
+            drive.StopApproach();Input.Release();lootGuardPosition=null;lootBeforeFight=null;
+            Input.PickupHoldProvider=previousPickup;
+        }
     }
 
     void RefreshGuardScene()
@@ -1263,11 +1282,14 @@ public sealed partial class HunterForm : Form
             ObserveLootTrackerDrops(options,nearbyPickupSnapshot);
             nextNearbyPickupRead=now+LootTrackerPollMilliseconds;
         }
-        var decision=NearbyLootPickup.Evaluate(self.Position,(double)options.NearbyEnemyRadius,nearbyPickupSnapshot);
+        bool anchored=!options.GroupMode && !options.HealerMode && activeHuntAnchor.HasValue;
+        if(anchored && lootGuardPosition.HasValue)return false; // Explicit protected pickup owns E during travel.
+        var decision=anchored ? NearbyLootPickup.EvaluateAnchor(self.Position,activeHuntAnchor!.Value,nearbyPickupSnapshot) :
+            NearbyLootPickup.Evaluate(self.Position,(double)options.NearbyEnemyRadius,nearbyPickupSnapshot);
         if(decision.NearbyCount!=nearbyPickupCount)
         {
             nearbyPickupCount=decision.NearbyCount;
-            TraceLog.Record("nearby ground loot hold changed",new {Count=nearbyPickupCount,Radius=options.NearbyEnemyRadius,HoldingE=decision.HoldLoot,Position=self.Position});
+            TraceLog.Record("nearby ground loot hold changed",new {Count=nearbyPickupCount,Radius=anchored ? NearbyLootPickup.AnchorRadius : (double)options.NearbyEnemyRadius,HoldingE=decision.HoldLoot,Position=self.Position});
         }
         return decision.HoldLoot;
     }
@@ -1275,6 +1297,8 @@ public sealed partial class HunterForm : Form
     {
         if(options.AutoPickupNearbyLoot || !requested || PriorityGamekeeper(options)!=null || CombatPickup.Blocked(world.PlayerPosition(),entities,guardSelfId,world.Loot(),baseline,
             options.AntiKillSteal,(double)options.OtherPlayerRadius)!=null) {ReleaseCombatPickup();return;}
+        if(!options.GroupMode && activeHuntAnchor is Vec pickupAnchor &&
+            !NearbyLootPickup.MayPickupAt(world.PlayerPosition(),pickupAnchor,world.Loot())){ReleaseCombatPickup();return;}
         combatPickupBaseline=baseline;
         Input.Hold(Keys.E,true,token);combatPickupHeld=true;
     }
@@ -1332,6 +1356,8 @@ public sealed partial class HunterForm : Form
             ClearRangedPending();ReleaseCombatPickup();movement?.StopApproach();Input.Release(preserveNearbyPickup:true);throw new PriorityTargetException(priority);
         }
         if(combatPickupHeld && (retreatRecovery!=null || combatPickupBaseline==null ||
+            !o.GroupMode && activeHuntAnchor is Vec heldPickupAnchor &&
+            !NearbyLootPickup.MayPickupAt(position,heldPickupAnchor,world.Loot()) ||
             CombatPickup.Blocked(position,entities,guardSelfId,world.Loot(),combatPickupBaseline,o.AntiKillSteal,(double)o.OtherPlayerRadius)!=null))
             ReleaseCombatPickup();
         if(retreatRecovery!=null)
@@ -1706,6 +1732,8 @@ public sealed partial class HunterForm : Form
             long nextCombatSkillAt=0;
             double responseRadius=Targeting.ResponseRadius((double)o.HuntRadius,(double)o.GamekeeperResponseRadius);
              bool gamekeeperReturnPending=false;
+             bool lootReturnPending=false;
+             long nextAnchorLootSweep=0;
              bool gamekeeperDefeated=false;
              bool gamekeeperReturnRouting=false;
              long nextGamekeeperReturnTrace=0;
@@ -1833,20 +1861,26 @@ public sealed partial class HunterForm : Form
             }
             async Task ReturnToSavedHuntPointAfterLoot(CancellationToken returnToken)
             {
-                Vec current=world.PlayerPosition();
-                if((current-anchor).Length>1.5)
+                ReleaseCombatPickup();Input.HoldMouse(false,false,returnToken);drive.StopApproach();
+                message="Returning to saved hunt point after loot";
+                navigation.BeginGoal("return to saved hunt point after loot");
+                returningFromPriority=true;
+                try
                 {
-                    ReleaseCombatPickup();
-                    Input.HoldMouse(false,false,returnToken);
-                    message="Returning to saved hunt point after loot";
-                    navigation.BeginGoal("return to saved hunt point after loot");
-                    returningFromPriority=true;
-                    try { await NavigateTo(drive,anchor,anchor,o,returnToken,boundaryRadius:activeCompletionBoundary); }
-                    finally { returningFromPriority=false; }
+                    long deadline=Environment.TickCount64+15000;
+                    while(!NearbyLootPickup.ArrivedAtAnchor(world.PlayerPosition(),anchor))
+                    {
+                        if(Environment.TickCount64>=deadline)
+                            throw new InvalidOperationException("Loot return could not reach the saved anchor; stopped rather than resume away from it.");
+                        await NavigateTo(drive,anchor,anchor,o,returnToken,
+                            boundaryRadius:NearbyLootPickup.AnchorRadius);
+                        await Input.Delay(40,returnToken);
+                    }
+                    drive.StopApproach();await RestoreSavedHuntFacing(returnToken);
+                    lootReturnPending=false;
+                    TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
                 }
-                drive.StopApproach();
-                await RestoreSavedHuntFacing(returnToken);
-                TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
+                finally{returningFromPriority=false;drive.StopApproach();}
             }
             async Task<bool> ReturnToSavedHuntPointAfterStationaryAssist(CancellationToken returnToken)
             {
@@ -2121,6 +2155,10 @@ public sealed partial class HunterForm : Form
                     if(await ReturnToSavedHuntPointAfterStationaryAssist(token))stationaryAssistReturnPending=false;
                     continue;
                 }
+                if(gamekeeper==null && lootReturnPending)
+                {
+                    await ReturnToSavedHuntPointAfterLoot(token);continue;
+                }
                 if (await TryHeal(drive, o, token)) continue;
                 if (deathRecovery.Pending)continue;
                 if (await TryRestoreMana(o,token)) continue;
@@ -2287,6 +2325,7 @@ public sealed partial class HunterForm : Form
                         if(Environment.TickCount64-encounterQuietSince<500) { message="Checking that nearby enemies are clearâ€¦"; await Input.Delay(100,token); continue; }
                         if(deferredLoot.Count>0)
                         {
+                            lootReturnPending=true;
                             if(await RunLootJob(deferredLoot.Peek(),drive,anchor,o,token))
                             {
                                 deferredLoot.Dequeue();
@@ -2300,6 +2339,16 @@ public sealed partial class HunterForm : Form
                         if(RangedPullEnabled(o))continue;
                         if(o.LeaveAreaWhenEmpty || healingRestPending)continue;
                     }
+                }
+                if(target==null && !o.GroupMode && !encounter.Active && !healingRestPending &&
+                    o.AutoPickupNearbyLoot && Environment.TickCount64>=nextAnchorLootSweep &&
+                    world.Loot().Any(drop=>NearbyLootPickup.InsideAnchor(drop.Position,anchor)))
+                {
+                    // Remember the return before input, including priority/death interruptions.
+                    lootReturnPending=true;
+                    try{await RunAnchorLoot(drive,anchor,o,token);}
+                    finally{nextAnchorLootSweep=Environment.TickCount64+15000;}
+                    await ReturnToSavedHuntPointAfterLoot(token);continue;
                 }
                 if(target==null && !o.GroupMode && !encounter.Active && !healingRestPending &&
                     await GuideToTreasureChest(drive,anchor,o,token))continue;
@@ -3285,12 +3334,13 @@ public sealed partial class HunterForm : Form
     async Task CollectLoot(Movement drive, Vec deathPosition, Vec anchor, Options options, CancellationToken token, int pickupHoldMs, bool priorityObject,HashSet<(uint,uint)> existingDrops)
     {
         if(deathRecovery.Pending)return;
-        double lootRadius=options.LeaveAreaWhenEmpty && !options.GroupMode && completionReturnPending && encounter.Active ? activeCompletionBoundary : (double)options.HuntRadius;
-        bool EligibleDrop(GroundItem i) => (!options.AntiKillSteal || !existingDrops.Contains((i.KeyA,i.KeyB))) && (i.Position-deathPosition).Length<=5 && (i.Position-anchor).Length<=lootRadius;
+        double lootRadius=NearbyLootPickup.AnchorRadius;
+        bool EligibleDrop(GroundItem i) => (!options.AntiKillSteal || !existingDrops.Contains((i.KeyA,i.KeyB))) &&
+            NearbyLootPickup.InsideAnchor(i.Position,anchor);
         List<GroundItem> ReadDrops()
         {
             var snapshot=world.Loot();
-            ObserveLootTrackerDrops(options,snapshot,anchor,lootRadius);
+            ObserveLootTrackerDrops(options,snapshot);
             return snapshot;
         }
         await Input.Delay(250, token);
@@ -3317,7 +3367,12 @@ public sealed partial class HunterForm : Form
                 await NavigateTo(drive,item.Position,anchor,options,token,boundaryRadius:lootRadius);
             }
             drive.StopApproach(); await Input.Delay(100, token);
-            var before = ReadDrops().Where(i => (i.Position-world.PlayerPosition()).Length <= 3).ToList();
+            var pickupSnapshot=ReadDrops();
+            if(!NearbyLootPickup.MayPickupAt(world.PlayerPosition(),anchor,pickupSnapshot))
+            {
+                TraceLog.Record("anchor loot pickup boundary blocked",new{Anchor=anchor,Position=world.PlayerPosition(),Radius=lootRadius});break;
+            }
+            var before = pickupSnapshot.Where(i => (i.Position-world.PlayerPosition()).Length <= NearbyLootPickup.PickupReach).ToList();
             if (options.AntiKillSteal && before.Any(i=>existingDrops.Contains((i.KeyA,i.KeyB)))) throw new TargetProtectionException("Pre-existing drops are inside pickup range");
             if (before.Count == 0) break;
             message = $"Picking up {before.Count} nearby drop(s) Â· holding E";
