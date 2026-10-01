@@ -50,12 +50,13 @@ public sealed partial class HunterForm
 
         using var native=new LootTrackerOverlay(()=>sample){Location=new Point(-20000,-20000)};
         _=native.Handle;
+        native.FitToArea(Screen.FromPoint(native.Location).WorkingArea.Size);
         IntPtr foreground=GetForegroundWindow();
         for(int cycle=0;cycle<4;cycle++)
         {
             native.SetDesign(3);native.SetScale(cycle%2==0?50:200);native.PresentRunicStrip();
-            if(!native.HasNonActivatingStyles || native.Size!=RunicStripRenderer.SizeAt(native.ScalePercent))
-                throw new Exception("Runic Strip lost passive styles or scaled size.");
+            if(!native.HasNonActivatingStyles || native.Size!=RunicStripRenderer.SizeAt(native.EffectiveScalePercent))
+                throw new Exception($"Runic Strip lost passive styles or scaled size: passive={native.HasNonActivatingStyles}, actual={native.Size}, expected={RunicStripRenderer.SizeAt(native.EffectiveScalePercent)}, requested={native.ScalePercent}, fitted={native.EffectiveScalePercent}, DPI={native.DeviceDpi}.");
             native.SetDesign(cycle%3);
         }
         if(native.LayeredPresentationCount<4 || foreground!=GetForegroundWindow())
