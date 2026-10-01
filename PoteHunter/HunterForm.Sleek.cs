@@ -21,7 +21,7 @@ public sealed partial class HunterForm
         {
             e.Graphics.Clear(UiWindow);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var outline = RoundedPath(card.Width - 1, card.Height - 1, 4);
+            using var outline = RoundedPath(card.Width - 1, card.Height - 1, UiCornerRadius);
             using var fill = new SolidBrush(UiSurface);
             using var border = new Pen(UiBorder);
             e.Graphics.FillPath(fill, outline);

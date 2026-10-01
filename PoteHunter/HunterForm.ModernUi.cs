@@ -16,6 +16,7 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
+    const int UiCornerRadius = 6;
     // Field Console: forest surfaces, brass accents and quiet status colors.
     static readonly Color UiWindow = Color.FromArgb(17, 28, 24);
     static readonly Color UiSidebar = Color.FromArgb(26, 41, 34);
@@ -202,7 +203,7 @@ public sealed partial class HunterForm
                 Name="fieldNav"+name,TextAlign=ContentAlignment.MiddleCenter,Size=new Size(112,34),Margin=new Padding(0,0,5,0),Padding=Padding.Empty,Font=new Font("Consolas",10f)};
             button.FlatAppearance.BorderSize=0;button.Cursor=Cursors.Hand;
             button.FlatAppearance.MouseOverBackColor=UiRaised;
-            RoundControl(button,4);nav.Controls.Add(button);
+            RoundControl(button,UiCornerRadius);nav.Controls.Add(button);
             ComboBox? picker=null;
             if(pages.Length>1)
             {
@@ -231,8 +232,8 @@ public sealed partial class HunterForm
         StyleActionButton(connect, UiRaised, UiText);
         StyleActionButton(start, UiAccent, UiWindow);
         start.Font=new Font("Segoe UI Semibold",9f);
-        RoundControl(connectionBadge,4);
-        RoundControl(footer,4);
+        RoundControl(connectionBadge,UiCornerRadius);
+        RoundControl(footer,UiCornerRadius);
         setupPage.BackColor=UiWindow;
         supportPage.BackColor=UiWindow;
         StyleActionButton(stop, UiRaised, UiDanger);
@@ -410,7 +411,7 @@ public sealed partial class HunterForm
         button.Cursor = Cursors.Hand;
         button.FlatAppearance.MouseOverBackColor=ControlPaint.Light(background,0.12f);
         button.FlatAppearance.MouseDownBackColor=ControlPaint.Dark(background,0.10f);
-        RoundControl(button,4);
+        RoundControl(button,UiCornerRadius);
     }
 
     static string SanitizeDisplayText(string text) => text

@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.68
+
+- Applied the selected Field Console adjustment: 6 px corners on settings
+  cards, navigation/action buttons, connection status and the status strip.
+  A shared radius keeps these surfaces consistent when resized.
+- Retained the Field Console layout and settings. Offline build, UI rendering
+  and existing navigation/settings checks passed without live game input.
+
 ## Release1.67
 
 - Applied the selected Field Console interface: deep forest surfaces, brass
