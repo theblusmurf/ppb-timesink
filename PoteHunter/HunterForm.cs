@@ -1224,6 +1224,11 @@ public sealed partial class HunterForm : Form
         return true;
     }
 
+    Entity? StationarySwingCandidate(Options options,Vec position,double range,IReadOnlyDictionary<uint,Health> health) =>
+        options.GroupMode || options.Ranged || deathRecovery.Pending ? null :
+        Targeting.ChooseStationaryEngaged(encounter.EngagedCandidates.Where(e=>
+            TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)==null),health,position,range);
+
     void StartNearbyPickup(Options options)
     {
         nearbyPickupSnapshot.Clear();nearbyPickupCount=0;nextNearbyPickupRead=0;nextLootTrackerRead=0;
@@ -2188,6 +2193,9 @@ public sealed partial class HunterForm : Form
                 if(gamekeeper==null && gamekeeperReturnPending && gamekeeperDefeated && await ReturnAfterGamekeeper(token))continue;
                 if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,level,skillDue,token))continue;
                 Entity? target=o.GroupMode?gamekeeper:GamekeeperPriority.ChooseFirst(encounter,gamekeeper,()=>null);
+                if(gamekeeper==null && target!=null && Targeting.IsStationaryHuntTargetId(target.Id))
+                    target=StationarySwingCandidate(o,pos,Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,
+                        Targeting.MeleeAttackRange+1),health) ?? target;
                 if(gamekeeper==null && RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing)
                 {
                     // Confirmed Firing tags define the pack lifetime. Within
@@ -2337,7 +2345,7 @@ public sealed partial class HunterForm : Form
                 int turnRecoveryAttempts=0;
                 int? lastCombatHp=null;
                 long approachStarted = now, combatStart = 0; Vec lastTargetPosition = target.Position; int missingHealth = 0;
-                long stationaryAttackHeldAt=0; int stationaryAttackBaselineHp=-1;
+                long stationaryAttackHeldAt=0,nextStationaryRangeTrace=0; int stationaryAttackBaselineHp=-1;
                 bool stationaryAssistUsed=false,stationaryAssistActive=false; Vec stationaryAssistGoal=default;
                 long targetMissingSince = 0;
                 double bodyAllowance=0; int? bodyProbeHp=null;long bodyProbeAt=0;
@@ -2565,7 +2573,22 @@ public sealed partial class HunterForm : Form
                         // assisted target dies.
                         if(!stationaryAssistActive)drive.StopApproach();
                         delta=current.Position-pos;
-                        bool keepStationarySwing=Input.BasicAttackHeld && delta.Length<=swingWindow;
+                        bool keepStationarySwing=Input.BasicAttackHeld && encounter.IsEngaged(current) &&
+                            Targeting.StationarySwingInRange(delta.Length,swingWindow,true);
+                        if(delta.Length>swingWindow && !keepStationarySwing)
+                        {
+                            RefreshGuardScene();var swingHealth=world.HealthSnapshot();
+                            var inRange=StationarySwingCandidate(o,pos,swingWindow,swingHealth);
+                            if(inRange!=null && inRange.Id!=current.Id)
+                            {
+                                TraceLog.Record("stationary swing target replaced",new{Previous=current.Id,Next=inRange.Id,Reason="Engaged target in melee range"});
+                                target=current=inRange;lockedTarget=inRange;hp=swingHealth[inRange.Id];
+                                delta=current.Position-pos;lastTargetPosition=current.Position;
+                                missingHealth=0;targetMissingSince=0;lastCombatHp=hp.Current;
+                                stationaryAttackBaselineHp=-1;stationaryAttackHeldAt=Environment.TickCount64;
+                                stationaryAssistActive=false;drive.StopApproach();
+                            }
+                        }
                         if(delta.Length>swingWindow && !keepStationarySwing)
                         {
                             if(!stationaryAssistActive && !stationaryAssistUsed && encounter.IsEngaged(current) &&
@@ -2604,6 +2627,11 @@ public sealed partial class HunterForm : Form
                             if(!stationaryAssistActive && delta.Length>swingWindow)
                             {
                                 ReleaseCombatPickup();Input.HoldMouse(false,false,token);
+                                if(Environment.TickCount64>=nextStationaryRangeTrace)
+                                {
+                                    nextStationaryRangeTrace=Environment.TickCount64+1000;
+                                    TraceLog.Record("stationary swing waiting for range",new{current.Id,current.DisplayName,Distance=delta.Length,AttackRange=swingWindow,ReleaseRange=swingWindow+.35});
+                                }
                                 try { await drive.Face(world,delta,token,.035); }
                                 catch(TurnUnresponsiveException) { TraceLog.Record("stationary target face unavailable",new {current.Id,current.DisplayName}); }
                                 message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{swingWindow:F1})";
@@ -2626,7 +2654,7 @@ public sealed partial class HunterForm : Form
                             TraceLog.Record("stationary target attack aim unavailable",new {current.Id,current.DisplayName});
                         }
                     }
-                    bool holdPriorityPosition=o.StationaryGamekeeperPriority && !o.GroupMode && (priorityFight || encounter.IsEngaged(current));
+                    bool holdPriorityPosition=!stationaryFarmTarget && o.StationaryGamekeeperPriority && !o.GroupMode && (priorityFight || encounter.IsEngaged(current));
                     if(holdPriorityPosition && delta.Length>chaseThreshold)
                     {
                         ReleaseCombatPickup();drive.StopApproach();Input.HoldMouse(false,false,token);
@@ -2714,12 +2742,8 @@ public sealed partial class HunterForm : Form
                         // watchdog below re-arms it only after the target has
                         // remained at the same HP for a bounded period.
                         long stationaryNow=Environment.TickCount64;
-                        if(stationaryAttackBaselineHp<0 || hp.Current!=stationaryAttackBaselineHp)
-                        {
-                            stationaryAttackBaselineHp=hp.Current;
-                            stationaryAttackHeldAt=stationaryNow;
-                        }
-                        bool rearm=!Input.BasicAttackHeld || stationaryNow-stationaryAttackHeldAt>=2500;
+                        bool rearm=Targeting.StationaryAttackNeedsRearm(hp.Current,Input.BasicAttackHeld,stationaryNow,
+                            ref stationaryAttackBaselineHp,ref stationaryAttackHeldAt);
                         if(rearm)
                         {
                             bool wasHeld=Input.BasicAttackHeld;
@@ -3003,7 +3027,18 @@ public sealed partial class HunterForm : Form
                         throw new InvalidOperationException("A nearby enemy could not be reached; stopped before pickup.");
                 }
                 ReleaseCombatPickup();drive.StopApproach();
-                Input.Release(preserveNearbyPickup:true);
+                bool preserveTransitionSwing=false;
+                if(Input.BasicAttackHeld && !token.IsCancellationRequested && Input.Allowed() &&
+                    !gamekeeperReturnPending && !stationaryAssistReturnPending && Targeting.IsStationaryHuntTargetId(target.Id))
+                {
+                    RefreshGuardScene();var transitionHealth=world.HealthSnapshot();var transitionPosition=world.PlayerPosition();
+                    ObserveEncounter(o,transitionHealth,transitionPosition,level);
+                    preserveTransitionSwing=transitionHealth.GetValueOrDefault(world.LocalPlayer().Id) is {Known:true,Dead:false} &&
+                        StationarySwingCandidate(o,transitionPosition,
+                        Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,Targeting.MeleeAttackRange+1),transitionHealth)!=null;
+                }
+                Input.Release(preserveNearbyPickup:true,preserveBasicAttack:preserveTransitionSwing);
+                if(preserveTransitionSwing)TraceLog.Record("basic attack preserved between engaged targets",new{Previous=target.Id,Count=encounter.EngagedCount});
                 lockedTarget = null;
                 int pickupHoldMs = o.GroupMode?0:Targeting.LootHoldMilliseconds(target, o.LootHoldMs);
                 if (collectAfterTarget && pickupHoldMs > 0 && !o.AutoPickupNearbyLoot)

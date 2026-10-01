@@ -361,12 +361,12 @@ public static class Input
         Send(new Packet { Value = new Union { Mouse = new Mouse { X = deltaX, Y = deltaY, Flags = 1 } } });
     }
     public static void Turn(int pixels, CancellationToken token) => Aim(pixels, 0, token);
-    public static void Release(bool preserveNearbyPickup = false)
+    public static void Release(bool preserveNearbyPickup = false,bool preserveBasicAttack = false)
     {
         // Activity transitions may retain an already-held E, but never create
         // new input or consult a provider during cleanup.
         keys.ReleaseAll(preserveNearbyPickup && PickupHoldProvider!=null ? key=>key==Keys.E : null);
-        buttons.ReleaseAll();
+        buttons.ReleaseAll(preserveBasicAttack ? right=>!right : null);
     }
 
     internal static async Task CheckHeldRangedFire()
@@ -508,6 +508,16 @@ public static class Input
                 throw new Exception("Pickup failed to hold E and left mouse together without tapping");
             Hold(Keys.E,false,default);await Key(Keys.D1,5,default);
             if(!BasicAttackHeld || packets.Any(p=>p.Type==0 && (p.Value.Mouse.Flags&4)!=0))throw new Exception("Releasing E interrupted basic combo");
+            Hold(Keys.W,true,default);HoldMouse(true,true,default);
+            int transitionPackets=packets.Count;
+            Release(preserveBasicAttack:true);
+            if(!BasicAttackHeld || RightButtonHeld || keys.IsHeld(Keys.W) ||
+                packets.Skip(transitionPackets).Any(p=>p.Type==0 && (p.Value.Mouse.Flags&6)!=0))
+                throw new Exception("Engaged target transition interrupted left attack or retained movement/skill input.");
+            Release();transitionPackets=packets.Count;
+            Release(preserveBasicAttack:true);
+            if(BasicAttackHeld || packets.Count!=transitionPackets)throw new Exception("Target cleanup created a new attack hold.");
+            HoldMouse(false,true,default);
             Hold(Keys.E,true,default);int checks=0;bool preempted=false;
             var keeper=new Entity(2,0x80001752,"Gamekeeper",new(12,0),0,Model:"MON_SnowGun2.GCMDS");
             Preflight=()=> {if(++checks>=2)throw new PriorityTargetException(keeper);};

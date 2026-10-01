@@ -66,6 +66,34 @@ internal sealed record RepairPatch(int X,int Y,int Width,int Height,byte[] Rgb)
         return expected>=20 && expected<=Width*Height*.35 && actual>=20 && actual<=Width*Height*.35 &&
             shared>=expected*.95 && shared>=actual*.95;
     }
+
+    // Small translucent icons retain their shape under a bounded color cast.
+    // Remove only a uniform per-channel offset; keep the original error and
+    // changed-pixel limits so missing, moved or different icons still fail.
+    public bool MatchesControl(Bitmap image)
+    {
+        if(Matches(image))return true;
+        if(!new Rectangle(Point.Empty,image.Size).Contains(Bounds) || Rgb.Length!=Width*Height*3)return false;
+        long red=0,green=0,blue=0;int offset=0;
+        for(int y=Y;y<Y+Height;y++)for(int x=X;x<X+Width;x++)
+        {
+            var pixel=image.GetPixel(x,y);
+            red+=pixel.R-Rgb[offset++];green+=pixel.G-Rgb[offset++];blue+=pixel.B-Rgb[offset++];
+        }
+        int count=Width*Height;
+        int dr=(int)Math.Round(red/(double)count),dg=(int)Math.Round(green/(double)count),db=(int)Math.Round(blue/(double)count);
+        if(Math.Abs(dr)>32 || Math.Abs(dg)>32 || Math.Abs(db)>32)return false;
+        long difference=0;int changed=0;offset=0;
+        for(int y=Y;y<Y+Height;y++)for(int x=X;x<X+Width;x++)
+        {
+            var pixel=image.GetPixel(x,y);
+            int error=Math.Abs(pixel.R-Math.Clamp(Rgb[offset++]+dr,0,255))+
+                Math.Abs(pixel.G-Math.Clamp(Rgb[offset++]+dg,0,255))+
+                Math.Abs(pixel.B-Math.Clamp(Rgb[offset++]+db,0,255));
+            difference+=error;if(error>90)changed++;
+        }
+        return difference<=count*3L*8 && changed<=count*.04;
+    }
 }
 
 internal sealed record RepairProfile(int Version,string ClientHash,int Width,int Height,

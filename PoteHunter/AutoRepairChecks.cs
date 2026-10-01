@@ -92,6 +92,28 @@ internal static class AutoRepairChecks
         Require(customView.State.Inventory && customView.State.Hammer && customView.State.Prompt && customView.State.Confirm &&
             customView.Hammer==profile.Hammer.Center && customView.Confirm==profile.Confirm.Center && customView.HammerVisual==null,
             "Saved repair controls were not used directly.");
+        using(var tinted=(Bitmap)image.Clone())
+        {
+            for(int y=0;y<tinted.Height;y++)for(int x=0;x<tinted.Width;x++)
+            {
+                var pixel=image.GetPixel(x,y);
+                tinted.SetPixel(x,y,Color.FromArgb(Math.Min(255,pixel.R+20),Math.Min(255,pixel.G+12),Math.Min(255,pixel.B+16)));
+            }
+            Require(!profile.Hammer.Matches(tinted) && profile.Hammer.MatchesControl(tinted),
+                "A uniform color cast hid the unchanged repair hammer.");
+            var tintedView=LiveRepairSurface.Recognize(tinted,profile,default,NoAutomatic);
+            Require(tintedView.State.Inventory && tintedView.State.Hammer,"Tinted inventory/hammer blocked repair recognition.");
+            using(var g=Graphics.FromImage(tinted))g.FillRectangle(Brushes.Black,profile.Hammer.Bounds);
+            var noHammer=LiveRepairSurface.Recognize(tinted,profile,default,NoAutomatic);
+            Require(noHammer.State.Inventory && !noHammer.State.Hammer,"Tint compensation accepted a missing hammer.");
+        }
+        using(var wrongIcon=(Bitmap)image.Clone())
+        {
+            var bounds=profile.Hammer.Bounds;
+            for(int y=bounds.Top;y<bounds.Bottom;y++)for(int x=bounds.Left;x<bounds.Right;x++)
+                wrongIcon.SetPixel(x,y,(x/3+y/3)%2==0?Color.FromArgb(15,30,45):Color.FromArgb(230,180,90));
+            Require(!profile.Hammer.MatchesControl(wrongIcon),"A different icon matched after color correction.");
+        }
         using(var changed=(Bitmap)image.Clone())
         {
             using(var g=Graphics.FromImage(changed))g.FillRectangle(Brushes.Black,profile.Prompt.Bounds);
@@ -122,6 +144,10 @@ internal static class AutoRepairChecks
                 if(textImage.GetPixel(x,y).R<190)portal.SetPixel(x,y,Color.FromArgb(165,120,175));
             Require(!textPatch.Matches(portal) && textPatch.MatchesText(portal),
                 "A translucent repair question was rejected when only its background changed.");
+            var textInventoryProfile=profile with{Inventory=textPatch};
+            var textInventory=LiveRepairSurface.Recognize(portal,textInventoryProfile,default,NoAutomatic);
+            Require(textInventory.State.Inventory && textInventory.State.Hammer,
+                "Visible inventory lettering was lost over a changed world background.");
             using var absent=(Bitmap)portal.Clone();
             using(var g=Graphics.FromImage(absent))g.FillRectangle(Brushes.Plum,textArea);
             Require(!textPatch.MatchesText(absent),"A blank translucent popup matched repair lettering.");

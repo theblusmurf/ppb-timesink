@@ -97,6 +97,25 @@ public static class Targeting
             normalized.Contains("tower",StringComparison.OrdinalIgnoreCase);
     }
     public const double StationaryAssistMaximumStep=1.5;
+    public static bool StationarySwingInRange(double distance,double range,bool alreadyHeld) =>
+        double.IsFinite(distance) && distance>=0 && double.IsFinite(range) && range>0 &&
+        distance<=range+(alreadyHeld ? .35 : 0);
+
+    public static bool StationaryAttackNeedsRearm(int health,bool held,long now,ref int previousHealth,ref long damageAt)
+    {
+        // Regeneration is not evidence that our held swing connected.
+        if(previousHealth<0 || health<previousHealth)damageAt=now;
+        previousHealth=health;
+        return !held || now-damageAt>=2500;
+    }
+
+    // Callers supply only protected, owned engaged members. Never pull a fresh
+    // target to retain a swing; use living readable HP and the actual range.
+    public static Entity? ChooseStationaryEngaged(IEnumerable<Entity> engaged,IReadOnlyDictionary<uint,Health> health,
+        Vec position,double range) => !position.Finite || !double.IsFinite(range) || range<=0 ? null :
+        engaged.Where(e=>e.Targetable && IsStationaryHuntTargetId(e.Id) && e.Position.Finite &&
+            health.GetValueOrDefault(e.Id) is {Known:true,Dead:false} && (e.Position-position).Length<=range)
+        .OrderByDescending(e=>health[e.Id].Current).ThenBy(e=>(e.Position-position).Length).ThenBy(e=>e.Id).FirstOrDefault();
     public static bool TryStationaryAssistStep(double targetDistance,double swingWindow,out double step)
     {
         step=0;
@@ -248,6 +267,27 @@ public static class Targeting
         if(!TryStationaryAssistStep(3.5,2.5,out var assistStep) || assistStep>StationaryAssistMaximumStep || assistStep<1.0 ||
             TryStationaryAssistStep(4.01,2.5,out _) || TryStationaryAssistStep(2.5,2.5,out _))
             throw new Exception("Stationary melee assist exceeded its bounded step or admitted an out-of-range target.");
+        if(!StationarySwingInRange(2.5,2.5,false) || StationarySwingInRange(2.6,2.5,false) ||
+            !StationarySwingInRange(2.8,2.5,true) || StationarySwingInRange(2.86,2.5,true) ||
+            StationarySwingInRange(double.NaN,2.5,true) || StationarySwingInRange(1,0,true))
+            throw new Exception("Stationary attack entry/release margins were inconsistent.");
+        int previousHealth=-1;long damageAt=0;
+        if(StationaryAttackNeedsRearm(80,true,1000,ref previousHealth,ref damageAt) ||
+            !StationaryAttackNeedsRearm(90,true,3500,ref previousHealth,ref damageAt) ||
+            StationaryAttackNeedsRearm(70,true,3600,ref previousHealth,ref damageAt) ||
+            StationaryAttackNeedsRearm(75,true,6000,ref previousHealth,ref damageAt) ||
+            !StationaryAttackNeedsRearm(76,true,6100,ref previousHealth,ref damageAt) ||
+            !StationaryAttackNeedsRearm(76,false,6101,ref previousHealth,ref damageAt))
+            throw new Exception("Target regeneration suppressed the stationary no-damage attack watchdog.");
+        var close=fixedTarget with{Position=new(1.5,0)};
+        var high=close with{Id=0x80011753,Position=new(2,0)};
+        var distant=close with{Id=0x80021753,Position=new(3,0)};
+        var stationaryHp=new Dictionary<uint,Health>{{close.Id,new(40,100)},{high.Id,new(80,100)},{distant.Id,new(100,100)}};
+        if(ChooseStationaryEngaged([close,high,distant],stationaryHp,anchor,2.5)?.Id!=high.Id)
+            throw new Exception("Stationary swing did not select the most-health engaged enemy inside range.");
+        stationaryHp[high.Id]=new(0,100);stationaryHp[close.Id]=new();
+        if(ChooseStationaryEngaged([close,high,distant],stationaryHp,anchor,2.5)!=null)
+            throw new Exception("Unknown/dead/out-of-range enemies retained a stationary attack.");
         if(!IsStationaryHuntFilter("Tribal") || !IsStationaryHuntFilter("Pulkhan") ||
             !IsStationaryHuntFilter("Tower") || !IsStationaryHuntFilter("Mimic") ||
             IsStationaryHuntFilter("Green"))

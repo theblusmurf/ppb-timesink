@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.75
+
+- Repair recognition now checks stable inventory lettering and allows a bounded uniform color cast on the saved hammer image. This addresses the observed post-revival stop where inventory was visible but its strict background comparison failed. Coordinates, distinctive icon shape, paired question/Yes recognition, focus/health/client guards and single confirmation remain required.
+- Stationary Mimic, Tribal, Pulkhan and Tower attacks retain a held swing through a 0.35-unit release margin. Entry remains 2.5 map units with default melee settings; the margin does not start new out-of-range attacks or expand the 1.5-unit assist step.
+- Keep basic attack held between defeated targets when another protected, living engaged target remains in melee range. Select the engaged target with the most remaining HP in range, and switch away from an out-of-range locked target when a valid in-range engaged target is available.
+- Removed the generic priority-position check that could override the stationary melee envelope. Target healing no longer resets the no-damage swing watchdog; only actual HP loss does. Added bounded range-wait diagnostics for future interruptions.
+- Normal empty-pack waits, Gamekeeper priority/return, death/recovery, stop/focus guards, routes, pickup and skill gates remain. The shared combat skill gap stays 1.5 seconds; self heals remain exempt. Added range, target-selection, input-transition and recognition regressions. No live game inputs or current-app replacement were performed; full updated live behavior still needs verification.
+
 ## Release1.74
 
 - Corrected custom repair confirmation recognition for translucent dialogs. Recognize the saved static white question and Yes lettering at their saved positions even when the revival portal or scenery changes behind them.
