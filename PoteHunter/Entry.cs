@@ -22,8 +22,19 @@ static class Entry
         WindowsClientInput.Enabled = inputCompatibility;
         void Startup(string step) => File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "startup-trace.txt"), DateTime.UtcNow.ToString("O") + " " + step + Environment.NewLine);
         Startup("Acquiring instance mutex");
-        using var mutex = new Mutex(true, "Local\\PoteHunter.SingleInstance", out bool created);
-        if (!created) return 0;
+        bool gateCheck=args.Length==1 && args[0]=="--patch-startup-check";
+        Mutex instance; bool created;
+        // Startup and patch installation share a gate. Only the running GUI owns
+        // the installer AppMutex; the patch worker must not create that mutex.
+        using (var gate = new Mutex(true, AutoPatcher.GateName, out bool gateCreated))
+        {
+            if (!gateCreated) return gateCheck ? 23 : 0;
+            try { instance = new Mutex(true, "Local\\PoteHunter.SingleInstance", out created); }
+            finally { gate.ReleaseMutex(); }
+        }
+        using var mutex = instance;
+        if (!created) return gateCheck ? 24 : 0;
+        if (gateCheck) return 0; // No GUI, client access or input in packaging checks.
         Startup("Initializing Windows Forms");
         ApplicationConfiguration.Initialize();
         Startup("Constructing hunter window");

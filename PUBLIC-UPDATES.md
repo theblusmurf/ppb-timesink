@@ -1,7 +1,7 @@
 # Public update distribution
 
 Setup > Updates retains manual checking/installation. Automatic patching is
-enabled by default from Release1.71 and can be disabled independently. It checks
+enabled by default from Release1.72 and can be disabled independently. It checks
 at startup and every 30 minutes, stages a verified installer, and applies it only
 when hunting, setup/tests, dialogs and manual route recording are stopped.
 The packaged executable copies its patch worker outside the install directory,
@@ -12,7 +12,7 @@ The worker then reopens PoteHunter with hunting stopped. It never forces a game
 process to close or requests a Windows reboot. Logs stay in the local
 PoteHunter/UpdateCache staging folder; failed versions stop automatic retry.
 Manual installation remains available. Turning automatic patching off/on clears
-that block. Install Release1.71 once using the existing updater to enable this.
+that block. Install Release1.72 once using the existing updater to enable this.
 
 The application checks https://github.com/theblusmurf/PoteHunter-Releases anonymously.
 This repository contains installers, portable builds, checksums and patch notes.

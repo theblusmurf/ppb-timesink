@@ -1,6 +1,6 @@
 # Release notes
 
-## Release1.71
+## Release1.72
 
 - Kept the public GitHub updater and manual Download and install option.
   Added automatic patching, enabled by default in Setup > Updates. Checks at
@@ -18,6 +18,12 @@
   installers and safe argument handling. Windows packaging exercises the
   actual silent patch install routine with user-data preservation sentinels.
   Automatic installation uses the complete release installer, not delta files.
+
+## Release1.71
+
+- Initial automatic patcher build; superseded by Release1.72 before public
+  distribution. Release1.72 separates the patch gate from the installer's
+  running-application mutex and tests installation while that gate is held.
 
 ## Release1.70
 

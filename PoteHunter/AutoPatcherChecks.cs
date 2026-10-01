@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace PoteHunter;
 
@@ -19,8 +20,22 @@ internal static class AutoPatcherTestSupport
             AutoPatcher.NoLinks(target);
             var update=new AvailableUpdate(args[3],1,new FileInfo(args[1]).Length,args[4]);
             AutoPatcher.VerifyInstaller(args[1],update,CancellationToken.None).GetAwaiter().GetResult();
-            AutoPatcher.Install(args[1],target,update,Path.Combine(root,"patch-installer.log"));
-            File.WriteAllText(Path.Combine(root,"patch-install-check.json"),JsonSerializer.Serialize(new{Passed=true,VerifiedInstaller=true,VersionConfirmed=true,NoRelaunch=true}));return 0;
+            void StartupCheck(int expected)
+            {
+                var start=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=false,CreateNoWindow=true};
+                start.ArgumentList.Add("--patch-startup-check");
+                using var probe=Process.Start(start)??throw new Exception("Startup check did not launch.");
+                if(!probe.WaitForExit(30000) || probe.ExitCode!=expected)throw new Exception("Application startup did not respect/release the patch gate.");
+            }
+            using(var gate=new Mutex(true,AutoPatcher.GateName,out bool owned))
+            {
+                if(!owned)throw new InvalidOperationException("Another patch is running.");
+                try { StartupCheck(23);AutoPatcher.RequireGuiExited();AutoPatcher.Install(args[1],target,update,Path.Combine(root,"patch-installer.log")); }
+                finally {gate.ReleaseMutex();}
+            }
+            StartupCheck(0);
+            File.WriteAllText(Path.Combine(root,"patch-install-check.json"),JsonSerializer.Serialize(new{Passed=true,VerifiedInstaller=true,
+                VersionConfirmed=true,SeparatePatchGate=true,GuiBlockedDuringPatch=true,GuiAllowedAfterPatch=true,NoRelaunch=true}));return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex.Message);return 1;}
     }

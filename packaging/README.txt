@@ -18,7 +18,7 @@ remains available. Installer size and GitHub SHA256 digest are
 verified before launch. Existing saved credentials are unused by this version.
 Failed patches retain local UpdateCache logs and stop automatic retries; toggle
 automatic patching off/on or use manual installation to retry. No game close or
-Windows reboot is requested. Install Release1.71 once to enable auto patching.
+Windows reboot is requested. Install Release1.72 once to enable auto patching.
 For first migration, close the app and copy settings.json, navigation-routes.json,
 repair-profile.json and revival-profile.json to the installed app folder if present.
 Copy your old settings.json before starting if you want to keep your preferences.

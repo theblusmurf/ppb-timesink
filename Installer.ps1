@@ -44,4 +44,4 @@ if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $test 'settings.json')) -o
 foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','loot-history.csv','session-log.txt'){
     if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Uninstall changed $name"}
 }
-@{Passed=$true;Version=$Version;Install=$true;Upgrade=$true;AutoPatcherInstall=$true;ProfilesAndLogsPreserved=$true;UninstallPreservesUserData=$true;SHA256=$hash} | ConvertTo-Json | Set-Content (Join-Path $output 'installer-checks.json')
+@{Passed=$true;Version=$Version;Install=$true;Upgrade=$true;AutoPatcherInstall=$true;StartupBlockedDuringPatch=$true;StartupAllowedAfterPatch=$true;ProfilesAndLogsPreserved=$true;UninstallPreservesUserData=$true;SHA256=$hash} | ConvertTo-Json | Set-Content (Join-Path $output 'installer-checks.json')

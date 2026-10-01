@@ -13,6 +13,7 @@ internal sealed record PatchRequest(string Directory, string CurrentVersion, Ava
 
 internal static partial class AutoPatcher
 {
+    internal const string GateName="Local\\PoteHunter.Patching";
     internal static string CacheRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PoteHunter", "UpdateCache");
     internal static bool Idle(bool working, bool busy, bool recording, bool modal) => !working && !busy && !recording && !modal;
@@ -131,12 +132,11 @@ internal static partial class AutoPatcher
             Record("Waiting for the original application to exit; no forced termination.");
             File.WriteAllText(Path.Combine(folder,"worker-ready.txt"),"ready");
             using (var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2))) await parent.WaitForExitAsync(timeout.Token);
-            using var mutex = new Mutex(false, "Local\\PoteHunter.SingleInstance");
-            bool owned;
-            try { owned = mutex.WaitOne(0); } catch (AbandonedMutexException) { owned = true; }
-            if (!owned) throw new InvalidOperationException("Another PoteHunter instance is running. Patch deferred.");
+            using var mutex = new Mutex(true, GateName, out bool owned);
+            if (!owned) throw new InvalidOperationException("Another PoteHunter instance is starting or patching. Patch deferred.");
             try
             {
+                RequireGuiExited();
                 if (File.ReadAllText(Path.Combine(request.Directory, "release-version.txt")).Trim() != request.CurrentVersion)
                     throw new InvalidOperationException("Installation changed while the patch was staged.");
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
@@ -151,6 +151,8 @@ internal static partial class AutoPatcher
                 Record("Installation confirmed; reopening PoteHunter with hunting stopped.");
             }
             finally { mutex.ReleaseMutex(); }
+            // Closing the last handle removes the named gate before GUI startup.
+            mutex.Dispose();
             using var reopened = Process.Start(new ProcessStartInfo(Path.Combine(request.Directory, "PoteHunter.exe"))
                 { UseShellExecute = true, WorkingDirectory = request.Directory });
             return 0;
@@ -163,5 +165,11 @@ internal static partial class AutoPatcher
             MessageBox.Show(AppUpdates.PatchStatus + "\nUse Setup > Updates to retry manually.\n" + (log ?? ""), "PoteHunter patcher");
             return 1;
         }
+    }
+    internal static void RequireGuiExited()
+    {
+        try { using var gui=Mutex.OpenExisting("Local\\PoteHunter.SingleInstance"); }
+        catch(WaitHandleCannotBeOpenedException) { return; }
+        throw new InvalidOperationException("Another PoteHunter instance is running. Patch deferred.");
     }
 }
