@@ -1,5 +1,20 @@
 # Release notes
 
+## Release1.70
+
+- Applied the selected Runic Strip loot overlay: six resource icons, full
+  amounts, hourly rates and a session timer in an outlined fantasy style.
+  Per-pixel transparency leaves the game visible between text and icons.
+- Navigation > Loot size % adjusts the strip from 50% to 200% in 5% steps,
+  scaling text, icons and spacing together. Size and dragged position are
+  saved; enlargement keeps the overlay inside the current screen.
+- Upgrade selects Runic Strip once. Previous designs remain available and
+  subsequent design choices are preserved. Tracking, rates, reset controls
+  and session logs continue using the existing session data.
+- Offline build/UI checks cover transparent pixels, scaled rendering,
+  saved settings, native composition and switching between overlay designs.
+  No live game input was sent.
+
 ## Release1.69
 
 - Restored detection for the September 30 client layout. Verify a complete,

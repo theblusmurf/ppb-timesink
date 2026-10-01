@@ -31,5 +31,8 @@
   "HealDelaySeconds": 5,
   "AntiKillSteal": true,
   "OtherPlayerRadius": 1,
-  "AvoidNames": []
+  "AvoidNames": [],
+  "LootTrackerDesign": 3,
+  "LootTrackerDesignVersion": 1,
+  "LootTrackerScalePercent": 100
 }

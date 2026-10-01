@@ -3,7 +3,7 @@ using System.Drawing.Drawing2D;
 namespace PoteHunter;
 
 /// <summary>A small draggable, non-activating overlay for tracked farm loot.</summary>
-internal sealed class LootTrackerOverlay : Form
+internal sealed partial class LootTrackerOverlay : Form
 {
     const int HeaderHeight=30;
     const int WsExToolWindow=0x00000080;
@@ -25,13 +25,43 @@ internal sealed class LootTrackerOverlay : Form
     bool dragging;
     Point dragOffset;
     int design=-1;
+    int scalePercent=100;
+    int screenScaleLimit=200;
     internal int Design=>design;
+    internal int ScalePercent=>scalePercent;
+    internal int EffectiveScalePercent=>Math.Min(scalePercent,screenScaleLimit);
     internal void SetDesign(int value)
     {
-        value=Math.Clamp(value,0,2);if(design==value)return;
-        design=value;Size=value switch{1=>new Size(640,144),2=>new Size(360,390),_=>new Size(390,330)};
+        value=Math.Clamp(value,0,3);if(design==value)return;
+        bool changesTransparency=(design==3)!=(value==3);
+        design=value;Size=value switch{1=>new Size(640,144),2=>new Size(360,390),3=>RunicStripRenderer.SizeAt(EffectiveScalePercent),_=>new Size(390,330)};
         BackColor=value==2?Color.FromArgb(221,204,164):Color.FromArgb(15,22,31);
-        Invalidate();
+        Opacity=value==3?1:.94;
+        // SetLayeredWindowAttributes (Form.Opacity) and per-pixel composition
+        // must use fresh layered-window state when switching presentations.
+        if(changesTransparency && IsHandleCreated)RecreateHandle();
+        RefreshSnapshot();
+    }
+
+    internal void SetScale(int value)
+    {
+        value=Math.Clamp(value,50,200);if(scalePercent==value)return;
+        scalePercent=value;
+        if(design==3){Size=RunicStripRenderer.SizeAt(EffectiveScalePercent);RefreshSnapshot();}
+    }
+
+    internal void FitToArea(Size available)
+    {
+        int limit=(int)Math.Min((long)available.Width*100/RunicStripRenderer.LogicalSize.Width,(long)available.Height*100/RunicStripRenderer.LogicalSize.Height);
+        limit=Math.Clamp(limit,50,200);if(screenScaleLimit==limit)return;
+        screenScaleLimit=limit;
+        if(design==3){Size=RunicStripRenderer.SizeAt(EffectiveScalePercent);RefreshSnapshot();}
+    }
+
+    internal void RefreshSnapshot()
+    {
+        if(design==3 && IsHandleCreated && Visible)PresentRunicStrip();
+        else Invalidate();
     }
 
     public LootTrackerOverlay(Func<LootTrackerSnapshot> snapshotProvider,Action<Point>? positionCommitted=null)
@@ -43,7 +73,7 @@ internal sealed class LootTrackerOverlay : Form
         StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(390,330);
         Cursor=Cursors.SizeAll;
         SetDesign(0);
-        MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left || e.Y>=HeaderHeight)return;dragging=true;dragOffset=e.Location;};
+        MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left || e.Y>=(design==3?40*EffectiveScalePercent/100:HeaderHeight))return;dragging=true;dragOffset=e.Location;};
         MouseMove+=(_,e)=>{if(!dragging)return;Location=new Point(Left+e.X-dragOffset.X,Top+e.Y-dragOffset.Y);};
         MouseUp+=(_,e)=>{if(e.Button!=MouseButtons.Left)return;dragging=false;positionCommitted?.Invoke(Location);};
     }
@@ -56,6 +86,7 @@ internal sealed class LootTrackerOverlay : Form
         base.SetVisibleCore(true);
         if(IsHandleCreated)
         {
+            if(design==3)PresentRunicStrip();
             ShowWindow(Handle,SwShownoactivate);
             SetWindowPos(Handle,new IntPtr(HWndTopmost),0,0,0,0,SwpNomove|SwpNosize|SwpNoactivate);
         }
@@ -74,6 +105,11 @@ internal sealed class LootTrackerOverlay : Form
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        if(design==3)
+        {
+            RunicStripRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent);
+            return;
+        }
         base.OnPaint(e);
         e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
         e.Graphics.Clear(BackColor);
@@ -124,6 +160,11 @@ internal sealed class LootTrackerOverlay : Form
             }
         }
         e.Graphics.DrawString($"Zone {snapshot.Zone}  ·  pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(10,ClientSize.Height-14));
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        if(design!=3)base.OnPaintBackground(e);
     }
 
     void DrawAlternate(Graphics g,LootTrackerSnapshot snapshot)

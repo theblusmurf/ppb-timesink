@@ -68,7 +68,9 @@ public sealed class Options
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
     public bool ShowLootTrackerOverlay { get; set; } = true;
-    public int LootTrackerDesign { get; set; }
+    public int LootTrackerDesign { get; set; } = 3;
+    public int LootTrackerDesignVersion { get; set; }
+    public int LootTrackerScalePercent { get; set; } = 100;
     public int LootTrackerOverlayX { get; set; } = -1;
     public int LootTrackerOverlayY { get; set; } = -1;
     public bool ShowTreasureChestMarkers { get; set; } = true;
@@ -107,6 +109,9 @@ public sealed class Options
         }
         if(options.MeleeRange<MinimumMeleeRange)options.MeleeRange=MinimumMeleeRange;
         options.RevivalDelaySeconds=Math.Clamp(options.RevivalDelaySeconds,0,600);
+        if(options.LootTrackerDesignVersion<1){options.LootTrackerDesign=3;options.LootTrackerDesignVersion=1;}
+        options.LootTrackerDesign=Math.Clamp(options.LootTrackerDesign,0,3);
+        options.LootTrackerScalePercent=Math.Clamp(options.LootTrackerScalePercent,50,200);
         return options;
     }
     public void Save() { if(MeleeRange<MinimumMeleeRange)MeleeRange=MinimumMeleeRange; RevivalDelaySeconds=Math.Clamp(RevivalDelaySeconds,0,600); File.WriteAllText(PathName + ".tmp", JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true })); File.Move(PathName + ".tmp", PathName, true); }

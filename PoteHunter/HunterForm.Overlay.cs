@@ -9,6 +9,8 @@ public sealed partial class HunterForm
     readonly CheckBox showNavigationRoutes = new() { Text = "Show routes on radar", AutoSize = true, Checked = true };
     readonly CheckBox showRouteOverlay = new() { Text = "Show route overlay", AutoSize = true };
     readonly ComboBox lootTrackerDesign = new() { DropDownStyle=ComboBoxStyle.DropDownList,Width=175 };
+    readonly NumericUpDown lootTrackerScale=new(){Minimum=50,Maximum=200,Increment=5,Value=100,Width=70};
+    readonly Label lootTrackerScaleLabel=new(){Text="Loot size %:",AutoSize=true,Padding=new Padding(5,5,0,0)};
     readonly CheckBox showLootTrackerOverlay = new() { Text = "Show loot tracker", AutoSize = true, Checked = true };
     readonly CheckBox guideTreasureChests = new() { Text = "Guide to treasure chests", AutoSize = true, Checked = true };
     readonly CheckBox showTreasureChestMarkers = new() { Text = "Show treasure boxes on map", AutoSize = true, Checked = true };
@@ -41,8 +43,8 @@ public sealed partial class HunterForm
     void InitializeNavigationOverlay(FlowLayoutPanel navControls)
     {
         ArgumentNullException.ThrowIfNull(navControls);
-        lootTrackerDesign.Items.AddRange(["Dungeon HUD","Compact Ribbon","Parchment Ledger"]);
-        lootTrackerDesign.SelectedIndex=0;
+        lootTrackerDesign.Items.AddRange(["Dungeon HUD","Compact Ribbon","Parchment Ledger","Runic Strip"]);
+        lootTrackerDesign.SelectedIndex=3;
         navControls.WrapContents=true;navControls.AutoSize=true;navControls.Dock=DockStyle.Top;
         navControls.ParentChanged+=(_,_)=>
         {
@@ -55,7 +57,8 @@ public sealed partial class HunterForm
             showNavigationOverlay.Checked = options.ShowNavigationOverlay;
             showNavigationRoutes.Checked = options.ShowNavigationRoutes;
             showRouteOverlay.Checked = options.ShowRouteOverlay;
-            lootTrackerDesign.SelectedIndex=Math.Clamp(options.LootTrackerDesign,0,2);
+            lootTrackerDesign.SelectedIndex=Math.Clamp(options.LootTrackerDesign,0,3);
+            lootTrackerScale.Value=Math.Clamp(options.LootTrackerScalePercent,50,200);
             showLootTrackerOverlay.Checked = options.ShowLootTrackerOverlay;
             navigationOverlaySize.Value = Math.Clamp(options.NavigationOverlaySize,
                 (int)navigationOverlaySize.Minimum, (int)navigationOverlaySize.Maximum);
@@ -86,8 +89,13 @@ public sealed partial class HunterForm
         navControls.Controls.Add(showRouteOverlay);
         navControls.Controls.Add(showLootTrackerOverlay);
         navControls.Controls.Add(lootTrackerDesign);
+        navControls.Controls.Add(lootTrackerScaleLabel);
+        navControls.Controls.Add(lootTrackerScale);
+        void UpdateLootSizeVisibility(){lootTrackerScale.Visible=lootTrackerScaleLabel.Visible=lootTrackerDesign.SelectedIndex==3;}
+        UpdateLootSizeVisibility();
         priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows all saved paths, anchors, facing and the 10-unit start corridor; auto-fits the full routes.");
-        priorityHint.SetToolTip(lootTrackerDesign,"Three game overlay designs with identical tracked totals and rates. Drag the header to reposition; your selection is saved.");
+        priorityHint.SetToolTip(lootTrackerDesign,"Runic Strip floats outlined text and icons over the game with no background. Drag its title to move. Design and position are saved; previous designs remain available.");
+        priorityHint.SetToolTip(lootTrackerScale,"Runic Strip size: 50% to 200% in 5% steps. Text, icons and spacing scale together; your size is saved. Automatically fits smaller screens.");
         navControls.Controls.Add(guideTreasureChests);
         navControls.Controls.Add(showTreasureChestMarkers);
         navControls.Controls.Add(sizeLabel);
@@ -114,7 +122,8 @@ public sealed partial class HunterForm
         showNavigationOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showNavigationRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showRouteOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
-        lootTrackerDesign.SelectedIndexChanged += (_, _) => OverlaySettingsChanged();
+        lootTrackerDesign.SelectedIndexChanged += (_, _) => {UpdateLootSizeVisibility();LootPresentationChanged();};
+        lootTrackerScale.ValueChanged += (_, _) => LootPresentationChanged();
         showLootTrackerOverlay.CheckedChanged += (_, _) => OverlaySettingsChanged();
         guideTreasureChests.CheckedChanged += (_, _) => OverlaySettingsChanged();
         showTreasureChestMarkers.CheckedChanged += (_, _) => OverlaySettingsChanged();
@@ -185,13 +194,31 @@ public sealed partial class HunterForm
         UpdateNavigationOverlay();
     }
 
+    void LootPresentationChanged()
+    {
+        if(busy || working)
+        {
+            // Presentation can change during hunting without saving unrelated
+            // combat edits or altering the active session.
+            try
+            {
+                var saved=Options.Read();saved.LootTrackerDesign=Math.Clamp(lootTrackerDesign.SelectedIndex,0,3);
+                saved.LootTrackerDesignVersion=1;saved.LootTrackerScalePercent=(int)lootTrackerScale.Value;saved.Save();
+            }
+            catch(Exception ex){message=ex.Message;}
+        }
+        OverlaySettingsChanged();
+    }
+
     /// <summary>Applies the overlay controls to a newly assembled options object.</summary>
     Options WithOverlaySettings(Options options)
     {
         options.ShowNavigationOverlay = showNavigationOverlay.Checked;
         options.ShowNavigationRoutes = showNavigationRoutes.Checked;
         options.ShowRouteOverlay = showRouteOverlay.Checked;
-        options.LootTrackerDesign = Math.Clamp(lootTrackerDesign.SelectedIndex,0,2);
+        options.LootTrackerDesign = Math.Clamp(lootTrackerDesign.SelectedIndex,0,3);
+        options.LootTrackerDesignVersion=1;
+        options.LootTrackerScalePercent=(int)lootTrackerScale.Value;
         options.ShowLootTrackerOverlay = showLootTrackerOverlay.Checked;
         options.NavigationOverlaySize = (int)navigationOverlaySize.Value;
         options.NavigationViewRadius = (int)navigationViewRadius.Value;
@@ -354,7 +381,9 @@ public sealed partial class HunterForm
         if (showLootTrackerOverlay.Checked)
         {
             lootTrackerOverlay ??= new LootTrackerOverlay(lootTracker.Snapshot, CommitLootTrackerPosition);
+            lootTrackerOverlay.FitToArea(Screen.FromRectangle(clientBounds).WorkingArea.Size);
             lootTrackerOverlay.SetDesign(lootTrackerDesign.SelectedIndex);
+            lootTrackerOverlay.SetScale((int)lootTrackerScale.Value);
             if(lootTrackerOverlay.Visible)
             {
                 Rectangle area=Screen.FromRectangle(clientBounds).WorkingArea;
@@ -372,7 +401,7 @@ public sealed partial class HunterForm
                 lootTrackerOverlay.Location=new Point(x,y);
                 lootTrackerOverlay.Show();
             }
-            lootTrackerOverlay.Invalidate();
+            lootTrackerOverlay.RefreshSnapshot();
         }
         else HideLootTrackerOverlay();
     }
@@ -463,8 +492,9 @@ public sealed partial class HunterForm
                 preview.DrawToBitmap(bitmap,new Rectangle(Point.Empty,preview.Size));bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"loot-overlay-design-{style}.png"));
                 galleryGraphics.DrawImageUnscaled(bitmap,positions[style]);
             }
-            preview.SetDesign(99);if(preview.Design!=2)throw new Exception("Invalid loot design was not bounded.");
+            preview.SetDesign(99);if(preview.Design!=3)throw new Exception("Invalid loot design was not bounded.");
         }
+        CheckRunicStripOverlay(sample);
         gallery.Save(Path.Combine(AppContext.BaseDirectory,"loot-overlay-choices.png"));
         var routes=new (int Slot,SavedNavigationRoute Route)[3];
         for(int i=0;i<3;i++)
@@ -475,7 +505,7 @@ public sealed partial class HunterForm
         using var routePreview=new NavigationOverlay((graphics,size)=>DrawSavedRouteOverlay(graphics,size,routes,new(0,10)),"SAVED ROUTES · 10m start corridor","Primary: violet · Alt 1: gold · Alt 2: coral · You: white"){Size=new(450,450)};
         if(!routePreview.HasPassiveWindowStyles)throw new Exception("Route overlay can intercept input or activate the game.");
         using var routeBitmap=new Bitmap(450,450);routePreview.DrawToBitmap(routeBitmap,new Rectangle(0,0,450,450));routeBitmap.Save(Path.Combine(AppContext.BaseDirectory,"route-overlay-preview.png"));
-        lootTrackerDesign.SelectedIndex=0;
+        lootTrackerDesign.SelectedIndex=3;
     }
 
     void CommitLootTrackerPosition(Point location)
