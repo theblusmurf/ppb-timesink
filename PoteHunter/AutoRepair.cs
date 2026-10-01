@@ -45,6 +45,27 @@ internal sealed record RepairPatch(int X,int Y,int Width,int Height,byte[] Rgb)
         }
         return difference<=Width*Height*3L*8 && changed<=Width*Height*.04;
     }
+
+    // Repair dialogs are translucent: the world behind their static white
+    // text changes after revival. Match the foreground glyphs at the saved
+    // coordinates, requiring both coverage and precision so blank/bright
+    // backgrounds or a different question cannot stand in for the text.
+    public bool MatchesText(Bitmap image)
+    {
+        if(Matches(image))return true;
+        if(!new Rectangle(Point.Empty,image.Size).Contains(Bounds) || Rgb.Length!=Width*Height*3)return false;
+        static bool Ink(int r,int g,int b)=>Math.Min(r,Math.Min(g,b))>=190 &&
+            Math.Max(r,Math.Max(g,b))-Math.Min(r,Math.Min(g,b))<=30;
+        int expected=0,actual=0,shared=0,offset=0;
+        for(int y=Y;y<Y+Height;y++)for(int x=X;x<X+Width;x++)
+        {
+            bool reference=Ink(Rgb[offset],Rgb[offset+1],Rgb[offset+2]);offset+=3;
+            var pixel=image.GetPixel(x,y);bool observed=Ink(pixel.R,pixel.G,pixel.B);
+            if(reference)expected++;if(observed)actual++;if(reference&&observed)shared++;
+        }
+        return expected>=20 && expected<=Width*Height*.35 && actual>=20 && actual<=Width*Height*.35 &&
+            shared>=expected*.95 && shared>=actual*.95;
+    }
 }
 
 internal sealed record RepairProfile(int Version,string ClientHash,int Width,int Height,

@@ -42,7 +42,7 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
             // A validated user setup is authoritative. Do not delay its small
             // patch checks behind a scan of every pixel at every UI scale.
             bool inventory=profile.Inventory.Matches(image),hammer=inventory && profile.Hammer.Matches(image);
-            bool prompt=profile.Prompt.Matches(image),confirm=prompt && profile.Confirm.Matches(image);
+            bool prompt=profile.Prompt.MatchesText(image),confirm=prompt && profile.Confirm.MatchesText(image);
             token.ThrowIfCancellationRequested();
             return new(new(inventory,hammer,prompt,confirm),hammer?profile.Hammer.Center:null,
                 confirm?profile.Confirm.Center:null,null,null);
@@ -88,7 +88,7 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
         {
             var visual=confirm?view.ConfirmVisual:view.HammerVisual;
             marker=await Task.Run(()=>visual!=null ? RecoveryVision.RepairMarker(image,visual,confirm,token) :
-                profile!=null && (confirm?profile.Prompt.Matches(image):profile.Inventory.Matches(image)&&!profile.Prompt.Matches(image)),token);
+                profile!=null && (confirm?profile.Prompt.MatchesText(image):profile.Inventory.Matches(image)&&!profile.Prompt.MatchesText(image)),token);
         }
         validate();token.ThrowIfCancellationRequested();
         var cursor=Input.Cursor();

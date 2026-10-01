@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.74 — Repair recognition after revival
+
+- Corrected custom repair confirmation recognition for translucent dialogs. Recognize the saved static white question and Yes lettering at their saved positions even when the revival portal or scenery changes behind them.
+- Keep paired question/button checks, unchanged inventory/hammer recognition, foreground/health/client/window guards, immediate pre-click question validation and one confirmation attempt. Existing compatible repair setups remain usable; no new revival setup is required.
+- Live Release1.73 investigation confirmed revival and hammer input succeeded and left the repair question and Yes visibly open. Strict RGB comparison rejected the changing background: question error 57.84 against an 8 limit, while its foreground lettering retained over 97% agreement.
+- Added regressions for changed translucent backgrounds, missing/different text, white backgrounds and missing confirmation buttons. Validate the saved failed frame privately without publishing game screenshots, profiles or logs. Live repaired sequence remains to be confirmed after installing this update.
+
 ## Release1.73
 
 - Reduced the shared gap between successful combat skill casts from 5 seconds

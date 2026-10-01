@@ -107,6 +107,39 @@ internal static class AutoRepairChecks
             var missing=LiveRepairSurface.Recognize(plain,profile,default,NoAutomatic);
             Require(missing.State==default,"Missing custom controls triggered automatic scanning or false recognition.");
         }
+        // Static white lettering survives a changed translucent background.
+        // Require its shape, not just brightness, and retain both dialog gates.
+        using(var textImage=new Bitmap(360,90))
+        {
+            var textArea=new Rectangle(170,45,120,24);
+            using(var g=Graphics.FromImage(textImage))
+            {g.DrawImageUnscaled(image,0,0);using var background=new SolidBrush(Color.FromArgb(70,60,50));g.FillRectangle(background,textArea);}
+            for(int y=49;y<65;y+=3)for(int x=174;x<282;x+=5)
+                if((x+y)%4!=0)textImage.SetPixel(x,y,Color.White);
+            var textPatch=RepairPatch.Capture(textImage,textArea);
+            using var portal=(Bitmap)textImage.Clone();
+            for(int y=textArea.Top;y<textArea.Bottom;y++)for(int x=textArea.Left;x<textArea.Right;x++)
+                if(textImage.GetPixel(x,y).R<190)portal.SetPixel(x,y,Color.FromArgb(165,120,175));
+            Require(!textPatch.Matches(portal) && textPatch.MatchesText(portal),
+                "A translucent repair question was rejected when only its background changed.");
+            using var absent=(Bitmap)portal.Clone();
+            using(var g=Graphics.FromImage(absent))g.FillRectangle(Brushes.Plum,textArea);
+            Require(!textPatch.MatchesText(absent),"A blank translucent popup matched repair lettering.");
+            using var bright=(Bitmap)portal.Clone();
+            using(var g=Graphics.FromImage(bright))g.FillRectangle(Brushes.White,textArea);
+            Require(!textPatch.MatchesText(bright),"A bright background was mistaken for repair text.");
+            using var different=(Bitmap)portal.Clone();
+            using(var g=Graphics.FromImage(different))g.FillRectangle(Brushes.Plum,textArea);
+            for(int y=50;y<66;y+=3)for(int x=175;x<283;x+=5)
+                if((x+y)%4!=0)different.SetPixel(x,y,Color.White);
+            Require(!textPatch.MatchesText(different),"Different lettering matched the repair question.");
+            var translucentProfile=profile with{Prompt=textPatch};
+            var paired=LiveRepairSurface.Recognize(portal,translucentProfile,default,NoAutomatic);
+            Require(paired.State.Prompt && paired.State.Confirm,"Translucent question lost its paired confirmation.");
+            using(var g=Graphics.FromImage(portal))g.FillRectangle(Brushes.Black,profile.Confirm.Bounds);
+            var noButton=LiveRepairSurface.Recognize(portal,translucentProfile,default,NoAutomatic);
+            Require(noButton.State.Prompt && !noButton.State.Confirm,"Recognized text bypassed a missing Yes button.");
+        }
         int autoScans=0;
         var automaticView=LiveRepairSurface.Recognize(image,null,default,()=>{autoScans++;return new(null,null);});
         Require(autoScans==1 && automaticView.State==default,"Automatic repair recognition was lost without a custom setup.");
