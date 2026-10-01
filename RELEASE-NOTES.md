@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.78
+
+- Apply the selected Field Console II design: deeper forest surfaces, brass accents, clearer typography and an Overview dashboard. Keep Start/F8, Stop/F9 and connection status visible across pages.
+- Add target-family shortcuts, a custom name filter, existing mode/range/automatic-skill controls, independent Gamekeeper priority, revival/repair/resume toggles and saved-route shortcuts. All edit the existing settings and respect running/busy locks; target shortcuts select one family to match the existing single-filter behavior.
+- Show the actual saved anchor, six session resource totals, active timer and estimated gold per hour from the existing tracker. Link directly to detailed hunt, recovery, route and loot pages. No mockup sample values or decorative feature promises are shipped.
+- Preserve all combat, revival, repair, navigation, loot and updater behavior. Existing profiles and settings remain compatible; no running application is replaced during development.
+
 ## Release1.77
 
 - Increase the solo loot pickup radius from 4 to 10 map units around the saved anchor. Automatic loot sweeps, timed pickup jobs, movement boundaries and out-of-circle pickup checks use the shared ten-unit radius.

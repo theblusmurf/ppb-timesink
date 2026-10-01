@@ -54,7 +54,7 @@ public sealed partial class HunterForm
 {
     void CheckFieldConsoleUi(TabControl tabs)
     {
-        foreach(string name in new[]{"Setup","Support","Monitor","Navigation","Advanced","Index"})
+        foreach(string name in new[]{"Overview","Setup","Support","Monitor","Navigation","Advanced","Index"})
         {
             var button=(Button)Controls.Find("fieldNav"+name,true).Single();
             if(!button.Visible || button.Right>button.Parent!.ClientSize.Width)
@@ -91,6 +91,7 @@ public sealed partial class HunterForm
             if(FieldVitalMeter.Read("HP",input).Fraction!=expected)throw new Exception("Invalid vital bar reading.");
         if(FieldVitalMeter.Read("MP","HP unknown · MP 25/50")!=("MP 25/50",.5d) ||
             FieldVitalMeter.Read("HP","").Text!="HP unknown")throw new Exception("Unknown/disconnected vitals were shown as known.");
+        CheckFieldOverview(tabs);
         int originalMode=compactMode.SelectedIndex;
         compactMode.SelectedIndex=3;PerformLayout();Application.DoEvents();
         if(!tankPicker.Visible || !healingSkillKeys.Visible || autoRevive.Visible)

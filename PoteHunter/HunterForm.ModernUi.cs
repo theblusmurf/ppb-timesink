@@ -18,11 +18,11 @@ public sealed partial class HunterForm
 {
     const int UiCornerRadius = 6;
     // Field Console: forest surfaces, brass accents and quiet status colors.
-    static readonly Color UiWindow = Color.FromArgb(17, 28, 24);
+    static readonly Color UiWindow = Color.FromArgb(13, 26, 21);
     static readonly Color UiSidebar = Color.FromArgb(26, 41, 34);
     static readonly Color UiSurface = Color.FromArgb(26, 41, 34);
     static readonly Color UiRaised = Color.FromArgb(34, 54, 43);
-    static readonly Color UiBorder = Color.FromArgb(55, 80, 62);
+    static readonly Color UiBorder = Color.FromArgb(61, 78, 62);
     static readonly Color UiText = Color.FromArgb(227, 235, 218);
     static readonly Color UiMuted = Color.FromArgb(169, 185, 165);
     static readonly Color UiAccent = Color.FromArgb(201, 183, 121);
@@ -42,7 +42,7 @@ public sealed partial class HunterForm
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
         MinimumSize = new Size(960, 680);
-        Size = new Size(1040, 760);
+        Size = new Size(1200, 850);
         BackColor = UiWindow;
         ForeColor = UiText;
         Padding = Padding.Empty;
@@ -87,7 +87,7 @@ public sealed partial class HunterForm
             Margin = Padding.Empty, Padding = new Padding(14, 0, 14, 10), BackColor = UiWindow
         };
         shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        foreach(int height in new[]{46, 40, 68})shell.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
+        foreach(int height in new[]{56, 42, 64})shell.RowStyles.Add(new RowStyle(SizeType.Absolute,height));
         shell.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         shell.RowStyles.Add(new RowStyle(SizeType.Absolute,36));
 
@@ -102,8 +102,8 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Text = "POTEHUNTER  /  FIELD CONSOLE", Dock = DockStyle.Fill,
-            Font = new Font("Consolas",13f,FontStyle.Bold), ForeColor = UiAccent,
+            Text = "PoteHunter   /   FIELD CONSOLE II", Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI Semibold",16f), ForeColor = UiAccent,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
         },0,0);
         masthead.Controls.Add(new Label
@@ -145,9 +145,9 @@ public sealed partial class HunterForm
         var pagePickers = new Panel {Dock=DockStyle.Fill,Margin=new Padding(4,12,8,0),BackColor=UiWindow};
         header.Controls.Add(pagePickers,1,0);
         var actions = new FlowLayoutPanel {AutoSize=true,Anchor=AnchorStyles.Right,WrapContents=false,Margin=Padding.Empty};
-        actions.Controls.AddRange([connect,start,stop]);connect.Text="Connect";start.Text="Start";stop.Text="Stop";
+        actions.Controls.AddRange([connect,start,stop]);connect.Text="Connect";start.Text="Start  F8";stop.Text="Stop  F9";
         foreach(var action in new[]{connect,start,stop})
-        {action.AutoSize=false;action.Size=new Size(82,32);action.Margin=new Padding(5,0,0,0);}
+        {action.AutoSize=false;action.Size=new Size(94,34);action.Margin=new Padding(5,0,0,0);}
         header.Controls.Add(actions,2,0);shell.Controls.Add(header,0,2);shell.Controls.Add(tabs,0,3);
 
         var footer = new TableLayoutPanel
@@ -193,14 +193,16 @@ public sealed partial class HunterForm
             ["Group"] = "Party roster and follow status. Choose the tank in Setup.",
             ["Ranged packs"] = "Tag several monsters, gather them, then clear."
         };
+        var overviewPage=CreateFieldOverview(tabs,setupPage);
+        tabs.TabPages.Add(overviewPage);
         var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
         var advancedPages = new[]{protectionPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Navigation",new[]{navigationPage}),("Advanced",advancedPages),("Index",new[]{indexPage})};
+        var sections=new[]{("Overview",new[]{overviewPage}),("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Navigation",new[]{navigationPage}),("Advanced",advancedPages),("Index",new[]{indexPage})};
         var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
         foreach(var (name,pages) in sections)
         {
             var button=new Button{Text=name,Tag=pages[0],FlatStyle=FlatStyle.Flat,BackColor=UiSidebar,ForeColor=UiMuted,
-                Name="fieldNav"+name,TextAlign=ContentAlignment.MiddleCenter,Size=new Size(112,34),Margin=new Padding(0,0,5,0),Padding=Padding.Empty,Font=new Font("Consolas",10f)};
+                Name="fieldNav"+name,TextAlign=ContentAlignment.MiddleCenter,Size=new Size(105,34),Margin=new Padding(0,0,5,0),Padding=Padding.Empty,Font=new Font("Segoe UI Semibold",10f)};
             button.FlatAppearance.BorderSize=0;button.Cursor=Cursors.Hand;
             button.FlatAppearance.MouseOverBackColor=UiRaised;
             RoundControl(button,UiCornerRadius);nav.Controls.Add(button);
@@ -218,7 +220,7 @@ public sealed partial class HunterForm
         {
             if(tabs.SelectedTab is not TabPage selected)return;
             pageTitle.Text=selected==setupPage?"Setup":FriendlyPageName(selected.Text);
-            pageSubtitle.Text=selected==setupPage?"Your mode, recovery and skills.":subtitles.GetValueOrDefault(selected.Text,"Live details and configuration.");
+            pageSubtitle.Text=selected==overviewPage?"Your hunt, recovery and session at a glance.":selected==setupPage?"Your mode, recovery and skills.":subtitles.GetValueOrDefault(selected.Text,"Live details and configuration.");
             pageSubtitle.AutoEllipsis=true;
             foreach(var (button,pages,picker) in navButtons)
             {
@@ -276,6 +278,7 @@ public sealed partial class HunterForm
             }
         };
 
+        tabs.SelectedTab=overviewPage;refreshOverview?.Invoke();
         RefreshNavigation();
         SanitizeDisplayTree(shell);
         WireDisplaySanitizer(shell);

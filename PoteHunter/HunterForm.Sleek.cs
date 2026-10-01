@@ -9,12 +9,12 @@ public sealed partial class HunterForm
     {
         var card = CompactTable();
         card.BackColor = UiSurface;
-        card.Padding = new Padding(12, 10, 12, 7);
+        card.Padding = new Padding(14, 12, 14, 10);
         card.Margin = new Padding(0, 0, 0, 8);
         CompactAdd(card, new Label
         {
             Text = title, AutoSize = true, ForeColor = UiAccent, UseMnemonic = false,
-            Font = new Font("Consolas", 9f, FontStyle.Bold),
+            Font = new Font("Segoe UI Semibold", 10f),
             Margin = new Padding(0, 0, 0, 8)
         });
         card.Paint += (_, e) =>
