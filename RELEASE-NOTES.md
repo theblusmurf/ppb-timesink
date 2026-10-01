@@ -1,6 +1,6 @@
 # Release notes
 
-## Release1.74 — Repair recognition after revival
+## Release1.74
 
 - Corrected custom repair confirmation recognition for translucent dialogs. Recognize the saved static white question and Yes lettering at their saved positions even when the revival portal or scenery changes behind them.
 - Keep paired question/button checks, unchanged inventory/hammer recognition, foreground/health/client/window guards, immediate pre-click question validation and one confirmation attempt. Existing compatible repair setups remain usable; no new revival setup is required.
