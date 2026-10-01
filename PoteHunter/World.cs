@@ -78,8 +78,8 @@ public sealed partial class World : IDisposable
         try
         {
             var self=LocalPlayer();uint scene=Pointer(moduleBase+profile.Scene);
-            var first=Native.Read(handle!,(nint)(scene+0x5e8),0x138);
-            var second=Native.Read(handle!,(nint)(scene+0x5e8),0x138);
+            var first=Native.Read(handle!,(nint)(scene+profile.Layout.Effects),0x138);
+            var second=Native.Read(handle!,(nint)(scene+profile.Layout.Effects),0x138);
             if(scene!=Pointer(moduleBase+profile.Scene) || !LocalCharacter.Same(self,LocalPlayer()) || !first.AsSpan(0,0x9c).SequenceEqual(second.AsSpan(0,0x9c)))
                 return new(false,"Active effects are updating",[]);
             return ActiveEffectSnapshot.Decode(second,effectNames);
@@ -146,7 +146,11 @@ public sealed partial class World : IDisposable
             }
             if (selected == null) throw new InvalidOperationException("Launch PlayPOTE and log into the world first.");
             ConnectionStage="Opening client for reading";
-            handle = Native.Open(selected.Id);
+            try { handle = Native.Open(selected.Id); }
+            catch(System.ComponentModel.Win32Exception ex) when(ex.NativeErrorCode==5)
+            {
+                throw new InvalidOperationException("Windows denied read-only access to Client.exe. If the game is running as administrator, launch PoteHunter as administrator too; otherwise run both normally.",ex);
+            }
             if (!Native.PathOf(handle).Equals(PoteMemoryProbe.Program.ClientPath, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Client identity changed.");
             process = selected;
             ConnectionStage="Locating client image mapping";
@@ -165,7 +169,7 @@ public sealed partial class World : IDisposable
             ConnectionStage="Checking supported live data";
             try
             {
-                var proofs=ProfileDiscovery.ActiveEffectEvidence(PoteMemoryProbe.Program.ClientPath,profile.Scene);
+                var proofs=ProfileDiscovery.ActiveEffectEvidence(PoteMemoryProbe.Program.ClientPath,profile.Scene,profile.Layout);
                 ActiveEffectsSupported=proofs.Count==6 && proofs.All(e=>{
                     var bytes=Native.Read(handle!,(nint)(moduleBase+e.CodeRva),e.Pattern.Split(' ').Length);
                     return ProfileDiscovery.Matches(bytes,e.Pattern) && (!e.CapturedRva.HasValue || BitConverter.ToUInt32(bytes,e.CaptureOffset)==(ulong)moduleBase+e.CapturedRva.Value);
@@ -192,6 +196,9 @@ public sealed partial class World : IDisposable
                 "8B 45 A4 8B 44 85 B8 C1 E0 04 05 45 02 00 00 03 F8 57 E8 ?? ?? ?? ?? 83 C4 04 83 F8 5A 0F 8E ?? ?? ?? ?? 33 C9 33 F6 8A 04 37",
                 "8B 81 40 02 00 00 3B 82 64 01 00 00 0F 94 C0 C3"];
             PartySupported=partyPatterns.All(pattern=> {
+                if(profile.Layout==SceneLayout.September30)
+                    pattern=pattern.Replace("8B 45 A4 8B 44 85 B8 C1 E0 04","8B C6 C1 E0 04",StringComparison.Ordinal)
+                        .Replace("33 C9 33 F6 8A 04 37","33 C9 33 F6 90 8A 04 37",StringComparison.Ordinal);
                 var evidence=ProfileDiscovery.OptionalEvidence(PoteMemoryProbe.Program.ClientPath,"Party roster",pattern);
                 return evidence!=null && ProfileDiscovery.Matches(Native.Read(handle!,(nint)(moduleBase+evidence.CodeRva),pattern.Split(' ').Length),pattern);
             });
@@ -261,7 +268,7 @@ public sealed partial class World : IDisposable
             if(slot.Kind==SlotKind.Item && string.IsNullOrWhiteSpace(DescribeItem(slot.Id).Category)) throw new InvalidOperationException("Automatic layout validation failed for a slotted item.");
         }
         uint scene=Pointer(moduleBase+profile.Scene);
-        if(Pointer(scene+0x3134)<0x10000 || Pointer(scene+0x3138)>8192) throw new InvalidOperationException("Automatic layout validation failed for the ground-item list.");
+        if(Pointer(scene+profile.Layout.GroundItems)<0x10000 || Pointer(scene+profile.Layout.GroundCount)>8192) throw new InvalidOperationException("Automatic layout validation failed for the ground-item list.");
         _=Loot();
     }
     public void Rescan()
@@ -446,7 +453,7 @@ public sealed partial class World : IDisposable
         uint scene = Pointer(moduleBase + profile.Scene);
         var result = new List<GroundItem>();
         if (scene < 0x10000) return result;
-        uint sentinel = Pointer(scene + 0x3134), count = Pointer(scene + 0x3138);
+        uint sentinel = Pointer(scene + profile.Layout.GroundItems), count = Pointer(scene + profile.Layout.GroundCount);
         if (sentinel < 0x10000 || count > 8192) return result;
         uint node = Pointer(sentinel); var seen = new HashSet<uint>();
         while (node >= 0x10000 && node != sentinel && seen.Add(node) && seen.Count <= 8192)
@@ -532,9 +539,9 @@ public sealed partial class World : IDisposable
     {
         uint scene = Pointer(moduleBase + profile.Scene);
         if (scene < 0x10000) throw new InvalidOperationException("Hotbar scene unavailable.");
-        uint page = Pointer(scene + 0x3168);
+        uint page = Pointer(scene + profile.Layout.HotbarPage);
         if (page != 0 && page != 10) throw new InvalidOperationException("Unrecognized hotbar page.");
-        var pointers = Native.Read(handle!, (nint)(scene + 0x13a8 + page * 4), 40);
+        var pointers = Native.Read(handle!, (nint)(scene + profile.Layout.HotbarSlots + page * 4), 40);
         var slots = new List<HotbarSlot>();
         for (int i = 0; i < 10; i++)
         {
@@ -542,9 +549,9 @@ public sealed partial class World : IDisposable
             uint slot = BitConverter.ToUInt32(pointers, i * 4);
             if (slot < 0x10000) { slots.Add(new HotbarSlot(key, SlotKind.Empty, 0, "Empty", 0, 0, false, 0)); continue; }
             var b = Native.Read(handle!, (nint)slot, 0x1c4);
-            uint kind = BitConverter.ToUInt32(b, 0x1c), assignment = BitConverter.ToUInt32(b, 0x1c0);
-            uint total = BitConverter.ToUInt32(b, 0x24), remaining = BitConverter.ToUInt32(b, 0x28);
-            bool locked = b[0x19c] != 0; int lockRemaining = BitConverter.ToInt32(b, 0x1a0);
+            uint kind = BitConverter.ToUInt32(b, profile.Layout.SlotKind), assignment = BitConverter.ToUInt32(b, 0x1c0);
+            uint total = BitConverter.ToUInt32(b, profile.Layout.CooldownTotal), remaining = BitConverter.ToUInt32(b, profile.Layout.CooldownRemaining);
+            bool locked = b[profile.Layout.Locked] != 0; int lockRemaining = BitConverter.ToInt32(b, profile.Layout.LockRemaining);
             if (assignment < 0x10000) { slots.Add(new HotbarSlot(key, SlotKind.Empty, 0, "Empty", total, remaining, locked, lockRemaining)); continue; }
             int id = 0; string name = "Unknown assignment"; SlotKind slotKind = SlotKind.Unknown;
             if (kind == 1)
@@ -581,19 +588,19 @@ public sealed partial class World : IDisposable
             }
             slots.Add(new HotbarSlot(key, slotKind, id, name, total, remaining, locked, lockRemaining,detail.Category,meta?.Description??detail.Description,detail.RestoresHealth,detail.RestoresMana,meta?.Use??SkillUseKind.Unknown,meta?.Target??SkillTargetKind.Unknown,manaCost));
         }
-        if (Pointer(scene + 0x3168) != page) throw new InvalidOperationException("Hotbar page changed during the read.");
+        if (Pointer(scene + profile.Layout.HotbarPage) != page) throw new InvalidOperationException("Hotbar page changed during the read.");
         return new HotbarSnapshot((int)page, slots);
     }
     public ushort SelectedSkill()
     {
-        uint scene=Pointer(moduleBase+profile.Scene),page=Pointer(scene+0x3168),selected=Pointer(scene+0x13a4);
+        uint scene=Pointer(moduleBase+profile.Scene),page=Pointer(scene+profile.Layout.HotbarPage),selected=Pointer(scene+profile.Layout.SelectedSlot);
         if(page is not (0 or 10) || selected<0x10000)return 0;
-        var slots=Native.Read(handle!,(nint)(scene+0x13a8+page*4),40);
+        var slots=Native.Read(handle!,(nint)(scene+profile.Layout.HotbarSlots+page*4),40);
         if(!Enumerable.Range(0,10).Any(i=>BitConverter.ToUInt32(slots,i*4)==selected))return 0;
-        if(Pointer(selected+0x1c)!=1)return 0;
+        if(Pointer(selected+profile.Layout.SlotKind)!=1)return 0;
         uint assignment=Pointer(selected+0x1c0);if(assignment<0x10000)return 0;
         ushort id=BitConverter.ToUInt16(Native.Read(handle!,(nint)(assignment+0x10),2));
-        return scene==Pointer(moduleBase+profile.Scene) && page==Pointer(scene+0x3168) && selected==Pointer(scene+0x13a4) && assignment==Pointer(selected+0x1c0)?id:(ushort)0;
+        return scene==Pointer(moduleBase+profile.Scene) && page==Pointer(scene+profile.Layout.HotbarPage) && selected==Pointer(scene+profile.Layout.SelectedSlot) && assignment==Pointer(selected+0x1c0)?id:(ushort)0;
     }
     string SkillName(ushort id)
     {

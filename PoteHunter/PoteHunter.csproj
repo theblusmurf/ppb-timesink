@@ -13,6 +13,7 @@
   <ItemGroup><Compile Include="../PoteMemoryProbe/WindowsClientRead.cs" Link="WindowsClientRead.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../PoteMemoryProbe/ClientCompatibility.cs" Link="ClientCompatibility.cs" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="BuildSignatures.json" LogicalName="PoteHunter.BuildSignatures.json" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="BuildSignatures-20260930.json" LogicalName="PoteHunter.BuildSignatures-20260930.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="DefaultSettings.json" LogicalName="PoteHunter.DefaultSettings.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="Repair*.png;ReviveButton.png" LogicalName="PoteHunter.%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup><None Include="maps\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>

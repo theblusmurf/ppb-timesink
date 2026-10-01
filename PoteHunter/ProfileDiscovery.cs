@@ -10,14 +10,16 @@ public static class ProfileDiscovery
 {
     sealed record Rule(string Name, string Pattern, int CaptureOffset = -1);
     sealed record Manifest(int Version, Rule[] Roots, Rule[] Checks);
-    static readonly Lazy<Manifest> signatures = new(() =>
+    static readonly Lazy<Manifest> signatures = new(() => LoadManifest("BuildSignatures.json"));
+    static readonly Lazy<Manifest> september30Signatures = new(() => LoadManifest("BuildSignatures-20260930.json"));
+    static Manifest LoadManifest(string name)
     {
-        using var stream=typeof(ProfileDiscovery).Assembly.GetManifestResourceStream("PoteHunter.BuildSignatures.json")
+        using var stream=typeof(ProfileDiscovery).Assembly.GetManifestResourceStream("PoteHunter."+name)
             ?? throw Failure("the bundled signature catalog is missing");
         var manifest=JsonSerializer.Deserialize<Manifest>(stream) ?? throw Failure("the signature catalog is invalid");
         Require(manifest.Version==1 && manifest.Roots.Length>=8 && manifest.Checks.Length>=9,"incomplete signature catalog");
         return manifest;
-    });
+    }
     static InvalidOperationException Failure(string reason) => new("Automatic client detection stopped: " + reason + ". Controls remain disabled.");
     static void Require(bool condition,string reason) { if(!condition) throw Failure(reason); }
 
@@ -49,10 +51,25 @@ public static class ProfileDiscovery
 
     public static ProfileDetection Discover(byte[] bytes)
     {
+        var matches=new List<ProfileDetection>();
+        var failures=new List<string>();
+        foreach(var catalog in new[]{(signatures.Value,SceneLayout.Legacy,"original"),
+            (september30Signatures.Value,SceneLayout.September30,"September 30")})
+        {
+            try { matches.Add(Discover(bytes,catalog.Item1,catalog.Item2)); }
+            catch(InvalidOperationException ex) { failures.Add(catalog.Item3+": "+ex.Message); }
+        }
+        Require(matches.Count<=1,"multiple incompatible layout catalogs matched");
+        if(matches.Count==0) throw Failure("no verified layout catalog matched ("+string.Join("; ",failures)+")");
+        return matches[0];
+    }
+
+    static ProfileDetection Discover(byte[] bytes,Manifest manifest,SceneLayout layout)
+    {
         var image=new PeImage(bytes);
         var evidence=new List<SignatureEvidence>();
         var roots=new Dictionary<string,uint>(StringComparer.Ordinal);
-        foreach(var rule in signatures.Value.Roots)
+        foreach(var rule in manifest.Roots)
         {
             var pattern=new Pattern(rule.Pattern);
             Require(rule.CaptureOffset>=0 && rule.CaptureOffset+4<=pattern.Length,"invalid capture for " + rule.Name);
@@ -71,7 +88,7 @@ public static class ProfileDiscovery
             Require(!roots.TryGetValue(rule.Name,out uint previous) || previous==resolved,"independent signatures disagree for " + rule.Name);
             roots[rule.Name]=resolved;
         }
-        foreach(var rule in signatures.Value.Checks)
+        foreach(var rule in manifest.Checks)
         {
             var matches=image.Find(new Pattern(rule.Pattern));
             Require(matches.Count==1,"member layout could not be verified: " + rule.Name);
@@ -88,7 +105,7 @@ public static class ProfileDiscovery
         uint destructor=image.U32Rva(roots["CreatureVtable"]);
         Require(destructor>=image.ImageBase && image.SectionAt(destructor-image.ImageBase,1)?.Executable==true,"creature vtable does not reference executable code");
         var profile=new BuildProfile(Convert.ToHexStringLower(SHA256.HashData(bytes)),image.ImageSize,
-            roots["CreatureVtable"],roots["Scene"],roots["LocalActor"],roots["CreatureManager"],roots["UidDataManager"],roots["MonsterDefinitions"],roots["ItemDefinitions"],roots["SkillDefinitions"]);
+            roots["CreatureVtable"],roots["Scene"],roots["LocalActor"],roots["CreatureManager"],roots["UidDataManager"],roots["MonsterDefinitions"],roots["ItemDefinitions"],roots["SkillDefinitions"]) { Layout=layout };
         return new(profile,true,image.TimeDateStamp,evidence);
     }
 
@@ -100,12 +117,14 @@ public static class ProfileDiscovery
         const string pattern="8B 85 ?? ?? ?? ?? 8A 88 4C 02 00 00 B8 ?? ?? ?? ?? 84 C9 0F 44 C6";
         return OptionalEvidence(path,"Standing/sitting regeneration flag",pattern);
     }
-    public static IReadOnlyList<SignatureEvidence> ActiveEffectEvidence(string path,uint sceneRva)
+    public static IReadOnlyList<SignatureEvidence> ActiveEffectEvidence(string path,uint sceneRva,SceneLayout? layout=null)
     {
         var image=new PeImage(File.ReadAllBytes(path));
         var rules=new[]{
-            new Rule("Effect scene root","A1 ?? ?? ?? ?? 33 C9 8B 3D ?? ?? ?? ?? 89 85 C0 FC FF FF 89 8D BC FC FF FF 8B 80 4C 36 00 00",1),
-            new Rule("Effect timer array","8B 85 C0 FC FF FF 8D 93 00 04 00 00 05 84 06 00 00 89 95 AC FC FF FF BE 01 00 00 00 89 85 B8 FC FF FF"),
+            new Rule("Effect scene root","A1 ?? ?? ?? ?? 33 C9 8B 3D ?? ?? ?? ?? 89 85 C0 FC FF FF 89 8D BC FC FF FF 8B 80 "+
+                (layout==SceneLayout.September30?"74":"4C")+" 36 00 00",1),
+            new Rule("Effect timer array","8B 85 C0 FC FF FF 8D 93 00 04 00 00 05 "+
+                (layout==SceneLayout.September30?"AC":"84")+" 06 00 00 89 95 AC FC FF FF BE 01 00 00 00 89 85 B8 FC FF FF"),
             new Rule("Effect magnitude","0F B7 98 64 FF FF FF 66 85 DB 0F 84 ?? ?? ?? ?? 83 3A 00"),
             new Rule("Effect seconds","8B 85 B8 FC FF FF 8B D3 33 DB 0F B7 00 83 F8 01 8D 48 FF 8D 46 FF 0F 43 D9"),
             new Rule("Effect stride","46 83 C2 04 83 C0 02 89 95 AC FC FF FF 89 85 B8 FC FF FF 83 FE 4E"),
@@ -233,6 +252,73 @@ public static class ProfileDiscovery
         bool rejected=false; try { Discover(new byte[512]); } catch(InvalidOperationException) { rejected=true; }
         if(!rejected) throw new Exception("Malformed client image was accepted");
         _=signatures.Value;
+        CheckLayoutCatalogs();
+    }
+
+    // Construct file-backed PE fixtures, without copying or publishing game data.
+    // Exercise complete catalog selection, agreeing roots and mandatory fields.
+    static void CheckLayoutCatalogs()
+    {
+        foreach(var catalog in new[]{(signatures.Value,SceneLayout.Legacy),
+            (september30Signatures.Value,SceneLayout.September30)})
+        {
+            byte[] fixture=new byte[0xb000];
+            void U16(int at,ushort value)=>BitConverter.TryWriteBytes(fixture.AsSpan(at,2),value);
+            void U32(int at,uint value)=>BitConverter.TryWriteBytes(fixture.AsSpan(at,4),value);
+            U16(0,0x5a4d);U32(0x3c,0x80);U32(0x80,0x4550);U16(0x84,0x14c);
+            U16(0x86,3);U16(0x94,0xe0);U16(0x98,0x10b);U32(0xb4,0x400000);U32(0xd0,0xb000);
+            void Section(int at,uint rva,uint size,uint flags)
+            {
+                U32(at+8,size);U32(at+12,rva);U32(at+16,size);U32(at+20,rva);U32(at+36,flags);
+            }
+            Section(0x178,0x1000,0x6000,0x60000020);
+            Section(0x1a0,0x8000,0x1000,0x40000040);
+            Section(0x1c8,0x9000,0x2000,0xc0000040);
+            string[] names=["CreatureVtable","Scene","LocalActor","CreatureManager","UidDataManager","MonsterDefinitions","ItemDefinitions","SkillDefinitions"];
+            var roots=names.Select((name,index)=>(name,rva:index==0?0x8000u:0x9000u+(uint)index*0x100)).ToDictionary(x=>x.name,x=>x.rva);
+            U32(0x8000,0x401100);
+            var locations=new Dictionary<string,int>();
+            int cursor=0x1100;
+            foreach(var group in catalog.Item1.Roots.Concat(catalog.Item1.Checks).GroupBy(r=>r.Pattern))
+            {
+                var tokens=group.Key.Split(' ');
+                locations[group.Key]=cursor;
+                for(int i=0;i<tokens.Length;i++) fixture[cursor+i]=tokens[i]=="??"?(byte)0x5a:Convert.ToByte(tokens[i],16);
+                foreach(var rule in group.Where(r=>r.CaptureOffset>=0)) U32(cursor+rule.CaptureOffset,0x400000+roots[rule.Name]);
+                cursor+=tokens.Length+32;
+            }
+            // Some independent root signatures are substrings of longer ones.
+            // Populate their wildcard captures at every matching location too.
+            var fixtureImage=new PeImage(fixture);
+            foreach(var rule in catalog.Item1.Roots)
+                foreach(uint match in fixtureImage.Find(new Pattern(rule.Pattern)))
+                    U32(fixtureImage.FileOffset(match)+rule.CaptureOffset,0x400000+roots[rule.Name]);
+            var resolved=Discover(fixture);
+            if(resolved.Profile.Layout!=catalog.Item2 || resolved.Profile.Scene!=roots["Scene"] ||
+                resolved.Profile.LocalActor!=roots["LocalActor"] || !resolved.Automatic)
+                throw new Exception("Complete catalog did not select its verified layout and captured roots.");
+            void Reject(byte[] corrupt)
+            {
+                bool rejected=false;try { ResolveForConnection(corrupt); }catch(InvalidOperationException){rejected=true;}
+                string hash=Convert.ToHexStringLower(SHA256.HashData(corrupt));
+                if(!rejected || PoteMemoryProbe.ClientCompatibility.SupportsRead(hash))
+                    throw new Exception("Incomplete or conflicting catalog granted read approval.");
+            }
+            byte[] missing=(byte[])fixture.Clone();
+            missing[locations[catalog.Item1.Checks.Single(r=>r.Name=="Hotbar slots and page").Pattern]]=0xcc;
+            Reject(missing);
+            byte[] disagree=(byte[])fixture.Clone();
+            var scene=catalog.Item1.Roots.First(r=>r.Name=="Scene");
+            BitConverter.TryWriteBytes(disagree.AsSpan(locations[scene.Pattern]+scene.CaptureOffset,4),0x400000+roots["Scene"]+0x10);
+            Reject(disagree);
+            if(catalog.Item2==SceneLayout.September30)
+            {
+                foreach(var rule in catalog.Item1.Checks.Where(r=>r.Name.StartsWith("Slot ") || r.Name.StartsWith("Ground ") || r.Name=="Selected hotbar slot"))
+                {
+                    byte[] corrupt=(byte[])fixture.Clone();corrupt[locations[rule.Pattern]]=0xcc;Reject(corrupt);
+                }
+            }
+        }
     }
 
     public static object CheckSnapshots(string knownPath,string updatedPath)

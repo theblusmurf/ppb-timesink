@@ -43,6 +43,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Build.ps1 failed with exit code $LASTEXITCODE."
     }
+    & (Join-Path $PSScriptRoot 'packaging/Test-AdminManifest.ps1') -Path (Join-Path $applicationRoot 'PoteHunter.exe')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'packaging/README.txt') -Destination (Join-Path $applicationRoot 'README.txt')
     Set-Content -LiteralPath (Join-Path $applicationRoot 'release-version.txt') -Value $Version -Encoding utf8
 
@@ -80,6 +81,7 @@ try {
         'Repository verification:'
         ($verifyOutput | ForEach-Object { $_.ToString() })
         'Packaged application verification:'
+        'Executable manifest: requireAdministrator; UIAccess disabled.'
         $testReport
     )
     Set-Content -LiteralPath $reportPath -Value $reportLines -Encoding utf8

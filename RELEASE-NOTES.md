@@ -1,5 +1,19 @@
 # Release notes
 
+## Release1.69
+
+- Restored detection for the September 30 client layout. Verify a complete,
+  separate signature catalog before selecting updated scene, hotbar, cooldown,
+  lock and ground-loot fields. Original client layout support is retained.
+- Updated optional effect and party-name proofs for this client. Root agreement,
+  loaded-code, process/window identity and live data validation remain required.
+- Administrator launch remains the default in PoteHunter.exe. Packaging now
+  verifies the executable's actual elevation manifest. Access-denied errors
+  explain that PoteHunter and an elevated client need matching permissions.
+- Local build, offline catalog/invalid-layout and UI checks passed. Read-only
+  elevated connection tests passed against the running client with readable
+  character HP/MP; no game input was sent. Combat/revival were not exercised.
+
 ## Release1.68
 
 - Applied the selected Field Console adjustment: 6 px corners on settings
