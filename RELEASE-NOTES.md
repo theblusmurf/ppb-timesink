@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.80
+
+- Prioritize ready Power Drain and recognized self-heal skills at or below the configured character HP percentage in both stationary and moving combat. Self-heals no longer wait for five living enemies, all enemies below 80% HP, the offensive opening delay or the shared 1.5-second skill gap.
+- Keep offensive skill pack rules and timing. Preserve the inclusive HP threshold, game cooldown, slot lock, retry, mana-reserve exemption, target/health/focus checks and the immediate HP/identity recheck before activation. Self-heals continue to use the existing valid combat target instead of delaying to retarget another pack member; basic attack restoration remains intact.
+- Add a self-heal activation audit with the actual character HP and configured threshold, clarify the healing/targeting tooltips, and add offline regressions for one/three/healthy enemy packs, heal priority, cooldown and retry guards, threshold boundaries and unchanged offensive selection. The separate healing-item/rest threshold is unchanged.
+- Existing settings, routes, profiles, Field Console II, updater and auto patcher remain compatible. No live game input or running-app replacement was performed; live gameplay still needs verification.
+
 ## Release1.79
 
 - Fix competing movement control near the saved anchor: authorized navigation and loot/return movement retain input ownership while stationary combat stays stationary. Existing focus, death, avoidance, boundary and Gamekeeper checks remain active.

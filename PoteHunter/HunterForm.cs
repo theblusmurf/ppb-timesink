@@ -2821,20 +2821,21 @@ public sealed partial class HunterForm : Form
                             }
                         }
                         var stationarySkillGroup=CombatSkillGroup(current,hp,pos,o);
-                        // The five-target gate applies to the combat pack, while
-                        // self-heals may bypass only the shared 1.5-second timer.
-                        bool stationarySkillGate=stationarySkillGroup.Ready;
-                        int stationaryReadyIndex=!current.PriorityLootObject && stationaryNow-combatStart>=1200 && stationarySkillGate ?
-                            SkillRotation.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
-                                slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o) &&
-                                    (stationaryNow>=nextCombatSkillAt || SkillHealthRule.Applies(slot,o))) : -1;
+                        int stationaryReadyIndex=CombatSkillPolicy.Choose(o.SkillKeys,skillCursor,stationaryBar,skillDue,stationaryNow,
+                            SkillConditionHealth(o),o,stationarySkillGroup,
+                            targetReady:!current.PriorityLootObject && hp.Known && !hp.Dead,
+                            offensiveReady:stationaryNow-combatStart>=1200,delayReady:stationaryNow>=nextCombatSkillAt,
+                            eligible:slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && ManaSkillAllowed(slot,o));
                         if(stationaryReadyIndex>=0)
                         {
                             ReleaseCombatPickup();
                             char key=o.SkillKeys[stationaryReadyIndex];
                             var slot=stationaryBar.Slot(key);
                             bool delayExempt=SkillHealthRule.Applies(slot,o);
-                            if(o.SmartSkillTargeting)
+                            bool prioritySelfHeal=CombatSkillPolicy.IsPriorityHeal(slot,o);
+                            // Heal on the valid combat target already in reach; do not delay
+                            // survival by retargeting to a farther member of the pack.
+                            if(o.SmartSkillTargeting && !prioritySelfHeal)
                             {
                                 var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
                                 if(hp.Known)skillHealth[current.Id]=hp;
@@ -2855,7 +2856,7 @@ public sealed partial class HunterForm : Form
                             }
                             try
                             {
-                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,DelayExempt=delayExempt,NextSkillAt=nextCombatSkillAt});
+                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,DelayExempt=delayExempt,PrioritySelfHeal=prioritySelfHeal,NextSkillAt=nextCombatSkillAt});
                                 await Input.Key((Keys)key,50,token);
                                 await Input.Delay(80,token);
                                 if(!await CastHealthCheckedSkill(slot,o,token))continue;
@@ -2967,19 +2968,21 @@ public sealed partial class HunterForm : Form
                         }
                     }
                     var combatSkillGroup=CombatSkillGroup(current,hp,pos,o);
-                    // The five-target gate applies to the combat pack, while
-                    // self-heals may bypass only the shared 1.5-second timer.
-                    bool combatSkillGate=combatSkillGroup.Ready;
-                    int readyIndex = !current.PriorityLootObject && now - combatStart >= 1200 && combatSkillGate ? SkillRotation.Choose(o.SkillKeys,
-                        skillCursor,bar,skillDue,now,slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && HealthSkillAllowed(slot,o) &&
-                            (now>=nextCombatSkillAt || SkillHealthRule.Applies(slot,o))) : -1;
+                    int readyIndex=CombatSkillPolicy.Choose(o.SkillKeys,skillCursor,bar,skillDue,now,
+                        SkillConditionHealth(o),o,combatSkillGroup,
+                        targetReady:!current.PriorityLootObject && hp.Known && !hp.Dead,
+                        offensiveReady:now-combatStart>=1200,delayReady:now>=nextCombatSkillAt,
+                        eligible:slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && ManaSkillAllowed(slot,o));
                     if (readyIndex >= 0)
                     {
                         ReleaseCombatPickup();
                         char key = o.SkillKeys[readyIndex];
                         var slot = bar.Slot(key);
                         bool delayExempt=SkillHealthRule.Applies(slot,o);
-                        if (o.SmartSkillTargeting)
+                        bool prioritySelfHeal=CombatSkillPolicy.IsPriorityHeal(slot,o);
+                        // Heal on the valid combat target already in reach; do not delay
+                        // survival by retargeting to a farther member of the pack.
+                        if(o.SmartSkillTargeting && !prioritySelfHeal)
                         {
                             var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
                             if(hp.Known)skillHealth[current.Id]=hp;
@@ -2996,7 +2999,7 @@ public sealed partial class HunterForm : Form
                         }
                         try
                         {
-                            TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, DelayExempt=delayExempt, NextSkillAt=nextCombatSkillAt });
+                            TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, DelayExempt=delayExempt, PrioritySelfHeal=prioritySelfHeal, NextSkillAt=nextCombatSkillAt });
                             // Keep the basic combo held while the skill is selected and right-clicked.
                             await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
                             Input.HoldMouse(false,true,token);

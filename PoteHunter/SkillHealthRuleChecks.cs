@@ -51,6 +51,56 @@ public static class SkillHealthRuleChecks
         var saved=JsonSerializer.Deserialize<Options>(JsonSerializer.Serialize(rule))!;
         Check(!saved.HealthSkillCondition && saved.HealthSkillPercent==75 && saved.HealthConditionKeys=="2","settings roundtrip");
         Check(JsonSerializer.Deserialize<Options>("{}")!.HealthSkillPercent==50,"older settings default");
-        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-health-rule-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,LiveGameTested=false,Checks=new[]{"name detection and exclusions","inclusive unrounded 50% boundary","character HP in combat","recipient HP in healer mode","missing/dead HP","cooldown lock and retry preserved","other attacks continue","post-selection activation recheck","manual key and configurable threshold","settings roundtrip"}},new JsonSerializerOptions{WriteIndented=true}));
+        CheckCombatSelection();
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-health-rule-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,LiveGameTested=false,Checks=new[]{"name detection and exclusions","inclusive unrounded 50% boundary","character HP in combat","recipient HP in healer mode","missing/dead HP","cooldown lock and retry preserved","other attacks continue","post-selection activation recheck","manual key and configurable threshold","settings roundtrip","priority heal with one or three enemies and healthy packs","priority before attacks and shared timers","offensive pack rules retained","valid target and extra-key exclusions"}},new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static void CheckCombatSelection()
+    {
+        static void Check(bool result,string reason){if(!result)throw new Exception("Combat self-heal priority: "+reason);}
+        var rule=new Options {HealthSkillCondition=true,HealthSkillPercent=40};
+        var bash=new HotbarSlot("1",SlotKind.Skill,1,"Bash Lv.1",11760,0,false,0,SkillUse:SkillUseKind.Instance,SkillTarget:SkillTargetKind.Melee);
+        var fast=bash with{Key="2",Id=2,Name="Fast Hit Lv.1"};
+        var drain=bash with{Key="3",Id=3,Name="Power Drain Lv.1",SkillTarget=SkillTargetKind.Enemy};
+        var bar=new HotbarSnapshot(0,[bash,fast,drain]);
+        var retry=new Dictionary<char,long>();
+        var targets=Enumerable.Range(1,10).Select(i=>new Entity((uint)i,0x80000000u+(uint)i,"Mimic",new(i*.1,0),0)).ToArray();
+        SkillGroupStatus Pack(int count,int percent)=>SkillGroupGate.Evaluate(targets.Take(count),targets[0],
+            targets.ToDictionary(t=>t.Id,_=>new Health(percent,100)),new(),12);
+        int Pick(Health hp,SkillGroupStatus pack,bool target=true,bool warm=true,bool delay=true,int cursor=0,Func<HotbarSlot,bool>? allowed=null)=>
+            CombatSkillPolicy.Choose("123",cursor,bar,retry,1000,hp,rule,pack,target,warm,delay,allowed??(_=>true));
+        var low=new Health(378,1000);var wounded=Pack(10,70);
+        foreach(var pack in new[]{Pack(1,15),Pack(3,16),Pack(4,79),Pack(10,80),Pack(10,100),wounded})
+        {
+            Check(Pick(low,pack,warm:false,delay:false)==2,"heal waited for enemy count/HP or combat timers");
+            Check(Pick(low,pack)==2 && Pick(low,pack,cursor:1)==2,"offensive rotation outranked a ready heal");
+        }
+        Check(Pick(new(400,1000),Pack(3,16))==2 && Pick(new(401,1000),Pack(3,16))==-1,"inclusive HP threshold");
+        Check(Pick(default,Pack(3,16))==-1 && Pick(new(0,1000),Pack(3,16))==-1,"unknown/dead HP rejected");
+        Check(Pick(low,wounded,target:false)==-1,"missing/dead/protected combat target permitted a skill");
+        Check(Pick(low,Pack(3,16),allowed:s=>s.Key!="3")==-1 && Pick(low,wounded,allowed:s=>s.Key!="3")==0,"eligibility denial bypassed or blocked valid attacks");
+        bar=new(0,[bash,fast,drain with{RemainingCooldown=1}]);
+        Check(Pick(low,Pack(3,16))==-1 && Pick(low,wounded)==0,"game cooldown bypassed");
+        bar=new(0,[bash,fast,drain with{Locked=true}]);Check(Pick(low,Pack(3,16))==-1,"slot lock bypassed");
+        bar=new(0,[bash,fast,drain]);retry['3']=1001;Check(Pick(low,Pack(3,16))==-1,"retry deadline bypassed");
+        retry['3']=1000;Check(Pick(low,Pack(3,16))==2,"elapsed retry deadline not released");retry.Clear();
+        foreach(var pack in new[]{Pack(1,15),Pack(3,16),Pack(4,79),Pack(10,80),Pack(10,100)})
+            Check(Pick(new(900,1000),pack)==-1,"ordinary skills bypassed pack count/HP");
+        Check(Pick(new(900,1000),wounded)==0 && Pick(new(900,1000),wounded,cursor:1)==1,"normal attack rotation changed");
+        Check(Pick(new(900,1000),wounded,warm:false)==-1 && Pick(new(900,1000),wounded,delay:false)==-1,"offensive warmup/delay bypassed");
+        rule.HealthConditionKeys="1";
+        bar=new(0,[bash,fast,drain with{RemainingCooldown=1}]);
+        Check(!CombatSkillPolicy.IsPriorityHeal(bash,rule) && Pick(low,Pack(3,16))==-1,"extra HP key made an ordinary attack bypass pack rules");
+        Check(Pick(low,wounded,delay:false)==0,"existing extra-key delay exemption changed");
+        rule.HealthConditionKeys="";bar=new(0,[bash,fast,drain]);
+        rule.HealthSkillCondition=false;
+        Check(!CombatSkillPolicy.IsPriorityHeal(drain,rule) && Pick(low,Pack(3,16))==-1 && Pick(new(900,1000),wounded,cursor:2)==2,"disabled HP condition changed ordinary rotation");
+        rule.HealthSkillCondition=true;rule.HealerMode=true;
+        Check(!CombatSkillPolicy.IsPriorityHeal(drain,rule),"recipient healing treated as combat self-healing");
+        rule.HealerMode=false;
+        bar=new(0,[bash,fast,drain with{Name="Greater Healing Lv.1",SkillTarget=SkillTargetKind.Friend}]);
+        Check(Pick(low,Pack(1,100))==2,"recognized direct heal still required a full pack");
+        Check(!SkillHealthRule.CanActivate(drain,drain,new(401,1000),rule) &&
+            !SkillHealthRule.CanActivate(drain,drain with{Id=4},low,rule),"post-selection HP/identity check bypassed");
     }
 }

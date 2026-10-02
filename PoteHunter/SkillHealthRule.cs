@@ -37,6 +37,31 @@ public static class SkillHealthRule
         current.SkillUse==expected.SkillUse && current.SkillTarget==expected.SkillTarget && current.Ready && Allows(current,character,options);
 }
 
+public static class CombatSkillPolicy
+{
+    // An extra HP-condition key is not proof that an offensive skill heals us.
+    // The priority path is reserved for recognized self-heals with an enabled
+    // character-health rule; healer-mode recipient selection stays separate.
+    public static bool IsPriorityHeal(HotbarSlot slot,Options options)=>
+        !options.HealerMode && SkillHealthRule.Applies(slot,options) && SkillHealthRule.AutomaticMatch(slot);
+
+    public static int Choose(string keys,int cursor,HotbarSnapshot bar,IReadOnlyDictionary<char,long> retryAt,long now,
+        Health character,Options options,SkillGroupStatus group,bool targetReady,bool offensiveReady,bool delayReady,
+        Func<HotbarSlot,bool> eligible)
+    {
+        if(!targetReady)return -1;
+        bool CanUse(HotbarSlot slot)=>SkillHealthRule.Allows(slot,character,options) && eligible(slot);
+        // Keep the same live cooldown, slot-lock and retry checks as attacks,
+        // but do not make survival wait for a full wounded pack or its timer.
+        int heal=SkillRotation.Choose(keys,cursor,bar,retryAt,now,
+            slot=>IsPriorityHeal(slot,options) && CanUse(slot));
+        if(heal>=0)return heal;
+        if(!offensiveReady || !group.Ready)return -1;
+        return SkillRotation.Choose(keys,cursor,bar,retryAt,now,
+            slot=>CanUse(slot) && (delayReady || SkillHealthRule.Applies(slot,options)));
+    }
+}
+
 public sealed partial class HunterForm
 {
     readonly CheckBox healthSkillCondition=new(){Text="Power Drain / heals at HP ≤",Checked=true,AutoSize=true};
@@ -97,6 +122,8 @@ public sealed partial class HunterForm
             TraceLog.Record("skill activation withheld",new{expected.Key,expected.Name,hp.Current,hp.Maximum,HealthSource=options.HealerMode?"Healing target":"Character",Threshold=options.HealthSkillPercent,Condition=SkillHealthRule.Applies(expected,options),current.Ready});
             return false;
         }
+        if(CombatSkillPolicy.IsPriorityHeal(current,options))
+            TraceLog.Record("self-heal activation requested",new{current.Key,current.Name,hp.Current,hp.Maximum,Threshold=options.HealthSkillPercent,Target=lockedTarget?.Id});
         await Input.CastSkill(current.SkillUse,(int)options.HealChargeMilliseconds,token);
         return true;
     }

@@ -29,11 +29,11 @@ public sealed partial class HunterForm
         settings.Controls.Add(healthRow,1,12);settings.SetColumnSpan(healthRow,3);
         var targetRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true,Margin=Padding.Empty};targetRow.Controls.AddRange([smartSkillTargeting,centerAreaSkills,retargetSkillTargets]);
         settings.Controls.Add(new Label{Text="Skill targeting",AutoSize=true,Anchor=AnchorStyles.Left},0,13);settings.Controls.Add(targetRow,1,13);settings.SetColumnSpan(targetRow,3);
-        priorityHint.SetToolTip(healthSkillCondition,"Power Drain and recognized healing skills use the character's HP during combat. In healer mode the selected recipient's HP is used. Self-heals may spend the mana reserve.");
+        priorityHint.SetToolTip(healthSkillCondition,"Power Drain and recognized self-heals take priority at or below this character HP percentage, without waiting for five enemies, wounded enemies or the combat skill gap. They still require a ready skill and valid combat target. In healer mode the selected recipient's HP is used. Self-heals may spend the mana reserve.");
         priorityHint.SetToolTip(autoMana,"Use a ready Food or Potion hotbar slot that restores MP when MP reaches this threshold. HP-only items are excluded.");
         priorityHint.SetToolTip(smartSkillTargeting,"Choose a better engaged target for each skill before casting.");
         priorityHint.SetToolTip(centerAreaSkills,"Aim area and enemy-line skills at the densest engaged pack.");
-        priorityHint.SetToolTip(retargetSkillTargets,"Allow single-target skills to switch to the lowest-health engaged enemy.");
+        priorityHint.SetToolTip(retargetSkillTargets,"Allow offensive single-target skills to switch to the highest-health engaged enemy. Priority self-heals keep the current valid combat target.");
         try
         {
             var options=Options.Read();autoMana.Checked=options.AutoRestoreMana;
