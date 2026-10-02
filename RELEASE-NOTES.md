@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.81
+
+- Start saved-facing restoration with a fresh turn-response window. Count actual sent pixels rather than requested direction during smoothing waits, replace the 100-poll cap with a two-second deadline, and retry post-loot facing up to three times without swallowing cancellation or disabling real no-response detection.
+- Keep an enabled solo run's death recovery available after known turning, blocked-movement or precise loot-return faults. Release all input and watch for confirmed death for up to two minutes; bound the resulting revival/repair/return to ten minutes. Stop, Escape/chat, lost focus, changed character/map, disabled revival, group mode and unknown failures never start or restart this watch. Recovery still requires the recorded route, confirmed living HP, repair when enabled, arrival/facing and the existing resume-on-arrival option.
+- Validate the recorded revival route before aim calibration on Start/F8. Expose the movement-fault watch in recovery status and log its start and completed recovery separately from ordinary startup travel.
+- Use at least a nominal 16 ms frame for final W corrections. Measure actual held time and movement before release separately from settling displacement; ignore sub-frame velocity samples and filter/limit speed estimate changes. Preserve avoidance checks, the 0.15-unit precise arrival requirement and stop/settle/face/recheck sequence.
+- Add offline regressions for unsent turns, idle-to-facing handoff, bounded retry/cancellation, recorded tiny-tap responses, frame-quantized arrival and deliberate-stop/focus safeguards. No live gameplay testing or installed-app replacement was performed. Gamekeeper arrival rules and access-denied diagnostics are outside this update.
+
 ## Release1.80
 
 - Prioritize ready Power Drain and recognized self-heal skills at or below the configured character HP percentage in both stationary and moving combat. Self-heals no longer wait for five living enemies, all enemies below 80% HP, the offensive opening delay or the shared 1.5-second skill gap.

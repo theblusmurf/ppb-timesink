@@ -6,6 +6,17 @@ internal static class DeathRecoveryChecks
 {
     public static void Run()
     {
+        var faultWatch=new FaultDeathWatch();var fault=new TurnUnresponsiveException(default,default);
+        foreach(var failure in new Exception[]{new OperationCanceledException("Escape"),new UnauthorizedAccessException(),new InvalidOperationException("Identity changed"),new RouteUnavailableException("Invalid route")})
+            if(faultWatch.TryBegin(failure,true,false,false,0))throw new Exception("An explicit stop or unknown fault enabled automatic recovery.");
+        if(faultWatch.TryBegin(fault,false,false,false,0) || faultWatch.TryBegin(fault,true,true,false,0) || faultWatch.TryBegin(fault,true,false,true,0))
+            throw new Exception("Disabled/group/cancelled run began a fault death watch.");
+        if(!faultWatch.TryBegin(fault,true,false,false,1000) || faultWatch.TryBegin(fault,true,false,false,1100) ||
+            faultWatch.Expired(120999,false) || !faultWatch.Expired(121000,false) || faultWatch.Expired(121000,true) ||
+            !faultWatch.Expired(601000,true) || faultWatch.RecoveryRemaining(601000)!=0)
+            throw new Exception("Fault watch refreshed itself or exceeded its bounded wait/recovery deadline.");
+        faultWatch.Reset();
+        if(faultWatch.Active || faultWatch.Reason!=null || faultWatch.Expired(999999,true))throw new Exception("Explicit stop retained fault recovery intent.");
         var interruptedRecovery=new DeathRecoveryState();int deathLogs=0;
         void OnDeath(Health hp){if(interruptedRecovery.Observe(hp,1000))deathLogs++;}
         foreach(var hp in new[]{new Health(1,100),default})
@@ -105,7 +116,7 @@ internal static class DeathRecoveryChecks
         }
         finally {if(File.Exists(file))File.Delete(file);if(File.Exists(file+".tmp"))File.Delete(file+".tmp");}
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
-            Passed=true,HardwareInputEmitted=false,Checks=new[]{"zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
+            Passed=true,HardwareInputEmitted=false,Checks=new[]{"bounded movement-fault death watch","explicit stop/unknown failure/group/disabled revival never enables fault recovery","watch cannot refresh its deadline","zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
                 "waypoints require actual arrival","final anchor tolerance","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
                 "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));

@@ -88,6 +88,7 @@ static class SelfTests
             RoutePlanner.SelfTest();
             Navigation.SelfTest();
             DeathRecoveryChecks.Run();
+            Input.CheckFaultWatchSafety();
             AutoRepairChecks.Run().GetAwaiter().GetResult();
             VisualRecoveryChecks.Run().GetAwaiter().GetResult();
             RecoveryTravelChecks.Run().GetAwaiter().GetResult();

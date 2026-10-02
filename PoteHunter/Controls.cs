@@ -125,7 +125,7 @@ public static class Input
     static Action<Packet>? selfTestSink;
     static Func<Keys,bool>? selfTestDown;
     public static bool Down(Keys key) => selfTestDown?.Invoke(key) ?? (selfTestSink==null && (GetAsyncKeyState((int)key) & 0x8000) != 0);
-    static void Check(CancellationToken token)
+    internal static void CheckSafety(CancellationToken token)
     {
         try
         {
@@ -134,12 +134,46 @@ public static class Input
             if(Down(Keys.Escape))throw new OperationCanceledException("Escape stop key pressed.");
             if(Down(Keys.Enter) && !keys.IsHeld(Keys.Enter))throw new OperationCanceledException("Enter/chat key pressed.");
             if(!Allowed())throw new OperationCanceledException("Game window lost focus or is no longer available.");
+        }
+        catch {Release();throw;}
+    }
+    static void Check(CancellationToken token)
+    {
+        try
+        {
+            CheckSafety(token);
             Preflight?.Invoke();
             // The nearby-loot decision owns E while enabled. Updating raw held
             // state here avoids recursively invoking Check through Hold.
             if(PickupHoldProvider is { } pickup)keys.Set(Keys.E,pickup());
         }
         catch {Release();throw;}
+    }
+    internal static void CheckFaultWatchSafety()
+    {
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedDown=selfTestDown;
+        var savedSink=selfTestSink;var savedPickup=PickupHoldProvider;
+        try
+        {
+            int packets=0;selfTestSink=_=>packets++;selfTestDown=_=>false;Allowed=()=>true;
+            PickupHoldProvider=()=>throw new Exception("Fault watch invoked pickup");
+            Preflight=()=>throw new Exception("Fault watch invoked combat preflight");
+            CheckSafety(default);
+            if(packets!=0)throw new Exception("Healthy fault watch emitted input.");
+            foreach(Keys key in new[]{Keys.F9,Keys.Escape,Keys.Enter})
+            {
+                selfTestDown=k=>k==key;bool stopped=false;
+                try{CheckSafety(default);}catch(OperationCanceledException){stopped=true;}
+                if(!stopped)throw new Exception("Fault watch ignored a stop/chat key.");
+            }
+            selfTestDown=_=>false;Allowed=()=>false;bool lostFocus=false;
+            try{CheckSafety(default);}catch(OperationCanceledException){lostFocus=true;}
+            if(!lostFocus)throw new Exception("Fault watch ignored focus loss.");
+            Allowed=()=>true;using var cancelled=new CancellationTokenSource();cancelled.Cancel();bool stoppedByToken=false;
+            try{CheckSafety(cancelled.Token);}catch(OperationCanceledException){stoppedByToken=true;}
+            if(!stoppedByToken)throw new Exception("Fault watch ignored run cancellation.");
+        }
+        finally{Release();Allowed=savedAllowed;Preflight=savedPreflight;selfTestDown=savedDown;selfTestSink=savedSink;PickupHoldProvider=savedPickup;}
     }
     static void Send(Packet p)
     {
@@ -681,8 +715,8 @@ public sealed partial class Movement
         if(Math.Abs(angle)<=tolerance) { smoothSteering.Reset();turnResponse.Reset();return true; }
         int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64);
         Vec position=world.PlayerPosition();
-        if(turnResponse.Observe(position,heading,Math.Sign(angle/RadiansPerPixel),Environment.TickCount64))throw new TurnUnresponsiveException(position,Forward);
         if (pixels != 0) Input.Turn(pixels, token);
+        if(turnResponse.Observe(position,heading,pixels,Environment.TickCount64,awaitingResponse:true))throw new TurnUnresponsiveException(position,Forward);
         await Input.Delay(TurnFeedbackDelay(pixels), token);
         return false;
     }
@@ -719,11 +753,11 @@ public sealed partial class Movement
         }
         int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,advancing,now);
         if(!watchTurns)turnResponse.Reset();
-        else if(turnResponse.Observe(position,heading,Math.Abs(angle)>.035?Math.Sign(angle/RadiansPerPixel):0,now))throw new TurnUnresponsiveException(position,Forward);
         if (pixels != 0)
         {
             Input.Turn(pixels, token);
         }
+        if(watchTurns && turnResponse.Observe(position,heading,pixels,now,awaitingResponse:Math.Abs(angle)>.035))throw new TurnUnresponsiveException(position,Forward);
         if (now - lastMotionTrace > 300)
         {
             lastMotionTrace = now;

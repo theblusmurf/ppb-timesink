@@ -25,7 +25,7 @@ public sealed class TurnResponse
 
     // Commands alone are not progress: either the measured facing or position
     // must change. Small delayed changes accumulate against the same baseline.
-    public bool Observe(Vec position,double heading,int commandedPixels,long now)
+    public bool Observe(Vec position,double heading,int commandedPixels,long now,bool awaitingResponse=false)
     {
         if(!position.Finite)throw new ArgumentOutOfRangeException(nameof(position));
         if(!double.IsFinite(heading))throw new ArgumentOutOfRangeException(nameof(heading));
@@ -33,11 +33,14 @@ public sealed class TurnResponse
         if(lastObservationAt is long previous && now<previous)
             throw new InvalidOperationException("Turning observations arrived out of order.");
         lastObservationAt=now;
-        if(commandedPixels==0)
+        if(commandedPixels==0 && !awaitingResponse)
         {
             tracking=false;
             return false;
         }
+        // A smoothing wait can check a previously sent turn, but cannot start
+        // a no-response window for input that was never actually sent.
+        if(!tracking && commandedPixels==0)return false;
         // Normalize before subtraction so even large finite angles cannot
         // overflow, and crossing the heading wrap is measured as a small turn.
         double normalized=Math.Atan2(Math.Sin(heading),Math.Cos(heading));

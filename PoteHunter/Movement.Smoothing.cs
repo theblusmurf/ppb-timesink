@@ -36,6 +36,8 @@ internal sealed class SmoothSteering
 
 internal sealed class ArrivalMotion
 {
+    internal const int FrameMilliseconds=16;
+    readonly Queue<double> speedSamples=new();
     Vec previous;
     long previousAt;
     bool observed;
@@ -48,20 +50,32 @@ internal sealed class ArrivalMotion
             if(distance>.01 && distance<5)
             {
                 double measured=distance/(now-previousAt);
-                if(measured is >=.001 and <=.08)Speed=Math.Clamp(Math.Max(measured,Speed*.85),.001,.08);
+                if(measured is >=.001 and <=.08)ObserveSpeed(measured);
             }
         }
         previous=position;previousAt=now;observed=true;
     }
     public double BrakingDistance(double tolerance)=>Math.Clamp(Speed*160+tolerance,1.25,4);
     public int PulseMilliseconds(double distance,double tolerance)=>
-        Math.Clamp((int)Math.Floor(Math.Max(0,distance-tolerance*.5)/Speed*.5),1,60);
-    public void ObservePulse(double moved,int commandedMilliseconds)
+        Math.Clamp((int)Math.Floor(Math.Max(0,distance-tolerance*.5)/Speed*.5),FrameMilliseconds,60);
+    void ObserveSpeed(double measured)
     {
-        // Include the measured settling displacement: frame quantization and
-        // release latency must shorten the next step, not cause overshoot.
-        if(moved>.001 && moved<3 && commandedMilliseconds>0)
-            Speed=Math.Clamp(Math.Max(Speed,moved/commandedMilliseconds),.001,.08);
+        speedSamples.Enqueue(measured);
+        if(speedSamples.Count>5)speedSamples.Dequeue();
+        var ordered=speedSamples.Order().ToArray();
+        double median=ordered[ordered.Length/2];
+        // Limit gain changes; one release/settling jump cannot double speed.
+        Speed=Math.Clamp(Speed*.75+Math.Clamp(median,Speed*.75,Speed*1.25)*.25,.001,.08);
+    }
+    public void ObservePulse(double moved,double heldMilliseconds)
+    {
+        // A sub-frame correction is quantized, not a velocity measurement.
+        // Use actual held time for longer pulses, never the requested sleep.
+        if(moved>.01 && moved<3 && heldMilliseconds>=FrameMilliseconds*2)
+        {
+            double measured=moved/heldMilliseconds;
+            if(measured is >=.001 and <=.08)ObserveSpeed(measured);
+        }
     }
 }
 
@@ -122,16 +136,21 @@ public sealed partial class Movement
         int duration=arrivalMotion.PulseMilliseconds(delta.Length,tolerance);
         double step=Math.Min(delta.Length,Math.Max(.05,arrivalMotion.Speed*duration*2));
         if(CanAdvance?.Invoke(position,position+forward*step)==false)return;
+        long heldAt=Environment.TickCount64;
+        double heldMilliseconds=0;
         try
         {
             Input.Hold(Keys.W,true,token);advancing=true;
+            heldAt=Environment.TickCount64;
             await Input.Delay(duration,token);
         }
-        finally { Input.Hold(Keys.W,false,default);advancing=false; }
+        finally { Input.Hold(Keys.W,false,default);advancing=false;heldMilliseconds=Environment.TickCount64-heldAt; }
+        Vec released=world.PlayerPosition();
         await Input.Delay(120,token);
         Vec after=world.PlayerPosition();
-        arrivalMotion.ObservePulse((after-position).Length,duration);
+        arrivalMotion.ObservePulse((released-position).Length,heldMilliseconds);
         TraceLog.Record("anchor approach correction",new {Before=position,After=after,Goal=goal,
-            Remaining=(goal-after).Length,PulseMilliseconds=duration,EstimatedUnitsPerMs=arrivalMotion.Speed});
+            Remaining=(goal-after).Length,PulseMilliseconds=duration,HeldMilliseconds=heldMilliseconds,
+            MovedWhileHeld=(released-position).Length,SettlingDisplacement=(after-released).Length,EstimatedUnitsPerMs=arrivalMotion.Speed});
     }
 }

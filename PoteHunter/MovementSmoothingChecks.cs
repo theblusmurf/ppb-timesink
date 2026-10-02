@@ -35,10 +35,41 @@ internal static class MovementSmoothingChecks
         var response=new TurnResponse();bool stalled=false;
         for(int now=0;now<=1600;now+=20)
         {
-            _=held.Next(1,0,.004,false,now);
-            stalled|=response.Observe(default,0,1,now);
+            int sent=held.Next(1,0,.004,false,now);
+            stalled|=response.Observe(default,0,sent,now,awaitingResponse:true);
         }
         Require(stalled,"cadence waiting hid an unresponsive turn");
+        var unsent=new TurnResponse();
+        Require(!unsent.Observe(default,0,0,0,true) && !unsent.Observe(default,0,0,10000,true),
+            "waiting without any sent input fabricated a stall");
+        var restoredResponse=new TurnResponse();restoredResponse.Observe(default,0,1,0);restoredResponse.Reset();
+        Require(!restoredResponse.Observe(default,0,1,10000,true) && !restoredResponse.Observe(default,0,0,11499,true) &&
+            restoredResponse.Observe(default,0,0,11500,true),"new facing goal inherited an idle timer or waits hid a real stall");
+        var quantized=new ArrivalMotion();double originalSpeed=quantized.Speed;
+        foreach(double moved in new[]{.0032626,0,.326145,.341727})quantized.ObservePulse(moved,9);
+        Require(quantized.Speed==originalSpeed && quantized.PulseMilliseconds(.334,.15)>=16,
+            "recorded sub-frame steps trained velocity or created another tiny tap");
+        quantized.ObservePulse(.9201,54);
+        Require(quantized.Speed<=originalSpeed*1.0625+1e-9,"one settling jump changed speed too abruptly");
+
+        long facingClock=10000;int resetCount=0,faceCalls=0,retries=0;
+        Task FacingDelay(int ms,CancellationToken ct){ct.ThrowIfCancellationRequested();facingClock+=ms;return Task.CompletedTask;}
+        int observations=await FacingRestore.RunAsync(_=>Task.FromResult(++faceCalls>110),()=>resetCount++,()=>{},FacingDelay,
+            ()=>facingClock,()=>new TurnUnresponsiveException(default,default),default,3,_=>retries++);
+        Require(observations==111 && retries==1 && resetCount>=3,"facing used an iteration cap or failed to retry a bounded goal");
+        facingClock=0;resetCount=0;faceCalls=0;bool facingStopped=false;
+        try {await FacingRestore.RunAsync(_=>{faceCalls++;return Task.FromResult(false);},()=>resetCount++,()=>{},FacingDelay,
+            ()=>facingClock,()=>new TurnUnresponsiveException(default,default),default,3);}
+        catch(TurnUnresponsiveException){facingStopped=true;}
+        Require(facingStopped && facingClock<=6500 && resetCount==5,"unresponsive facing retry was unbounded");
+        using(var facingCancel=new CancellationTokenSource())
+        {
+            facingCancel.Cancel();bool interrupted=false;
+            try {await FacingRestore.RunAsync(_=>throw new Exception("Cancelled facing emitted input"),()=>{},()=>{},FacingDelay,
+                ()=>facingClock,()=>new TurnUnresponsiveException(default,default),facingCancel.Token,3);}
+            catch(OperationCanceledException){interrupted=true;}
+            Require(interrupted,"facing retry swallowed a deliberate cancellation");
+        }
 
         // Reproduce a fast approach that would cross a .15-unit anchor during
         // one held-W tick; braking followed by observed, settled corrections
@@ -107,6 +138,8 @@ internal static class MovementSmoothingChecks
         {
             Passed=true,HardwareInputEmitted=false,
             Checks=new[]{"delayed heading response and both calibration signs","time-bounded turn size","unresponsive turn deadline",
+                "unsent turns cannot start stall timing","new facing goal clears idle timer","bounded post-loot facing retry and cancellation",
+                "recorded sub-frame steps excluded from speed training","frame-sized pulse and filtered speed gain",
                 "frame-quantized precise arrival","recorded post-facing drift rejected","settle then face then recheck",
                 "blocked/cancelled/focus-lost return releases movement","persistent damage quiet period","stationary defense family/range/protection gates"}
         },new JsonSerializerOptions{WriteIndented=true}));
