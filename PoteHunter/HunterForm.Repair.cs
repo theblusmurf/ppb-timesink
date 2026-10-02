@@ -15,7 +15,7 @@ public sealed partial class HunterForm
         CompactAdd(card,CompactRow("Repair",autoRepair));
         var actions=CompactFlow(configureRepair,testRepair);CompactAdd(card,actions);CompactAdd(card,repairStatus);
         priorityHint.SetToolTip(autoRepair,"Recognize the inventory hammer and repair confirmation, repair once after revival, then follow the saved return route. Off by default. Requires the game's repair capability and cost.");
-        priorityHint.SetToolTip(configureRepair,"Optional fallback for another inventory layout. Automatic recognition normally uses the included Domitus templates. Custom setup sends no game input.");
+        priorityHint.SetToolTip(configureRepair,"Optional fallback for another inventory layout. Automatic recognition normally uses the included Domitus templates. Saved custom setup survives client updates while the same controls and window size still match. Custom setup sends no game input.");
         priorityHint.SetToolTip(testRepair,"With hunting stopped, wait 5 seconds, switch to the game, and run the configured repair sequence once. This confirms the game's repair cost.");
         void Refresh()
         {
@@ -23,7 +23,7 @@ public sealed partial class HunterForm
             revivalDelaySeconds.Enabled=farmOnArrival.Enabled=visualRevival.Enabled=autoRevive.Checked;
             reviveKey.Enabled=autoRevive.Checked&&!visualRevival.Checked;
             repairStatus.Text=!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
-                :"Automatic recognition enabled. Test repair first; custom setup is optional.";
+                :"Saved custom setup survives client updates with an unchanged layout. Test repair first; custom setup is optional.";
         }
         autoRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};autoRevive.CheckedChanged+=(_,_)=>Refresh();
         visualRevival.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
@@ -104,9 +104,15 @@ public sealed partial class HunterForm
         RepairProfile? profile=null;
         if(File.Exists(RepairProfile.PathName))
         {
-            try{profile=RepairProfile.Load(world.ClientHash,RepairScreen.Bounds(world).Size);}
+            try{profile=RepairProfile.Load(RepairScreen.Bounds(world).Size);}
             catch(Exception ex) when(ex is InvalidOperationException or IOException)
-            {TraceLog.Record("custom repair profile skipped",new{Reason=ex.Message,Using="Automatic recognition"});}
+            {
+                TraceLog.Record("repair setup rejected",new{Reason=ex.Message});
+                throw new InvalidOperationException("Saved repair setup cannot be used. "+ex.Message,ex);
+            }
+            if(!string.Equals(profile.ClientHash,world.ClientHash,StringComparison.OrdinalIgnoreCase))
+                TraceLog.Record("repair setup reused after client update",new{CapturedClient=profile.ClientHash,
+                    CurrentClient=world.ClientHash,profile.Width,profile.Height,VisualControlsStillRequired=true});
         }
         var previousPreflight=Input.Preflight;
         void Validate()

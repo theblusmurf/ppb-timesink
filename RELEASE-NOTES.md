@@ -1,5 +1,11 @@
 # Release notes
 
+## Release1.82
+
+- Reuse saved custom repair setup across game-client updates when its window size and visual controls remain unchanged. Keep the original capture fingerprint as diagnostic metadata; existing version-1 profiles load without rewriting or recalibration.
+- Continue requiring inventory, hammer, repair question and confirmation recognition before input, with pointer/focus/identity/health and cancellation checks retained. Reject unsupported/corrupt setups, changed window dimensions and missing or moved controls; a rejected saved setup stops repair with a clear reason instead of switching to automatic clicks. Automatic recognition remains available when no custom setup exists.
+- Add offline regressions for legacy profile persistence, changed-client reuse, moved/missing controls, changed resolution, unsupported formats and existing repair cancellation/click guards. Existing settings/routes/profiles remain compatible. Live repair and gameplay remain unverified; the installed application was not replaced during development.
+
 ## Release1.81
 
 - Start saved-facing restoration with a fresh turn-response window. Count actual sent pixels rather than requested direction during smoothing waits, replace the 100-poll cap with a two-second deadline, and retry post-loot facing up to three times without swallowing cancellation or disabling real no-response detection.

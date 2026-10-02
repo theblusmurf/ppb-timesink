@@ -37,8 +37,9 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
     internal static View Recognize(Bitmap image,RepairProfile? profile,CancellationToken token,Func<RepairVisuals> automatic)
     {
         token.ThrowIfCancellationRequested();
-        if(profile!=null && image.Width==profile.Width && image.Height==profile.Height)
+        if(profile!=null)
         {
+            profile.Validate(image.Size);
             // A validated user setup is authoritative. Do not delay its small
             // patch checks behind a scan of every pixel at every UI scale.
             bool inventory=profile.Inventory.MatchesText(image)||profile.Inventory.MatchesControl(image);

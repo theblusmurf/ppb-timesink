@@ -85,7 +85,7 @@ internal static class AutoRepairChecks
         var profile=new RepairProfile(1,"client",image.Width,image.Height,
             RepairPatch.Capture(image,new(10,10,40,24)),RepairPatch.Capture(image,new(90,10,40,24)),
             RepairPatch.Capture(image,new(170,10,40,24)),RepairPatch.Capture(image,new(250,10,40,24)));
-        profile.Validate("CLIENT",image.Size);
+        profile.Validate(image.Size);
         Require(profile.Inventory.Matches(image),"A matching repair marker was rejected.");
         RepairVisuals NoAutomatic()=>throw new Exception("Custom repair setup ran the full-screen automatic scan.");
         var customView=LiveRepairSurface.Recognize(image,profile,default,NoAutomatic);
@@ -179,17 +179,42 @@ internal static class AutoRepairChecks
             JsonSerializer.Serialize(new{Passed=true,CustomSetupBypassesFullScreenScan=true,MissingControlsRejected=true,
                 AutomaticWithoutProfileRetained=true,CancellationRetained=true}));
         Invalid(()=>RepairPatch.Capture(image,new(-1,10,40,24)),"An out-of-frame control was accepted.");
-        Invalid(()=>profile.Validate("different-client",image.Size),"A repair setup from another client was accepted.");
-        Invalid(()=>profile.Validate("client",new(400,90)),"A resized game window reused old repair coordinates.");
-        Invalid(()=>(profile with{Confirm=profile.Prompt}).Validate("client",image.Size),"Overlapping prompt/button recognition was accepted.");
+        var updatedClient=profile with{ClientHash="different-client"};
+        updatedClient.Validate(image.Size);
+        Require(LiveRepairSurface.Recognize(image,updatedClient,default,NoAutomatic).State==customView.State,
+            "A changed executable fingerprint discarded unchanged repair controls.");
+        Invalid(()=>(profile with{Version=2}).Validate(image.Size),"An unsupported repair profile format was accepted.");
+        using(var resized=new Bitmap(400,90))
+            Invalid(()=>LiveRepairSurface.Recognize(resized,profile,default,NoAutomatic),
+                "A resized image bypassed saved setup validation with automatic recognition.");
+        using(var moved=(Bitmap)image.Clone())
+        {
+            using(var g=Graphics.FromImage(moved))
+            {
+                g.FillRectangle(Brushes.Black,profile.Inventory.Bounds);
+                g.DrawImage(image,new Rectangle(profile.Inventory.X+1,profile.Inventory.Y+1,
+                    profile.Inventory.Width,profile.Inventory.Height),profile.Inventory.Bounds,GraphicsUnit.Pixel);
+            }
+            var observed=LiveRepairSurface.Recognize(moved,updatedClient,default,NoAutomatic);
+            Require(!observed.State.Inventory && !observed.State.Hammer,
+                "A moved inventory marker was accepted after a client update.");
+        }
+        Invalid(()=>profile.Validate(new(400,90)),"A resized game window reused old repair coordinates.");
+        Invalid(()=>(profile with{Confirm=profile.Prompt}).Validate(image.Size),"Overlapping prompt/button recognition was accepted.");
         string path=Path.Combine(Path.GetTempPath(),"PoteHunter-repair-"+Guid.NewGuid().ToString("N")+".json");
         try
         {
-            Invalid(()=>RepairProfile.Load("client",image.Size,path),"Missing repair setup was accepted.");
-            profile.Save(path);var saved=RepairProfile.Load("client",image.Size,path);
+            Invalid(()=>RepairProfile.Load(image.Size,path),"Missing repair setup was accepted.");
+            profile.Save(path);var saved=RepairProfile.Load(image.Size,path);
             Require(saved.Confirm.Matches(image) && saved.Hammer.Center==profile.Hammer.Center,"Saved repair setup lost recognition or click position.");
-            File.WriteAllText(path,"{invalid");Invalid(()=>RepairProfile.Load("client",image.Size,path),"Corrupt repair setup was accepted.");
-            File.WriteAllText(path,"null");Invalid(()=>RepairProfile.Load("client",image.Size,path),"Empty repair setup was accepted.");
+            var bytes=File.ReadAllBytes(path);
+            var reused=RepairProfile.Load(image.Size,path);
+            Require(reused.ClientHash=="client" && File.ReadAllBytes(path).SequenceEqual(bytes),
+                "Loading a legacy setup rewrote its capture fingerprint or contents.");
+            Require(LiveRepairSurface.Recognize(image,reused,default,NoAutomatic).State==customView.State,
+                "Legacy saved patches lost recognition after loading.");
+            File.WriteAllText(path,"{invalid");Invalid(()=>RepairProfile.Load(image.Size,path),"Corrupt repair setup was accepted.");
+            File.WriteAllText(path,"null");Invalid(()=>RepairProfile.Load(image.Size,path),"Empty repair setup was accepted.");
         }
         finally{if(File.Exists(path))File.Delete(path);if(File.Exists(path+".tmp"))File.Delete(path+".tmp");}
         var defaults=JsonSerializer.Deserialize<Options>("{}");
@@ -198,7 +223,7 @@ internal static class AutoRepairChecks
             "Repair was enabled by default or the independent toggles failed to persist.");
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"auto-repair-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,HardwareInputEmitted=false,Checks=new[]{"inventory open/closed starts","one hammer and one confirmation","missing controls and stuck dialogs stop",
-                "focus/cancellation/second death stop repair","distinct static patches required","missing prompt rejected","client/window compatibility",
+                "focus/cancellation/second death stop repair","distinct static patches required","missing prompt rejected","client-update reuse with unchanged UI and strict window/format/patch checks",
                 "profile round trip and corrupt data","independent persisted defaults"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }

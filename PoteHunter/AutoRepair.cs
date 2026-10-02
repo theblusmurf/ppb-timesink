@@ -100,21 +100,24 @@ internal sealed record RepairProfile(int Version,string ClientHash,int Width,int
     RepairPatch Inventory,RepairPatch Hammer,RepairPatch Prompt,RepairPatch Confirm)
 {
     public static string PathName=>Path.Combine(AppContext.BaseDirectory,"repair-profile.json");
-    public void Validate(string hash,Size size)
+    public void Validate(Size size)
     {
-        if(Version!=1 || !string.Equals(ClientHash,hash,StringComparison.OrdinalIgnoreCase) || Width!=size.Width || Height!=size.Height)
-            throw new InvalidOperationException("Repair setup belongs to a different client build or window size. Configure repair again.");
+        // ClientHash records where the UI patches were captured; executable updates
+        // do not invalidate unchanged pixels. Keep version, geometry and patch checks.
+        if(Version!=1)throw new InvalidOperationException("Repair setup format is unsupported. Configure repair again.");
+        if(Width!=size.Width || Height!=size.Height)
+            throw new InvalidOperationException("The game window size changed. Configure repair again for this size.");
         if(new[]{Inventory,Hammer,Prompt,Confirm}.Any(p=>p==null || !p.Valid(size)) ||
             Inventory.Bounds.IntersectsWith(Hammer.Bounds) || Prompt.Bounds.IntersectsWith(Confirm.Bounds))
             throw new InvalidOperationException("Repair setup has invalid or overlapping recognition areas. Configure repair again.");
     }
     public void Save(string? path=null)
     {
-        Validate(ClientHash,new(Width,Height));
+        Validate(new(Width,Height));
         string file=path??PathName;
         File.WriteAllText(file+".tmp",JsonSerializer.Serialize(this));File.Move(file+".tmp",file,true);
     }
-    public static RepairProfile Load(string hash,Size size,string? path=null)
+    public static RepairProfile Load(Size size,string? path=null)
     {
         string file=path??PathName;
         if(!File.Exists(file))throw new InvalidOperationException("Choose Configure repair in Setup before enabling auto repair.");
@@ -123,7 +126,7 @@ internal sealed record RepairProfile(int Version,string ClientHash,int Width,int
         try {profile=JsonSerializer.Deserialize<RepairProfile>(File.ReadAllText(file));}
         catch(JsonException) {throw new InvalidOperationException("Repair setup could not be read; configure repair again.");}
         if(profile==null)throw new InvalidOperationException("Repair setup is empty; configure repair again.");
-        profile.Validate(hash,size);return profile;
+        profile.Validate(size);return profile;
     }
 }
 
