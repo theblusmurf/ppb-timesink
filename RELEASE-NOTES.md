@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.83
+
+- Fix custom repair hammer recognition when a saved selection includes a translucent panel edge or changing world pixels. Add a bounded, exact-position icon structure check with independent inventory recognition; keep separate repair question/Yes, focus, pointer, identity, health and cancellation checks. Existing saved profiles remain compatible.
+- Wait for the full 12-second recognition deadline instead of stopping after 25 quick observations. Never repeat the repair confirmation or start route movement while repair UI completion is unverified.
+- Record recognition state changes, hammer match scores and the last observed state on timeout. Report explicitly when repair verification blocks the saved-route return.
+- Add offline regressions for delayed controls, missing/shifted/different icons, changed backgrounds, independent recognition gates, cancellation and single-click repair completion. Validate the compiled matcher against a private captured frame. Live end-to-end repair and return still require verification after upgrading; the running app was not replaced during development.
+
 ## Release1.82
 
 - Reuse saved custom repair setup across game-client updates when its window size and visual controls remain unchanged. Keep the original capture fingerprint as diagnostic metadata; existing version-1 profiles load without rewriting or recalibration.

@@ -8,6 +8,8 @@ internal static class AutoRepairChecks
     {
         int stage=inventoryOpen?1:0;
         public readonly List<RepairAction> Actions=[];
+        public long Now {get;private set;}
+        public long HammerAfterMilliseconds;
         public bool NoInventory,NoHammer,UnknownPrompt,NoConfirm,StuckPrompt,StuckInventory;
         public Exception? AfterHammer;
         public Action? OnDelay;
@@ -16,7 +18,7 @@ internal static class AutoRepairChecks
             if(stage==2 && AfterHammer!=null)throw AfterHammer;
             return Task.FromResult<RepairObservation>(stage switch
             {
-                1 or 3=>new(true,!NoHammer,false,false),
+                1 or 3=>new(true,!NoHammer && Now>=HammerAfterMilliseconds,false,false),
                 2=>new(true,false,!UnknownPrompt,!NoConfirm),
                 _=>default
             });
@@ -34,7 +36,7 @@ internal static class AutoRepairChecks
             };
             return Task.CompletedTask;
         }
-        public Task Delay(CancellationToken token){OnDelay?.Invoke();token.ThrowIfCancellationRequested();return Task.CompletedTask;}
+        public Task Delay(CancellationToken token){Now+=120;OnDelay?.Invoke();token.ThrowIfCancellationRequested();return Task.CompletedTask;}
     }
 
     static void Require(bool condition,string message){if(!condition)throw new Exception(message);}
@@ -50,6 +52,14 @@ internal static class AutoRepairChecks
             "Repair did not open inventory, repair once, then close inventory.");
         var open=new Surface(true);await AutoRepair.Run(open,default);
         Require(open.Actions.SequenceEqual(complete.Actions.Skip(1)),"Repair toggled an already open inventory closed.");
+        var settling=new Surface{HammerAfterMilliseconds=6000};await AutoRepair.Run(settling,default);
+        Require(settling.Now>=6000 && settling.Actions.SequenceEqual(complete.Actions),
+            "Repair abandoned a settling hammer before the full recognition deadline.");
+        var missingHammer=new Surface{NoHammer=true};bool timedOut=false;
+        try{await AutoRepair.Run(missingHammer,default);}catch(InvalidOperationException){timedOut=true;}
+        Require(timedOut && missingHammer.Now==AutoRepair.PhaseTimeoutMilliseconds &&
+            missingHammer.Actions.SequenceEqual(new[]{RepairAction.OpenInventory}),
+            "A missing hammer did not stop at the deadline without a click.");
         var alreadyPrompt=new Surface();await alreadyPrompt.Perform(RepairAction.Hammer,default);alreadyPrompt.Actions.Clear();
         async Task Fails(Surface surface,params RepairAction[] actions)
         {
@@ -113,6 +123,52 @@ internal static class AutoRepairChecks
             for(int y=bounds.Top;y<bounds.Bottom;y++)for(int x=bounds.Left;x<bounds.Right;x++)
                 wrongIcon.SetPixel(x,y,(x/3+y/3)%2==0?Color.FromArgb(15,30,45):Color.FromArgb(230,180,90));
             Require(!profile.Hammer.MatchesControl(wrongIcon),"A different icon matched after color correction.");
+        }
+        using(var iconImage=(Bitmap)image.Clone())
+        {
+            var area=profile.Hammer.Bounds;
+            using(var g=Graphics.FromImage(iconImage))
+            {
+                g.FillRectangle(Brushes.SaddleBrown,area);
+                g.FillRectangle(Brushes.DimGray,new Rectangle(area.X+8,area.Y+2,24,20));
+                using var handle=new Pen(Color.FromArgb(190,170,140),3);
+                g.DrawLine(handle,area.X+12,area.Y+20,area.X+25,area.Y+5);
+                g.FillPolygon(Brushes.Silver,new[]{new Point(area.X+17,area.Y+4),new Point(area.X+22,area.Y+2),
+                    new Point(area.X+30,area.Y+10),new Point(area.X+26,area.Y+15)});
+            }
+            var iconPatch=RepairPatch.Capture(iconImage,area);
+            var iconProfile=profile with{Hammer=iconPatch};
+            using var changedBackground=(Bitmap)iconImage.Clone();
+            for(int y=area.Top;y<area.Bottom;y++)for(int x=area.Left;x<area.Right;x++)
+            {
+                bool core=x>=area.X+8 && x<area.Right-8 && y>=area.Y+2 && y<area.Bottom-2;
+                var c=iconImage.GetPixel(x,y);int shade=-12+(x-area.X)/4;
+                changedBackground.SetPixel(x,y,core?Color.FromArgb(Math.Clamp(c.R+shade,0,255),Math.Clamp(c.G+shade,0,255),Math.Clamp(c.B+shade,0,255)):
+                    Color.FromArgb(160+(y%3)*10,145+(x%3)*10,100));
+            }
+            var match=iconPatch.InspectIcon(changedBackground);
+            Require(!iconPatch.MatchesControl(changedBackground) && match.Matched && match.Method=="Icon structure",
+                "An unchanged hammer shape was lost when the selected panel/world margin changed.");
+            Require(LiveRepairSurface.Recognize(changedBackground,iconProfile,default,NoAutomatic).State.Hammer,
+                "Paired inventory did not recognize the unchanged hammer structure.");
+            using var absentIcon=(Bitmap)changedBackground.Clone();
+            using(var g=Graphics.FromImage(absentIcon))g.FillRectangle(Brushes.DimGray,new Rectangle(area.X+8,area.Y+2,24,20));
+            Require(!iconPatch.InspectIcon(absentIcon).Matched,"Panel edges matched after the hammer itself disappeared.");
+            using var movedIcon=(Bitmap)absentIcon.Clone();
+            using(var g=Graphics.FromImage(movedIcon))g.DrawImage(iconImage,new Rectangle(area.X+9,area.Y+2,24,20),
+                new Rectangle(area.X+8,area.Y+2,24,20),GraphicsUnit.Pixel);
+            Require(!iconPatch.InspectIcon(movedIcon).Matched,"A shifted hammer passed exact-position shape recognition.");
+            using var differentIcon=(Bitmap)absentIcon.Clone();
+            using(var g=Graphics.FromImage(differentIcon))g.FillEllipse(Brushes.Silver,new Rectangle(area.X+10,area.Y+4,20,16));
+            Require(!iconPatch.InspectIcon(differentIcon).Matched,"A different icon passed hammer recognition.");
+            using var noInventory=(Bitmap)changedBackground.Clone();
+            using(var g=Graphics.FromImage(noInventory))g.FillRectangle(Brushes.Black,profile.Inventory.Bounds);
+            Require(!LiveRepairSurface.Recognize(noInventory,iconProfile,default,NoAutomatic).State.Hammer,
+                "Hammer structure bypassed the independent inventory marker.");
+            using var noPrompt=(Bitmap)changedBackground.Clone();
+            using(var g=Graphics.FromImage(noPrompt))g.FillRectangle(Brushes.Black,profile.Prompt.Bounds);
+            Require(!LiveRepairSurface.Recognize(noPrompt,iconProfile,default,NoAutomatic).State.Confirm,
+                "Hammer recognition bypassed the repair question gate.");
         }
         using(var changed=(Bitmap)image.Clone())
         {

@@ -33,7 +33,9 @@ internal static class RepairScreen
 internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Action validate,CancellationToken runToken) : IRepairSurface
 {
     readonly HashSet<RepairAction> attempted=new();
-    internal sealed record View(RepairObservation State,Point? Hammer,Point? Confirm,VisualControl? HammerVisual,VisualControl? ConfirmVisual);
+    RepairObservation? lastObserved;
+    internal sealed record View(RepairObservation State,Point? Hammer,Point? Confirm,VisualControl? HammerVisual,VisualControl? ConfirmVisual,
+        RepairIconMatch? HammerMatch=null);
     internal static View Recognize(Bitmap image,RepairProfile? profile,CancellationToken token,Func<RepairVisuals> automatic)
     {
         token.ThrowIfCancellationRequested();
@@ -43,11 +45,12 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
             // A validated user setup is authoritative. Do not delay its small
             // patch checks behind a scan of every pixel at every UI scale.
             bool inventory=profile.Inventory.MatchesText(image)||profile.Inventory.MatchesControl(image);
-            bool hammer=inventory && profile.Hammer.MatchesControl(image);
+            var hammerMatch=inventory?profile.Hammer.InspectIcon(image):null;
+            bool hammer=inventory && hammerMatch?.Matched==true;
             bool prompt=profile.Prompt.MatchesText(image),confirm=prompt && profile.Confirm.MatchesText(image);
             token.ThrowIfCancellationRequested();
             return new(new(inventory,hammer,prompt,confirm),hammer?profile.Hammer.Center:null,
-                confirm?profile.Confirm.Center:null,null,null);
+                confirm?profile.Confirm.Center:null,null,null,hammerMatch);
         }
         var visual=automatic();token.ThrowIfCancellationRequested();
         return new(new(visual.Hammer!=null,visual.Hammer!=null,visual.Confirm!=null,visual.Confirm!=null),
@@ -58,7 +61,14 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
         runToken.ThrowIfCancellationRequested();token.ThrowIfCancellationRequested();validate();
         using var image=RepairScreen.Capture(world);
         var view=await Task.Run(()=>Recognize(image,profile,token,()=>RecoveryVision.Repair(image,token)),token);
-        runToken.ThrowIfCancellationRequested();validate();return view;
+        runToken.ThrowIfCancellationRequested();validate();
+        if(lastObserved!=view.State)
+        {
+            lastObserved=view.State;
+            TraceLog.Record("repair recognition changed",new{Recognition=profile!=null?"Custom setup":"Automatic templates",
+                image.Width,image.Height,view.State,view.HammerMatch});
+        }
+        return view;
     }
     public async Task<RepairObservation> Observe(CancellationToken token)=>(await Read(token)).State;
     public async Task Perform(RepairAction action,CancellationToken token)

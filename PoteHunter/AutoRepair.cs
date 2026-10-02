@@ -3,6 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace PoteHunter;
 
+internal sealed record RepairIconMatch(bool Matched,string Method,double? Correlation=null,
+    double? GradientCorrelation=null,double? MeanError=null);
+
 internal sealed record RepairPatch(int X,int Y,int Width,int Height,byte[] Rgb)
 {
     [JsonIgnore] public Rectangle Bounds=>new(X,Y,Width,Height);
@@ -94,6 +97,58 @@ internal sealed record RepairPatch(int X,int Y,int Width,int Height,byte[] Rgb)
         }
         return difference<=count*3L*8 && changed<=count*.04;
     }
+
+    // The saved hammer selection may include a translucent panel edge and
+    // world pixels. Only this small icon gets a structural fallback, at its
+    // exact saved position. Inventory and confirmation remain separate gates.
+    public RepairIconMatch InspectIcon(Bitmap image)
+    {
+        if(MatchesControl(image))return new(true,"Pixels");
+        if(Width is <16 or >96 || Height is <16 or >96 ||
+            !new Rectangle(Point.Empty,image.Size).Contains(Bounds) || Rgb.Length!=Width*Height*3)
+            return new(false,"Unsupported icon bounds");
+        int insetX=Width/5,insetY=Math.Max(1,Height/12);
+        int width=Width-2*insetX,height=Height-2*insetY,count=width*height;
+        if(count<144)return new(false,"Insufficient icon detail");
+        var expected=new double[count];var actual=new double[count];
+        double colorDifference=0;var offsets=new double[3];
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++)
+        {
+            int i=y*width+x,source=((y+insetY)*Width+x+insetX)*3;
+            var p=image.GetPixel(X+x+insetX,Y+y+insetY);
+            expected[i]=(Rgb[source]+Rgb[source+1]+Rgb[source+2])/3d;
+            actual[i]=(p.R+p.G+p.B)/3d;
+            offsets[0]+=p.R-Rgb[source];offsets[1]+=p.G-Rgb[source+1];offsets[2]+=p.B-Rgb[source+2];
+        }
+        for(int c=0;c<3;c++)offsets[c]/=count;
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++)
+        {
+            int source=((y+insetY)*Width+x+insetX)*3;
+            var p=image.GetPixel(X+x+insetX,Y+y+insetY);
+            colorDifference+=Math.Abs(p.R-Rgb[source]-offsets[0])+Math.Abs(p.G-Rgb[source+1]-offsets[1])+Math.Abs(p.B-Rgb[source+2]-offsets[2]);
+        }
+        static double Correlation(double[] a,double[] b,out double varianceA,out double varianceB)
+        {
+            double meanA=a.Average(),meanB=b.Average(),aa=0,bb=0,ab=0;
+            for(int i=0;i<a.Length;i++){double x=a[i]-meanA,y=b[i]-meanB;aa+=x*x;bb+=y*y;ab+=x*y;}
+            varianceA=aa/a.Length;varianceB=bb/a.Length;
+            return aa>0 && bb>0?ab/Math.Sqrt(aa*bb):0;
+        }
+        double correlation=Correlation(expected,actual,out double varianceExpected,out double varianceActual);
+        int edges=(width-1)*height+(height-1)*width,index=0;
+        var expectedEdges=new double[edges];var actualEdges=new double[edges];
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++)
+        {
+            int i=y*width+x;
+            if(x+1<width){expectedEdges[index]=expected[i+1]-expected[i];actualEdges[index++]=actual[i+1]-actual[i];}
+            if(y+1<height){expectedEdges[index]=expected[i+width]-expected[i];actualEdges[index++]=actual[i+width]-actual[i];}
+        }
+        double gradient=Correlation(expectedEdges,actualEdges,out double edgeExpected,out double edgeActual);
+        double meanError=colorDifference/(count*3);
+        bool matched=offsets.All(d=>Math.Abs(d)<=32) && varianceExpected>=144 && varianceActual>=144 &&
+            edgeExpected>=64 && edgeActual>=64 && correlation>=.92 && gradient>=.92 && meanError<=12;
+        return new(matched,"Icon structure",correlation,gradient,meanError);
+    }
 }
 
 internal sealed record RepairProfile(int Version,string ClientHash,int Width,int Height,
@@ -135,6 +190,7 @@ internal enum RepairAction { OpenInventory, Hammer, Confirm, CloseInventory }
 
 internal interface IRepairSurface
 {
+    long Now=>Environment.TickCount64;
     Task<RepairObservation> Observe(CancellationToken token);
     Task Perform(RepairAction action,CancellationToken token);
     Task Delay(CancellationToken token);
@@ -142,23 +198,28 @@ internal interface IRepairSurface
 
 internal static class AutoRepair
 {
+    internal const int PhaseTimeoutMilliseconds=12000;
     public static async Task Run(IRepairSurface surface,CancellationToken token)
     {
         async Task WaitFor(Func<RepairObservation,bool> test,string failure)
         {
             using var phase=CancellationTokenSource.CreateLinkedTokenSource(token);
-            phase.CancelAfter(TimeSpan.FromSeconds(12));
+            phase.CancelAfter(PhaseTimeoutMilliseconds);
+            long started=surface.Now;
+            RepairObservation last=default;
             try
             {
-                for(int attempt=0;attempt<25;attempt++)
+                while(surface.Now-started<PhaseTimeoutMilliseconds)
                 {
                     phase.Token.ThrowIfCancellationRequested();
-                    if(test(await surface.Observe(phase.Token)))return;
+                    last=await surface.Observe(phase.Token);
+                    if(test(last))return;
                     await surface.Delay(phase.Token);
                 }
             }
             catch(OperationCanceledException) when(!token.IsCancellationRequested && phase.IsCancellationRequested)
-            {throw new InvalidOperationException(failure);}
+            { /* Report the same last-observed stage for either deadline. */ }
+            TraceLog.Record("repair recognition timed out",new{Reason=failure,ElapsedMilliseconds=surface.Now-started,LastObserved=last});
             throw new InvalidOperationException(failure);
         }
         token.ThrowIfCancellationRequested();

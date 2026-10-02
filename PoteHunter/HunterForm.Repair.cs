@@ -134,6 +134,11 @@ public sealed partial class HunterForm
             repairStatus.Text="Repair UI sequence completed; inventory closed.";
             TraceLog.Record("repair sequence completed",new{DurabilityVerified=false,BeforeReturn=deathRecovery.Pending});
         }
+        catch(InvalidOperationException ex) when(deathRecovery.Pending)
+        {
+            TraceLog.Record("repair blocked saved-route return",new{Reason=ex.Message});
+            throw new InvalidOperationException("Return to anchor paused: "+ex.Message,ex);
+        }
         finally {Input.Release();Input.Preflight=previousPreflight;repairInProgress=false;}
     }
 }
