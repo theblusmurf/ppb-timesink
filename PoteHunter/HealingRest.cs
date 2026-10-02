@@ -25,6 +25,11 @@ public sealed class HealingRest
         return !bar.Slots.Any(RecoveryItems.Recognized);
     }
 
+    // Use the run's shared damage timestamp; restarting a recovery object must
+    // not create another sit/stand attempt while hits are still arriving.
+    public static bool ReadyAfterDamage(long? lastDamageAt,long now)=>
+        !lastDamageAt.HasValue || now>=lastDamageAt.Value && now-lastDamageAt.Value>=QuietMilliseconds;
+
     public static bool ShouldTrigger(Health health,decimal threshold)
     {
         ValidateHealth(health);

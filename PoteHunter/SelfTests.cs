@@ -20,6 +20,7 @@ static class SelfTests
             if ((Movement.Rotate(new Vec(1, 0), Math.PI / 2) - new Vec(0, 1)).Length > 1e-9) throw new Exception("Rotation");
             if ((Movement.FromClientHeading(0) - new Vec(0, -1)).Length > 1e-9 || (Movement.FromClientHeading(Math.PI / 2) - new Vec(-1, 0)).Length > 1e-9) throw new Exception("Client heading axes");
             CheckTracking();
+            MovementSmoothingChecks.Run().GetAwaiter().GetResult();
             ProfileDiscovery.SelfTest();
             DataRecorder.SelfTest();
             Avoidance.SelfTest();

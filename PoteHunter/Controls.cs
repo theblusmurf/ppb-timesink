@@ -616,7 +616,7 @@ public sealed partial class Movement
     Vec progressPosition;
     long progressAt, lastMotionTrace;
     readonly TurnResponse turnResponse = new();
-    public void ResetTurnResponse() => turnResponse.Reset();
+    public void ResetTurnResponse() { turnResponse.Reset();smoothSteering.Reset(); }
     public static double Angle(Vec a, Vec b) => Math.Atan2(a.X * b.Y - a.Y * b.X, a.X * b.X + a.Y * b.Y);
     public static Vec Rotate(Vec a, double angle) => new(a.X * Math.Cos(angle) - a.Y * Math.Sin(angle), a.X * Math.Sin(angle) + a.Y * Math.Cos(angle));
     // The client advances X/Z with cos(-heading-pi/2), sin(-heading-pi/2).
@@ -678,11 +678,11 @@ public sealed partial class Movement
         Forward = FromClientHeading(heading);
         if (delta.Length < .01) {turnResponse.Reset();return true;}
         double angle = Angle(Forward, delta);
-        int pixels = Math.Abs(angle)<=tolerance ? 0 : CalculateTurn(angle, RadiansPerPixel, false);
+        if(Math.Abs(angle)<=tolerance) { smoothSteering.Reset();turnResponse.Reset();return true; }
+        int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64);
         Vec position=world.PlayerPosition();
-        if(turnResponse.Observe(position,heading,pixels,Environment.TickCount64))throw new TurnUnresponsiveException(position,Forward);
-        if (pixels == 0) return true;
-        Input.Turn(pixels, token);
+        if(turnResponse.Observe(position,heading,Math.Sign(angle/RadiansPerPixel),Environment.TickCount64))throw new TurnUnresponsiveException(position,Forward);
+        if (pixels != 0) Input.Turn(pixels, token);
         await Input.Delay(TurnFeedbackDelay(pixels), token);
         return false;
     }
@@ -694,9 +694,14 @@ public sealed partial class Movement
         advancing = false;
         return wasAdvancing || wasTraveling;
     }
-    public async Task Approach(World world, Vec position, Vec delta, CancellationToken token,bool watchTurns=false)
+    public async Task Approach(World world, Vec position, Vec delta, CancellationToken token,bool watchTurns=false,double arrivalTolerance=0)
     {
         long now = Environment.TickCount64;
+        arrivalMotion.Observe(position,now,advancing);
+        if(arrivalTolerance>0 && delta.Length<=arrivalMotion.BrakingDistance(arrivalTolerance))
+        {
+            await ApproachPrecisely(world,position+delta,arrivalTolerance,token);return;
+        }
         double heading=world.PlayerHeading();
         Forward = FromClientHeading(heading);
         double angle = Angle(Forward, delta);
@@ -712,9 +717,9 @@ public sealed partial class Movement
             if ((position - progressPosition).Length > .15) { progressPosition = position; progressAt = now; }
             else if (now - progressAt > 1800) { StopApproach(); throw new MovementBlockedException(position,Forward); }
         }
-        int pixels = CalculateTurn(angle, RadiansPerPixel, advancing);
+        int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,advancing,now);
         if(!watchTurns)turnResponse.Reset();
-        else if(turnResponse.Observe(position,heading,pixels,now))throw new TurnUnresponsiveException(position,Forward);
+        else if(turnResponse.Observe(position,heading,Math.Abs(angle)>.035?Math.Sign(angle/RadiansPerPixel):0,now))throw new TurnUnresponsiveException(position,Forward);
         if (pixels != 0)
         {
             Input.Turn(pixels, token);

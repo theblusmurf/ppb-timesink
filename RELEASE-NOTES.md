@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.79
+
+- Fix competing movement control near the saved anchor: authorized navigation and loot/return movement retain input ownership while stationary combat stays stationary. Existing focus, death, avoidance, boundary and Gamekeeper checks remain active.
+- Brake before the end of precise loot and melee-assist returns, use short measured final corrections, and confirm the character has settled at the original anchor both before and after restoring its saved facing. Keep the 0.15-unit arrival requirement and bounded return timeout.
+- Smooth ordinary movement/facing corrections using elapsed-time turn limits and observed heading feedback, retaining fast large turns and unresponsive-input detection.
+- Stop repeated no-item rest recovery under incoming damage. Share the three-second quiet period across retries and allow approved in-range defensive targets to be selected while holding a stationary farming position. Target-family, health, identity and ownership checks remain enforced.
+- Add offline regressions for delayed heading response, frame-quantized final steps, drift after facing, cancelled/blocked returns, repeated damage and protected defensive targets. Existing settings, routes, profiles, UI, updater and auto patcher remain compatible. Live gameplay validation is still required; no running application was replaced during development.
+
 ## Release1.78
 
 - Apply the selected Field Console II design: deeper forest surfaces, brass accents, clearer typography and an Overview dashboard. Keep Start/F8, Stop/F9 and connection status visible across pages.
