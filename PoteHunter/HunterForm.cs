@@ -972,12 +972,14 @@ public sealed partial class HunterForm : Form
     {
         if(!options.AutoReviveAfterDeath || options.HealerMode)return null;
         var self=world.LocalPlayer();int zone=world.ActiveZone();Vec anchor=world.PlayerPosition();
-        navigation.LoadSavedRoutes();
+        navigation.SelectTargetSelection(options.Target);
         int slot=options.GroupMode?-1:RecoveryTravel.StartupSlot(navigation.SavedRoutes,anchor,zone,self.Name,self.Height,SelectedSavedNavigationSlot());
         SavedNavigationRoute? route=slot>=0?navigation.GetSavedRoute(slot):navigation.SavedRoutesForZone(zone)
             .Where(item=>RecoveryRouting.Compatible(item.Route,zone,self.Name,self.Height) && (item.Route.Anchor-anchor).Length<=2.5)
             .OrderBy(item=>(item.Route.Anchor-anchor).Length).Select(item=>item.Route).FirstOrDefault();
         if(slot>=0 && route!=null && (route.Anchor-anchor).Length>2.5)anchor=route.Anchor;
+        if(route==null && navigation.UnassignedRouteCount>0)
+            return $"Choose {navigation.RouteTargetLabel} in Overview, then Assign existing routes in Navigation, or record its return route with Home / End.";
         return RecoveryRouting.SavedReturnProblem(route,zone,self.Name,self.Height,anchor);
     }
     async Task StartHunting(long? requestedVersion=null)
@@ -1678,7 +1680,7 @@ public sealed partial class HunterForm : Form
             int activeSavedRouteSlot=0;
             drive.TargetHeightOffset=(double)o.RangedVerticalAimOffset;
             runZone=world.ActiveZone();unreachableTargets.Clear();
-            navigation.LoadSavedRoutes();
+            navigation.SelectTargetSelection(o.Target);
             // If the primary saved farming point is occupied when the hunt is
             // activated, choose the first free alternative instead of entering
             // another player's spot. The activation point is otherwise kept as

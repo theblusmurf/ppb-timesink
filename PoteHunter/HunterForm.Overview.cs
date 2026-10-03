@@ -22,16 +22,22 @@ public sealed partial class HunterForm
             if(filter.Text != "Mimic" || CurrentOptions().Target != "Mimic") throw new Exception("Overview target preset did not update the bound filter.");
             Find<TextBox>("overviewTargetFilter").Text = "Custom monster";
             if(filter.Text != "Custom monster") throw new Exception("Overview custom filter was discarded.");
+            if(navigation.RouteTargetKey!="CUSTOM MONSTER")throw new Exception("Custom target route set did not follow the filter.");
             filter.Text = "Tribal";
             if(Find<TextBox>("overviewTargetFilter").Text != "Tribal") throw new Exception("Overview did not follow detailed target edits.");
             var repair = Find<CheckBox>("overviewRepair"); repair.Checked = !autoRepair.Checked;
             if(repair.Checked != autoRepair.Checked) throw new Exception("Overview repair toggle did not bind.");
-            working = true; refreshOverview?.Invoke();
+            if(navigation.RouteTargetKey!="TRIBAL" || !Find<Label>("overviewRouteTarget").Text.Contains("Tribal"))throw new Exception("Route set label did not follow target selection.");
+            navigation.BeginRecording(new(0,0));filter.Text="Mimic";
+            if(navigation.Recording || !navigation.RecordingCancelled || navigation.RouteTargetKey!="MIMIC")throw new Exception("Changing target did not cancel the old recording.");
+            filter.Text="Tribal";
+            working = true; refreshOverview?.Invoke();RefreshNavigationRecordingControls();
+            if(clearSavedNavigationRoute.Enabled || clearAllSavedNavigationRoutes.Enabled || assignUnassignedNavigationRoutes.Enabled)throw new Exception("Route mutations allowed during hunting.");
             if(Find<Button>("overviewTargetMimic").Enabled || Find<TextBox>("overviewTargetFilter").Enabled || repair.Enabled || Find<ComboBox>("overviewMode").Enabled || Find<Button>("overviewRoute0").Enabled)
                 throw new Exception("Overview permits settings changes while hunting.");
             bool lockedRepair = autoRepair.Checked; repair.Checked = !lockedRepair;
             if(autoRepair.Checked != lockedRepair) throw new Exception("Overview bypassed running-state guard.");
-            working = false; compactMode.SelectedIndex = 3; refreshOverview?.Invoke();
+            working = false;RefreshNavigationRecordingControls(); compactMode.SelectedIndex = 3; refreshOverview?.Invoke();
             if(Find<ComboBox>("overviewMode").SelectedIndex != 3 || Find<CheckBox>("overviewRevive").Enabled || Find<Button>("overviewTargetMimic").Enabled)
                 throw new Exception("Overview healer state differs from detailed settings.");
             compactMode.SelectedIndex = 0; refreshOverview?.Invoke();
@@ -141,6 +147,7 @@ public sealed partial class HunterForm
         CompactAdd(recovery, Link("Revival & repair setup", () => OpenSetup(autoRevive)));
 
         var routes = CompactCard("SAVED ROUTES"); CompactAdd(right, routes);
+        var routeTargetText=Detail("overviewRouteTarget");CompactAdd(routes,routeTargetText);
         var routeButtons = new List<Button>();
         for(int slot = 0; slot < Navigation.SavedRouteSlotCount; slot++)
         {
@@ -202,6 +209,7 @@ public sealed partial class HunterForm
                 recoveryText.Text = healerMode.Checked ? "Death recovery is unavailable in healer mode."
                     : "Revive → Repair (if enabled) → Saved route";
                 foreach(var check in recovery.Controls.OfType<CheckBox>()) check.Enabled &= !healerMode.Checked;
+                routeTargetText.Text=$"Targets: {navigation.RouteTargetLabel}"+(navigation.UnassignedRouteCount>0?" · Assign existing routes in Navigation":"");
                 for(int i = 0; i < routeButtons.Count; i++)
                 {
                     var saved = navigation.SavedRoutes[i]; var button = routeButtons[i];

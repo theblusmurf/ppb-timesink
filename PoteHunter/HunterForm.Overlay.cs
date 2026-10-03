@@ -34,7 +34,8 @@ public sealed partial class HunterForm
     readonly Button saveNavigationSpot = new() { Text = "Save current spot", AutoSize = true };
     readonly Button saveNavigationRoute = new() { Text = "Finish & save · End", AutoSize = true };
     readonly Button clearSavedNavigationRoute = new() { Text = "Clear selected", AutoSize = true };
-    readonly Button clearAllSavedNavigationRoutes = new() { Text = "Clear all routes", AutoSize = true };
+    readonly Button clearAllSavedNavigationRoutes = new() { Text = "Clear target routes", AutoSize = true };
+    readonly Button assignUnassignedNavigationRoutes=new(){Name="assignUnassignedRoutes",Text="Assign existing routes",AutoSize=true};
     readonly Button resetLootTracker = new() { Text = "Reset loot", AutoSize = true };
     readonly Button resetLootTimer = new() { Text = "Reset timer", AutoSize = true };
     NavigationOverlay? navigationOverlay;
@@ -70,7 +71,7 @@ public sealed partial class HunterForm
             guideTreasureChests.Checked = options.GuideTreasureChests;
             showTreasureChestMarkers.Checked = options.ShowTreasureChestMarkers;
             useAlternativeHuntRoutes.Checked = options.UseAlternativeHuntRoutes;
-            navigation.LoadSavedRoutes();
+            navigation.SelectTargetSelection(options.Target);
         }
         catch
         {
@@ -98,7 +99,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(lootTrackerBackgroundOpacity);
         void UpdateLootSizeVisibility(){lootTrackerScale.Visible=lootTrackerScaleLabel.Visible=lootTrackerBackgroundOpacity.Visible=lootTrackerBackgroundLabel.Visible=lootTrackerDesign.SelectedIndex is 1 or 3;}
         UpdateLootSizeVisibility();
-        priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows all saved paths, anchors, facing and the 10-unit start corridor; auto-fits the full routes.");
+        priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows saved paths for the selected target filter, anchors, facing and the 10-unit start corridor; auto-fits the full routes.");
         priorityHint.SetToolTip(lootTrackerDesign,"Runic Fold and Runic Strip float outlined text and resource icons over the game with an adjustable background. Drag the header to move. Design, size, background opacity and position are saved. Silvin is a low-tier metal.");
         priorityHint.SetToolTip(lootTrackerScale,"Transparent loot overlay size: 50% to 200% in 5% steps. Text, icons and spacing scale together; your size is saved. Automatically fits smaller screens.");
         priorityHint.SetToolTip(lootTrackerBackgroundOpacity,"Runic Fold / Runic Strip background only: 0% is fully transparent, 100% is solid. Text and icons stay bright. Saved automatically, including during hunting.");
@@ -120,8 +121,9 @@ public sealed partial class HunterForm
         navControls.Controls.Add(saveNavigationRoute);
         navControls.Controls.Add(clearSavedNavigationRoute);
         navControls.Controls.Add(clearAllSavedNavigationRoutes);
+        navControls.Controls.Add(assignUnassignedNavigationRoutes);
         navControls.Controls.Add(savedNavigationRoutesStatus);
-        navControls.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(650,0),Text="F8 within 10 map units of a saved path: follow route to anchor, restore facing, then hunt. Selected slot preferred. See Index for all hotkeys."});
+        navControls.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(650,0),Text="Each target filter has its own Primary + two alternatives. F8 within 10 map units of a matching saved path: follow route to anchor, restore facing, then hunt. Selected slot preferred. See Index for all hotkeys."});
         navControls.Controls.Add(resetLootTracker);
         navControls.Controls.Add(resetLootTimer);
 
@@ -138,21 +140,32 @@ public sealed partial class HunterForm
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
         useAlternativeHuntRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
+        filter.TextChanged+=(_,_)=>{if(!busy && !working)SyncNavigationTargetSelection();};
+        assignUnassignedNavigationRoutes.Click+=(_,_)=>
+        {
+            if(busy || working || navigation.Recording)return;
+            SyncNavigationTargetSelection();
+            message=navigation.AssignUnassignedRoutes()
+                ? $"Existing routes assigned to {navigation.RouteTargetLabel}."
+                : "Assignment requires an empty target route set and readable existing routes.";
+            RefreshSavedNavigationRouteStatus();navigationCanvas.Invalidate();refreshOverview?.Invoke();
+        };
+        priorityHint.SetToolTip(assignUnassignedNavigationRoutes,"Attach routes saved by older releases to the current target filter. Existing target routes are never overwritten. Other target sets remain separate.");
         savedNavigationSlot.SelectedIndexChanged += (_, _) => RefreshSavedNavigationRouteStatus();
         startNavigationRecording.Click += (_, _) => StartNavigationRouteRecording();
         saveNavigationSpot.Click += (_, _) => SaveNavigationRouteFromNavigationTab(true);
         saveNavigationRoute.Click += (_, _) => SaveNavigationRouteFromNavigationTab(false,true);
         clearSavedNavigationRoute.Click += (_, _) =>
         {
+            if(busy || working || navigation.Recording)return;
             int slot=SelectedSavedNavigationSlot();
-            navigation.ClearSavedRoute(slot);
-            message=$"{SavedNavigationSlotName(slot)} cleared.";
+            message=navigation.ClearSavedRoute(slot)?$"{navigation.RouteTargetLabel} · {SavedNavigationSlotName(slot)} cleared.":navigation.Status;
             RefreshSavedNavigationRouteStatus(); navigationCanvas.Invalidate();
         };
         clearAllSavedNavigationRoutes.Click += (_, _) =>
         {
-            navigation.ClearSavedRoute();
-            message="All saved hunt routes cleared.";
+            if(busy || working || navigation.Recording)return;
+            message=navigation.ClearSavedRoute()?$"Routes cleared for {navigation.RouteTargetLabel}.":navigation.Status;
             RefreshSavedNavigationRouteStatus(); navigationCanvas.Invalidate();
         };
         resetLootTracker.Click += (_, _) => { bool saved = SaveLootLog("Reset loot"); lootTracker.Reset(); if (saved) message = "Loot totals reset."; UpdateNavigationOverlay(); };
@@ -164,13 +177,14 @@ public sealed partial class HunterForm
     {
         if (busy || working) { message="Stop the hunt before recording a route manually."; return; }
         if (!connected || !navigationPosition.Finite) { message="Connect to the game before starting route recording."; return; }
+        SyncNavigationTargetSelection();
         if (navigation.Recording) { message="A route is already recording. Press End to finish and save it."; return; }
         try
         {
             double heading=world.PlayerHeading();
             navigation.BeginRecording(navigationPosition);
             message=$"Route recording started at zone {navigationZone}. Walk to the destination, then press End to finish and save.";
-            TraceLog.Record("manual navigation route recording started",new {Zone=navigationZone,Anchor=navigationPosition,Heading=heading});
+            TraceLog.Record("manual navigation route recording started",new {TargetSelection=navigation.RouteTargetLabel,Zone=navigationZone,Anchor=navigationPosition,Heading=heading});
         }
         catch(Exception ex) { message="Could not start navigation route: "+ex.Message; }
         RefreshNavigationRecordingControls();navigationCanvas.Invalidate();
@@ -183,6 +197,10 @@ public sealed partial class HunterForm
         startNavigationRecording.Enabled=manualAvailable && !navigation.Recording;
         saveNavigationRoute.Enabled=manualAvailable && navigation.Recording;
         saveNavigationSpot.Enabled=manualAvailable;
+        savedNavigationSlot.Enabled=!busy && !working;
+        clearSavedNavigationRoute.Enabled=clearAllSavedNavigationRoutes.Enabled=!busy && !working && !navigation.Recording;
+        assignUnassignedNavigationRoutes.Visible=navigation.UnassignedRouteCount>0;
+        assignUnassignedNavigationRoutes.Enabled=!busy && !working && !navigation.Recording && navigation.CanAssignUnassignedRoutes;
         navigationRecordingStatus.Text=navigation.Recording
             ? $"Recording {navigation.RecordingTrail.Count} point(s) · End saves"
             : navigation.RecordingCancelled
@@ -253,6 +271,7 @@ public sealed partial class HunterForm
         {
             if(busy || working) { message="Stop the hunt before saving a route manually."; return; }
             if(!connected || !navigationPosition.Finite) { message="Connect to the game before saving a route."; return; }
+            SyncNavigationTargetSelection();
             if(finishRecording && !navigation.Recording)
             {
                 message=navigation.RecordingCancelled ? "Route recording was cancelled after an unsafe movement gap; start again." : "Start route recording before finishing a route.";
@@ -285,9 +304,9 @@ public sealed partial class HunterForm
                 if(finishRecording)
                 {
                     navigation.EndRecording();
-                    TraceLog.Record("manual navigation route recording finished",new {Slot=slot,Zone=navigationZone,Anchor=anchor,PointCount=navigation.GetSavedRoute(slot)?.Points.Length ?? 0});
+                    TraceLog.Record("manual navigation route recording finished",new {TargetSelection=navigation.RouteTargetLabel,Slot=slot,Zone=navigationZone,Anchor=anchor,PointCount=navigation.GetSavedRoute(slot)?.Points.Length ?? 0});
                 }
-                message=$"Saved {SavedNavigationSlotName(slot)} {(spotOnly?"spot":"route")} ({navigation.GetSavedRoute(slot)?.Points.Length ?? 0} points, {profile.Character} / radius {profile.HuntRadius:0.#}).";
+                message=$"Saved {navigation.RouteTargetLabel} · {SavedNavigationSlotName(slot)} {(spotOnly?"spot":"route")} ({navigation.GetSavedRoute(slot)?.Points.Length ?? 0} points, {profile.Character} / radius {profile.HuntRadius:0.#}).";
             }
             else message="Save the current position or walk a route first; no valid navigation point was found.";
             RefreshSavedNavigationRouteStatus();
@@ -304,13 +323,25 @@ public sealed partial class HunterForm
         2 => "Alternative route 2",
         _ => "Primary hunt route"
     };
+    void SyncNavigationTargetSelection()
+    {
+        if(busy || working)return;
+        bool cancelled=navigation.Recording && Navigation.TargetSelectionKey(filter.Text)!=navigation.RouteTargetKey;
+        navigation.SelectTargetSelection(filter.Text);
+        if(cancelled)message="Target changed; route recording cancelled. Press Home to start a route for this selection.";
+        RefreshSavedNavigationRouteStatus();RefreshNavigationRecordingControls();navigationCanvas.Invalidate();refreshOverview?.Invoke();
+    }
+
     void RefreshSavedNavigationRouteStatus()
     {
         if(savedNavigationRoutesStatus.IsDisposed)return;
         double defaultRadius=0;
         try { defaultRadius=(double)Options.Read().HuntRadius; } catch { }
-        savedNavigationRoutesStatus.Text=string.Join("  ·  ",navigation.SavedRoutes.Select((route,slot)=>
+        savedNavigationRoutesStatus.Text=$"Targets: {navigation.RouteTargetLabel}  ·  "+string.Join("  ·  ",navigation.SavedRoutes.Select((route,slot)=>
             $"{(slot==0?"Primary":$"Alt {slot}")}: {(route==null?"—":$"Z{route.Zone} · {route.Points.Length} pts · {(string.IsNullOrWhiteSpace(route.Character)?"any":route.Character)} · R{(route.HuntRadius>0?route.HuntRadius:defaultRadius):0.#}")}"));
+        if(navigation.UnassignedRouteCount>0)savedNavigationRoutesStatus.Text+=$"  ·  {navigation.UnassignedRouteCount} existing route(s) unassigned";
+        assignUnassignedNavigationRoutes.Visible=navigation.UnassignedRouteCount>0;
+        assignUnassignedNavigationRoutes.Enabled=!busy && !working && !navigation.Recording && navigation.CanAssignUnassignedRoutes;
     }
 
     double NavigationViewRadius() => (double)navigationViewRadius.Value;
@@ -451,7 +482,7 @@ public sealed partial class HunterForm
     {
         g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(Color.FromArgb(19,25,30));
-        if(routes.Length==0){using var emptyFont=new Font("Segoe UI",9);g.DrawString("No saved routes in this zone.\nHome: start · End: save at anchor",emptyFont,Brushes.Wheat,new PointF(12,15));return;}
+        if(routes.Length==0){using var emptyFont=new Font("Segoe UI",9);g.DrawString("No routes for this target in this zone.\nHome: start · End: save at anchor",emptyFont,Brushes.Wheat,new PointF(12,15));return;}
         var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).Append(position).Where(p=>p.Finite).ToArray();
         double minX=points.Min(p=>p.X)-12,maxX=points.Max(p=>p.X)+12,minY=points.Min(p=>p.Y)-12,maxY=points.Max(p=>p.Y)+12;
         float scale=(float)Math.Min((size.Width-32)/Math.Max(1,maxX-minX),(size.Height-32)/Math.Max(1,maxY-minY));

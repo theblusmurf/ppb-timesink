@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.89
+
+- Save a separate Primary route and two alternatives for each target preset or custom name filter. Changing the selected target loads its routes in Overview, Navigation, radar and the route overlay; capitalization and outer spaces do not create duplicate sets. An empty filter has its own All targets set.
+- Use only the selected target's routes for the ten-unit startup corridor, revival return and occupied-spot fallback. Retain existing character, map, height, anchor, facing and recorded-path checks. Cancel an unfinished recording when its target changes; lock route mutation while hunting.
+- Preserve routes from older releases as unassigned. Select their intended target and use Navigation > Assign existing routes on an empty set; create a local backup before migrating. Saving or clearing one target leaves other sets and unassigned routes intact. Preserve unreadable or unsupported route files instead of overwriting them.
+- Validate target isolation, all three slots, custom filters, normalization, old single/set formats, profile/facing preservation, scoped clear, recording cancellation, stale-library saves and invalid-file handling. Build, offline recovery and UI checks pass without live game input or replacing the running app. Existing settings, updater and wallet tracker remain compatible; live route travel still requires verification after upgrading.
+
 ## Release1.88
 
 - Replace estimated ground-pile gold in the session total and gold/hour with the actual character wallet balance minus a verified session baseline. Validate the optional reader against both inventory currency display routines and the loaded client, then require stable wallet, scene and character reads. Unknown or stale balances display an em dash rather than invented income; other resource counters retain detected-drop estimates.
