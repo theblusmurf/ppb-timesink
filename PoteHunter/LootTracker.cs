@@ -7,7 +7,15 @@ public sealed record LootTrackerItemSummary(string Name,long Count);
 public sealed record LootTrackerRateSummary(string Name,double PerHour);
 public sealed record LootTrackerSourceSummary(string Source,int Kills,int Drops,IReadOnlyList<LootTrackerItemSummary> Items);
 public sealed record LootTrackerDropSummary(string Source,string Name,Vec Position,DateTime SeenUtc);
-public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList<LootTrackerSourceSummary> Sources,IReadOnlyList<LootTrackerDropSummary> RecentDrops,IReadOnlyList<LootTrackerItemSummary> TrackedLoot,DateTime SessionStartedUtc,TimeSpan Elapsed,DateTime RateStartedUtc,TimeSpan RateElapsed,IReadOnlyList<LootTrackerRateSummary> HourlyLoot);
+public sealed record WalletGoldSnapshot(bool Known,string Character,long? Current,long? Baseline,long? Net,DateTime? ReadUtc,string Status);
+public sealed record LootTrackerSnapshot(int Zone,int PendingKills,IReadOnlyList<LootTrackerSourceSummary> Sources,IReadOnlyList<LootTrackerDropSummary> RecentDrops,IReadOnlyList<LootTrackerItemSummary> TrackedLoot,DateTime SessionStartedUtc,TimeSpan Elapsed,DateTime RateStartedUtc,TimeSpan RateElapsed,IReadOnlyList<LootTrackerRateSummary> HourlyLoot)
+{
+    public WalletGoldSnapshot Wallet {get;init;}=new(false,"",null,null,null,null,"Waiting for a verified wallet balance");
+    public long DetectedGoldEstimate {get;init;}
+    public string AmountText(string name)=>name=="Gold" && !Wallet.Known?"—":(TrackedLoot.FirstOrDefault(x=>x.Name==name)?.Count??0).ToString("N0",CultureInfo.CurrentCulture);
+    public string RateText(string name,string format="N0")=>name=="Gold" && !Wallet.Known?"—":(HourlyLoot.FirstOrDefault(x=>x.Name==name)?.PerHour??0).ToString(format,CultureInfo.CurrentCulture);
+    public static string DisplayName(string name)=>name=="Gold"?"Gold (net)":name;
+}
 
 /// <summary>Attributes newly observed ground items to the nearby tracked farm target that died most recently.</summary>
 public sealed class LootTracker
@@ -38,6 +46,34 @@ public sealed class LootTracker
     bool rateActive;
     int zone;
     bool initialized;
+    WalletReading wallet;
+    string walletCharacter="";
+    long? walletBaseline;
+    long? walletRateBaseline;
+    string walletReason="Waiting for a verified wallet balance";
+
+    /// <summary>Tracks actual net wallet change; spending reduces the total. Ground piles never supply this balance.</summary>
+    public void ObserveWallet(WalletReading reading)
+    {
+        lock(gate)
+        {
+            if(!reading.Known || string.IsNullOrWhiteSpace(reading.Character) || reading.ObservedUtc>DateTime.UtcNow.AddSeconds(1) || DateTime.UtcNow-reading.ObservedUtc>TimeSpan.FromSeconds(5))
+            {wallet=wallet with{Known=false};walletReason=string.IsNullOrWhiteSpace(reading.Status)?"Wallet balance unavailable":reading.Status;return;}
+            if(walletBaseline.HasValue && !string.Equals(walletCharacter,reading.Character,StringComparison.Ordinal))
+            {wallet=wallet with{Known=false};walletReason="Character changed; reset loot to start a new wallet baseline";return;}
+            if(!walletBaseline.HasValue){walletBaseline=reading.Current;walletCharacter=reading.Character;walletRateBaseline=0;}
+            wallet=reading;walletReason="Net wallet change; repairs, purchases, trades and other income are included";
+            walletRateBaseline??=(long)reading.Current-walletBaseline.Value;
+        }
+    }
+
+    WalletGoldSnapshot WalletSnapshotLocked(DateTime now)
+    {
+        bool fresh=wallet.Known && walletBaseline.HasValue && now-wallet.ObservedUtc<=TimeSpan.FromSeconds(5);
+        return new(fresh,walletCharacter,walletBaseline.HasValue?wallet.Current:null,walletBaseline,
+            fresh?(long)wallet.Current-walletBaseline!.Value:null,walletBaseline.HasValue?wallet.ObservedUtc:null,
+            wallet.Known && !fresh?"Wallet reading is stale; waiting for a fresh balance":walletReason);
+    }
 
     public LootTracker()
     {
@@ -232,14 +268,14 @@ public sealed class LootTracker
         long amount=trackedName=="Gold"?GoldAmountFor(item):1;
         state.Items[itemName]=state.Items.GetValueOrDefault(itemName)+amount;
         if(trackedName!=null)trackedLoot[trackedName]=trackedLoot.GetValueOrDefault(trackedName)+amount;
-        string recentName=trackedName=="Gold"?(amount>0?$"Gold ({amount:N0})":"Gold (amount unavailable)"):itemName;
+        string recentName=trackedName=="Gold"?(amount>0?$"Gold pile (~{amount:N0})":"Gold (amount unavailable)"):itemName;
         recent.Insert(0,new LootTrackerDropSummary(match.Source,recentName,item.Position,now));
         if(recent.Count>12)recent.RemoveRange(12,recent.Count-12);
         known.Add(key);
         unmatched.Remove(key);
         if(trackedName=="Gold")
         {
-            try{TraceLog.Record("loot tracker gold credited",new{key.Zone,key.KeyA,key.KeyB,Amount=amount,Source=match.Source,KillId=match.Id,KillGeneration=match.Generation,Total=trackedLoot["Gold"]});}
+            try{TraceLog.Record("loot tracker gold pile estimate",new{key.Zone,key.KeyA,key.KeyB,Amount=amount,Source=match.Source,KillId=match.Id,KillGeneration=match.Generation,DetectedEstimate=trackedLoot["Gold"],ExcludedFromWalletTotal=true});}
             catch(IOException){}catch(UnauthorizedAccessException){}
         }
     }
@@ -253,9 +289,11 @@ public sealed class LootTracker
             AccumulateActiveLocked(now);
             TimeSpan rateElapsed=PositiveDuration(activeRateElapsed);
             double rateHours=rateElapsed.TotalHours;
+            var walletSummary=WalletSnapshotLocked(now);
             var hourly=TrackedLootOrder.Select(name=>
             {
-                long earned=Math.Max(0,trackedLoot[name]-rateBaseline.GetValueOrDefault(name));
+                long earned=name=="Gold"?(walletSummary.Net??0)-(walletRateBaseline??0):Math.Max(0,trackedLoot[name]-rateBaseline.GetValueOrDefault(name));
+                if(name=="Gold" && !walletSummary.Known)earned=0;
                 return new LootTrackerRateSummary(name,rateHours>0?earned/rateHours:0);
             }).ToArray();
             return new LootTrackerSnapshot(zone,pending.Count,
@@ -264,8 +302,9 @@ public sealed class LootTracker
                     SourceState state=sources[source];
                     return new LootTrackerSourceSummary(source,state.Kills,state.Drops,
                         state.Items.OrderByDescending(item=>item.Value).ThenBy(item=>item.Key,StringComparer.OrdinalIgnoreCase)
-                            .Take(5).Select(item=>new LootTrackerItemSummary(item.Key,item.Value)).ToArray());
-                }).ToArray(),recent.ToArray(),TrackedLootOrder.Select(name=>new LootTrackerItemSummary(name,trackedLoot[name])).ToArray(),sessionStartedUtc,elapsed,rateStartedUtc,rateElapsed,hourly);
+                            .Take(5).Select(item=>new LootTrackerItemSummary(item.Key=="Gold"?"Gold pile estimate":item.Key,item.Value)).ToArray());
+                }).ToArray(),recent.ToArray(),TrackedLootOrder.Select(name=>new LootTrackerItemSummary(name,name=="Gold"?walletSummary.Net??0:trackedLoot[name])).ToArray(),sessionStartedUtc,elapsed,rateStartedUtc,rateElapsed,hourly)
+                {Wallet=walletSummary,DetectedGoldEstimate=trackedLoot["Gold"]};
         }
     }
 
@@ -287,6 +326,7 @@ public sealed class LootTracker
         activeRateElapsed=TimeSpan.Zero;
         activeSinceUtc=rateActive?now:null;
         foreach(string name in TrackedLootOrder)rateBaseline[name]=trackedLoot[name];
+        walletRateBaseline=WalletSnapshotLocked(now).Net;
     }
 
     void ResetLocked(int newZone,bool resetSession=false)
@@ -297,6 +337,9 @@ public sealed class LootTracker
         {
             known.Clear();recordedKills.Clear();
             foreach(string name in TrackedLootOrder)trackedLoot[name]=0;
+            var current=WalletSnapshotLocked(DateTime.UtcNow);
+            walletBaseline=current.Known?current.Current:null;
+            if(!current.Known){wallet=default;walletCharacter="";walletReason="Waiting for a new verified wallet baseline";}
             ResetRateWindowLocked(DateTime.UtcNow);
         }
     }
@@ -322,7 +365,7 @@ public sealed class LootTracker
             new GroundItem(8,8,8,"Gemstone",new(1,.5),0)],8);
         snap=tracker.Snapshot();
         if(snap.Sources.First(source=>source.Source=="Mimic").Drops!=7)throw new Exception("Tracked item drops were not attributed.");
-        if(snap.TrackedLoot.Any(item=>item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
+        if(snap.TrackedLoot.Any(item=>item.Name!="Gold" && item.Count!=1) || snap.TrackedLoot.Count!=6)throw new Exception("Named valuable counters were not recorded.");
         if(TrackedLootFor(new GroundItem(10,10,10,"Silvein",new(.5,.5),0))!="Silvin" || TrackedLootFor(new GroundItem(11,11,11,"Mitheil",new(.5,.5),0))!="Mithril")
             throw new Exception("Legacy valuable aliases did not normalize to the corrected labels.");
         var encodedGold=new GroundItem(12,12,unchecked((int)(0x80000000u|115u)),"Special drop",new(.5,.5),0);
@@ -335,9 +378,10 @@ public sealed class LootTracker
             TrackedLootFor(new GroundItem(15,15,15,"BlackMoon",new(.5,.5),0))!="Gems")
             throw new Exception("Client currency and gem labels did not normalize to the requested counters.");
         var amountTracker=new LootTracker();amountTracker.ObserveDrops([existing],8);amountTracker.RecordKill(mimic,new(0,0),8);amountTracker.ObserveDrops([existing,encodedGold],8);
-        if(amountTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
+        if(amountTracker.Snapshot().DetectedGoldEstimate!=115)
             throw new Exception("Gold amount was not accumulated from the special-drop id.");
         GoldRecordSelfTest(mimic);
+        WalletSelfTest();
         GroupDeathSelfTest(mimic);
         var baselineGold=new GroundItem(30,30,unchecked((int)(0x80000000u|115u)),"Special drop",new(0,0),0);
         var dedupeTracker=new LootTracker();
@@ -345,37 +389,37 @@ public sealed class LootTracker
         dedupeTracker.RecordKill(mimic,new(0,0),8);
         dedupeTracker.ObserveDrops([],8,new(0,0),10);
         dedupeTracker.ObserveDrops([baselineGold],8,new(0,0),10);
-        if(dedupeTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
+        if(dedupeTracker.Snapshot().DetectedGoldEstimate!=0)
             throw new Exception("A baseline pile was credited after disappearing and reappearing.");
         var newGold=baselineGold with { KeyA=31 };
         dedupeTracker.ObserveDrops([baselineGold,newGold],8,new(0,0),10);
-        if(dedupeTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
+        if(dedupeTracker.Snapshot().DetectedGoldEstimate!=115)
             throw new Exception("A new pile with a distinct identity was not credited.");
         var delayedTracker=new LootTracker();
         delayedTracker.ObserveDrops([],8,new(0,0),10);
         delayedTracker.ObserveDrops([newGold],8,new(0,0),10);
         delayedTracker.RecordKill(mimic,new(0,0),8);
         delayedTracker.ObserveDrops([newGold],8,new(0,0),10);
-        if(delayedTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
+        if(delayedTracker.Snapshot().DetectedGoldEstimate!=115)
             throw new Exception("A drop seen before its kill was not retried for attribution.");
         var transientTracker=new LootTracker();
         transientTracker.ObserveDrops([],8,new(0,0),10);
         transientTracker.ObserveDrops([newGold],8,new(0,0),10);
         transientTracker.ObserveDrops([],8,new(0,0),10);
         transientTracker.RecordKill(mimic,new(0,0),8);
-        if(transientTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=115)
+        if(transientTracker.Snapshot().DetectedGoldEstimate!=115)
             throw new Exception("A pile removed before the kill event was not retained for attribution.");
         var radiusTracker=new LootTracker();
         radiusTracker.ObserveDrops([],8,new(0,0),10);
         radiusTracker.RecordKill(mimic,new(0,0),8);
         radiusTracker.ObserveDrops([new GroundItem(32,32,unchecked((int)(0x80000000u|99u)),"Special drop",new(20,0),0)],8,new(0,0),10);
-        if(radiusTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
+        if(radiusTracker.Snapshot().DetectedGoldEstimate!=0)
             throw new Exception("A pile outside the saved farming radius was credited.");
         var typeIdentityTracker=new LootTracker();
         typeIdentityTracker.ObserveDrops([new GroundItem(40,40,1,"Existing",new(0,0),0)],8,new(0,0),10);
         typeIdentityTracker.RecordKill(mimic,new(0,0),8);
         typeIdentityTracker.ObserveDrops([new GroundItem(40,40,unchecked((int)(0x80000000u|77u)),"Special drop",new(0,0),0)],8,new(0,0),10);
-        if(typeIdentityTracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count!=0)
+        if(typeIdentityTracker.Snapshot().DetectedGoldEstimate!=0)
             throw new Exception("A refreshed pile was double-counted when its item type changed.");
         var idleTracker=new LootTracker();idleTracker.ResetTimer();
         if(idleTracker.Snapshot().RateElapsed!=TimeSpan.Zero)
@@ -385,7 +429,7 @@ public sealed class LootTracker
         tracker.ObserveZone(9);
         snap=tracker.Snapshot();
         if(snap.Sources.Any(source=>source.Kills!=0 || source.Drops!=0))throw new Exception("Zone changes did not reset zone attribution.");
-        if(snap.TrackedLoot.Any(item=>item.Count!=1))throw new Exception("Zone changes erased session loot totals.");
+        if(snap.TrackedLoot.Any(item=>item.Name!="Gold" && item.Count!=1))throw new Exception("Zone changes erased session loot totals.");
         tracker.Reset();
         if(tracker.Snapshot().TrackedLoot.Any(item=>item.Count!=0))throw new Exception("Explicit tracker reset did not clear session loot totals.");
         var timerTracker=new LootTracker();
@@ -395,8 +439,39 @@ public sealed class LootTracker
             throw new Exception("Loot earnings timer snapshot was invalid.");
         timerTracker.ResetTimer();
         var resetTimed=timerTracker.Snapshot();
-        if(resetTimed.TrackedLoot.First(item=>item.Name=="Gold").Count!=115 || resetTimed.HourlyLoot.Any(item=>item.PerHour!=0))
+        if(resetTimed.DetectedGoldEstimate!=115 || resetTimed.HourlyLoot.Any(item=>item.PerHour!=0))
             throw new Exception("Resetting the loot timer changed totals or retained the old rate window.");
+    }
+
+    static void WalletSelfTest()
+    {
+        var tracker=new LootTracker();
+        void Read(uint amount,string character="Test")=>tracker.ObserveWallet(new(true,amount,character,DateTime.UtcNow,"Verified"));
+        long? Net()=>tracker.Snapshot().Wallet.Net;
+        if(tracker.Snapshot().Wallet.Known || tracker.Snapshot().AmountText("Gold")!="—")throw new Exception("Unknown wallet was displayed as gold earnings");
+        Read(51471);if(Net()!=0 || tracker.Snapshot().Wallet.Baseline!=51471)throw new Exception("Starting wallet was counted as income");
+        Read(57625);Read(57625);tracker.activeRateElapsed=TimeSpan.FromMinutes(30);
+        tracker.ObserveDrops([],8);tracker.RecordKill(new(10,0x80001753,"Mimic",new(0,0),0),new(0,0),8);
+        tracker.ObserveDrops([new(1,1,unchecked((int)(0x80000000u|9999u)),"Special drop",new(0,0),0)],8);
+        if(tracker.Snapshot().DetectedGoldEstimate!=9999 || Net()!=6154)throw new Exception("Ground gold overrode actual wallet earnings");
+        if(Net()!=6154 || tracker.Snapshot().HourlyLoot.First(x=>x.Name=="Gold").PerHour!=12308)throw new Exception("Wallet income or repeated-poll accounting failed");
+        tracker.ObserveZone(12);tracker.ObserveZone(8);
+        if(Net()!=6154)throw new Exception("Revival/zone travel erased the wallet baseline");
+        Read(51829);if(Net()!=358)throw new Exception("Repair spending was omitted from net earnings");
+        Read(50000);if(Net()!=-1471 || tracker.Snapshot().HourlyLoot.First(x=>x.Name=="Gold").PerHour!=-2942)throw new Exception("A net wallet loss was clamped to zero");
+        tracker.ResetTimer();if(Net()!=-1471 || tracker.Snapshot().HourlyLoot.First(x=>x.Name=="Gold").PerHour!=0)throw new Exception("Timer reset changed the session wallet baseline");
+        Read(50100);tracker.activeRateElapsed=TimeSpan.FromMinutes(30);
+        if(tracker.Snapshot().HourlyLoot.First(x=>x.Name=="Gold").PerHour!=200)throw new Exception("Timer reset did not start a new wallet rate window");
+        tracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Disconnected"));
+        if(tracker.Snapshot().Wallet.Known || tracker.Snapshot().RateText("Gold")!="—")throw new Exception("Missing wallet reads became zero earnings");
+        Read(50200);if(Net()!=-1271)throw new Exception("Reconnect erased the original wallet baseline");
+        tracker.wallet=tracker.wallet with{ObservedUtc=DateTime.UtcNow.AddSeconds(-6)};
+        if(tracker.Snapshot().Wallet.Known)throw new Exception("Stale wallet was treated as current");
+        Read(50200,"Other");if(tracker.Snapshot().Wallet.Known)throw new Exception("A different character contaminated the session");
+        tracker.Reset();Read(51471,"Other");Read(51500,"Other");if(Net()!=29)throw new Exception("Loot reset failed to establish a fresh character baseline");
+        tracker.Reset();if(Net()!=0 || tracker.Snapshot().Wallet.Baseline!=51500)throw new Exception("Reset failed to use the current verified wallet");
+        Read(uint.MaxValue,"Other");if(Net()!=(long)uint.MaxValue-51500)throw new Exception("Unsigned wallet values overflowed net totals");
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"wallet-gold-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,Checks=new[]{"baseline excludes pre-existing balance","6154 actual income","no duplicate polls","spending and negative net","zone/revival retention","independent timer reset","unknown/stale reads","same-character reconnect","different-character reset","unsigned balance"}}));
     }
 
     static void GroupDeathSelfTest(Entity mimic)
@@ -407,7 +482,7 @@ public sealed class LootTracker
         var piles=new[] {100,103,99,109}.Select((amount,index)=>new GroundItem((uint)(100+index),1,
             unchecked((int)(0x80000000u|(uint)amount)),"Special drop",new(0,0),0)).ToArray();
         tracker.ObserveDrops(piles,8,new(0,0),40);
-        long Gold()=>tracker.Snapshot().TrackedLoot.First(item=>item.Name=="Gold").Count;
+        long Gold()=>tracker.Snapshot().DetectedGoldEstimate;
         if(Gold()!=0)throw new Exception("Unattributed collateral piles were prematurely credited.");
         var collateral=mimic with {Generation=5};
         var encounter=new Encounter();encounter.Begin();
@@ -489,22 +564,22 @@ public sealed class LootTracker
         tracker.ObserveDrops(drops,8);
         var snap=tracker.Snapshot();
         var source=snap.Sources.Single(row=>row.Source=="Mimic");
-        if(snap.TrackedLoot.Single(item=>item.Name=="Gold").Count!=535 || source.Drops!=5 || source.Items.Single().Count!=535)
+        if(snap.DetectedGoldEstimate!=535 || source.Drops!=5 || source.Items.Single().Count!=535)
             throw new Exception("Recorded gold piles must contribute 535 gold once, not five pile counts.");
         tracker.activeRateElapsed=TimeSpan.FromMinutes(30);
         snap=tracker.Snapshot();
-        if(snap.HourlyLoot.Single(item=>item.Name=="Gold").PerHour!=1070)
-            throw new Exception("Gold per hour was not calculated from currency amounts.");
+        if(snap.Wallet.Known || snap.HourlyLoot.Single(item=>item.Name=="Gold").PerHour!=0)
+            throw new Exception("Ground-pile estimates leaked into wallet gold per hour.");
         var unknown=new GroundItem(200,200,2,"Gold",new(0,0),0);
         tracker.ObserveDrops([unknown],8);
         snap=tracker.Snapshot();
         if(GoldAmountFor(unknown)!=0 || GoldAmountFor(unknown with {TypeId=int.MinValue})!=0 ||
-            snap.TrackedLoot.Single(item=>item.Name=="Gold").Count!=535 || snap.RecentDrops[0].Name!="Gold (amount unavailable)")
+            snap.DetectedGoldEstimate!=535 || snap.RecentDrops[0].Name!="Gold (amount unavailable)")
             throw new Exception("An unavailable gold amount must not be recorded as one gold.");
         var large=new GroundItem(300,300,-1,"Gold",new(0,0),0);
         tracker.ObserveDrops([large,large with {KeyA=301}],8);
         snap=tracker.Snapshot();
-        if(snap.TrackedLoot.Single(item=>item.Name=="Gold").Count!=4294967829L ||
+        if(snap.DetectedGoldEstimate!=4294967829L ||
             snap.Sources.Single(row=>row.Source=="Mimic").Items.Single().Count!=4294967829L)
             throw new Exception("Gold session and source totals overflowed the 32-bit pile count.");
     }

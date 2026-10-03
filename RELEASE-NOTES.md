@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.88
+
+- Replace estimated ground-pile gold in the session total and gold/hour with the actual character wallet balance minus a verified session baseline. Validate the optional reader against both inventory currency display routines and the loaded client, then require stable wallet, scene and character reads. Unknown or stale balances display an em dash rather than invented income; other resource counters retain detected-drop estimates.
+- Preserve the baseline through death, revival, repair, map travel and reconnecting the same character. Reset loot starts a new wallet baseline; Reset timer preserves session totals and starts a new rate window. A different character requires a loot reset. Repairs, purchases, trades and other income affect net gold, including negative totals; wallet data cannot identify which enemy supplied income.
+- Label Gold (net) in all overlay designs and Overview, with current wallet/baseline details in the Overview tooltip. Keep gold-pile estimates separate for diagnostics and source attribution; they never affect wallet earnings. Save death/reset rows to loot-wallet-session-log.csv with wallet freshness, balance and baseline columns, preserving the old drop-estimate CSV.
+- Validate gains, spending, unsigned balances, duplicate reads, unknown/stale readings, character changes, reset behavior, route/revival retention, strict signature conflicts and CSV compatibility. The read-only guarded reader matched the live inventory gold display during development; long-run wallet earnings still require verification after upgrading. Existing combat, input, recovery, routes, icons and updater remain unchanged; the running app was not replaced.
+
 ## Release1.87
 
 - Apply the approved original inventory images for Silvin, Mithril, Iternium and Fehu to Runic Fold, and use the game's Diamond image for Gems. Keep Gold's coin icon and the two-row brass/ivory layout shown in the preview.

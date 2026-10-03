@@ -210,6 +210,7 @@ public sealed partial class World : IDisposable
             ConnectionVerified=true;
             ConfigureCamera();
             ConfigureMana();
+            ConfigureWallet();
             WriteProfileAudit(true,ProfileStatus);
             ConnectionStage="Connected";
         }
@@ -734,6 +735,7 @@ public sealed partial class World : IDisposable
         ConnectionVerified=false;
         ResetCamera();
         ResetMana();
+        ResetWallet();
         windowIdentity = null;
         PlayerName="";
         RestSupported=false;

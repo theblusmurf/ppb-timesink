@@ -44,15 +44,13 @@ internal static class RunicStripRenderer
             LootOverlayBackground.Draw(graphics,LogicalSize,backgroundOpacityPercent);
             Text(graphics,"SPOILS OF THE HUNT","Georgia",16,new(10,7,425,28),Brass);
             Text(graphics,Duration(snapshot.Elapsed),"Consolas",13,new(525,9,145,24),Muted,true);
-            var totals=snapshot.TrackedLoot.ToDictionary(item=>item.Name,item=>item.Count,StringComparer.OrdinalIgnoreCase);
-            var rates=snapshot.HourlyLoot.ToDictionary(item=>item.Name,item=>item.PerHour,StringComparer.OrdinalIgnoreCase);
             for(int i=0;i<Resources.Length;i++)
             {
                 string name=Resources[i];float left=10+i*110;
                 Icon(graphics,name,new(left+43,47,22,22));
-                Text(graphics,$"{totals.GetValueOrDefault(name):N0}","Consolas",24,new(left,77,108,35),name=="Gold"?Brass:Ink,true);
-                Text(graphics,name,"Georgia",14,new(left,111,108,24),Ink,true);
-                Text(graphics,$"{rates.GetValueOrDefault(name):N0} / hr","Consolas",11,new(left,137,108,21),Muted,true);
+                Text(graphics,snapshot.AmountText(name),"Consolas",24,new(left,77,108,35),name=="Gold"?Brass:Ink,true);
+                Text(graphics,LootTrackerSnapshot.DisplayName(name),"Georgia",14,new(left,111,108,24),Ink,true);
+                Text(graphics,$"{snapshot.RateText(name)} / hr","Consolas",11,new(left,137,108,21),Muted,true);
             }
             using var line=new Pen(Color.FromArgb(160,Brass),1);
             graphics.DrawLine(line,258,173,322,173);graphics.DrawLine(line,354,173,418,173);

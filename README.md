@@ -12,6 +12,20 @@ uses the same session totals and rates for Silvin, Mithril, Iternium, Fehu, Gold
 and Gems. Drag its header to move it. The ribbon summarises aggregate kills/drops;
 the detailed HUD and ledger also show attribution and recent drops.
 
+**Gold (net)** is the actual wallet balance minus the first verified balance of
+the application session. Repairs, purchases and trades reduce it; other income
+also increases it. It is net wallet change, not enemy-specific gross loot. The
+Overview Gold tooltip shows the wallet and baseline. Unavailable or stale reads
+show an em dash. Other resources and per-target gold-pile estimates remain
+detected-drop estimates, separate from wallet earnings.
+
+The wallet baseline survives death, revival, repair, zone travel and reconnects
+to the same character. **Reset loot** starts a fresh baseline; **Reset timer**
+preserves the total and starts a new rate window. Changing characters requires
+Reset loot. Rates use active farming time. Death and reset events append to
+**loot-wallet-session-log.csv**, including the wallet balance, baseline, read
+time and availability. Existing loot-session-log.csv files are preserved.
+
 Start / F8 automatically follows a saved route to its anchor when you stand
 within **10 map units of the recorded path**. Select the desired slot in
 Advanced > Navigation; it is preferred when compatible and nearby, otherwise

@@ -23,7 +23,7 @@ public sealed partial class HunterForm : Form
     readonly Navigation navigation = new();
     readonly ChestCatalog chestCatalog = new();
     readonly LootTracker lootTracker = new();
-    readonly LootTrackerLog lootTrackerLog = new(System.IO.Path.Combine(AppContext.BaseDirectory, "loot-session-log.csv"));
+    readonly LootTrackerLog lootTrackerLog = new(System.IO.Path.Combine(AppContext.BaseDirectory, "loot-wallet-session-log.csv"));
     readonly Dictionary<(int Zone,uint Id),long> chestGuideCooldown = new();
     readonly ZoneMapBackground zoneMapBackground = new();
     readonly TabPage groupPage=new("Group");
@@ -552,7 +552,8 @@ public sealed partial class HunterForm : Form
     {
         status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError);
         lootTracker.ObserveActivity(working && connected && activeGuardOptions!=null);
-        if (!connected || busy) return;
+        if(!connected){lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
+        if(busy)return;
         try
         {
             if (working && !Input.Allowed()) Stop("Stopped: switched away from the game. Recalibrate before starting again.");
@@ -569,6 +570,7 @@ public sealed partial class HunterForm : Form
                 return;
             }
             UpdateDetectedCharacter(self);
+            lootTracker.ObserveWallet(world.ReadWallet());
             Vec pos = self.Position;
             var health = world.HealthSnapshot();
             latestHealth = health;

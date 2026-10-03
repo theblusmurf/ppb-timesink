@@ -142,19 +142,16 @@ internal sealed partial class LootTrackerOverlay : Form
         using var mutedBrush=new SolidBrush(Color.FromArgb(175,196,203,210));
         using var accentBrush=new SolidBrush(Color.FromArgb(255,215,120));
         float y=HeaderHeight+7;
-        e.Graphics.DrawString($"Tracked loot  ·  Gold is amount  ·  Elapsed {FormatDuration(snapshot.Elapsed)}",detailFont,mutedBrush,new PointF(10,y));y+=16;
+        e.Graphics.DrawString($"Tracked loot  ·  Gold is net wallet  ·  Elapsed {FormatDuration(snapshot.Elapsed)}",detailFont,mutedBrush,new PointF(10,y));y+=16;
         e.Graphics.DrawString($"Active earning time {FormatDuration(snapshot.RateElapsed)}  ·  per hour",detailFont,mutedBrush,new PointF(10,y));y+=15;
-        var hourly=snapshot.HourlyLoot.ToDictionary(item=>item.Name,StringComparer.OrdinalIgnoreCase);
         for(int i=0;i<snapshot.TrackedLoot.Count;i+=2)
         {
             var left=snapshot.TrackedLoot[i];
-            double leftRate=hourly.GetValueOrDefault(left.Name)?.PerHour??0;
-            e.Graphics.DrawString($"{left.Name}: {left.Count:N0} ({leftRate:N1}/h)",rowFont,textBrush,new PointF(10,y));
+            e.Graphics.DrawString($"{LootTrackerSnapshot.DisplayName(left.Name)}: {snapshot.AmountText(left.Name)} ({snapshot.RateText(left.Name,"N1")}/h)",rowFont,textBrush,new PointF(10,y));
             if(i+1<snapshot.TrackedLoot.Count)
             {
                 var right=snapshot.TrackedLoot[i+1];
-                double rightRate=hourly.GetValueOrDefault(right.Name)?.PerHour??0;
-                e.Graphics.DrawString($"{right.Name}: {right.Count:N0} ({rightRate:N1}/h)",rowFont,textBrush,new PointF(205,y));
+                e.Graphics.DrawString($"{LootTrackerSnapshot.DisplayName(right.Name)}: {snapshot.AmountText(right.Name)} ({snapshot.RateText(right.Name,"N1")}/h)",rowFont,textBrush,new PointF(205,y));
             }
             y+=17;
         }
@@ -197,14 +194,13 @@ internal sealed partial class LootTrackerOverlay : Form
         g.DrawString("Parchment Ledger",heading,inkBrush,new PointF(10,6));
         g.DrawString("drag header to move",detailFont,mutedBrush,new PointF(210,9));
         g.DrawString($"Session {FormatDuration(snapshot.Elapsed)}  ·  Active {FormatDuration(snapshot.RateElapsed)}  ·  Zone {snapshot.Zone}",detailFont,mutedBrush,new PointF(10,37));
-        var rates=snapshot.HourlyLoot.ToDictionary(item=>item.Name,StringComparer.OrdinalIgnoreCase);
         g.DrawString("Collected",detailFont,mutedBrush,new PointF(154,61));g.DrawString("Per hour",detailFont,mutedBrush,new PointF(270,61));
         float y=82;
         foreach(var item in snapshot.TrackedLoot)
         {
-            g.DrawString(item.Name,rowFont,inkBrush,new PointF(12,y));
-            TextRenderer.DrawText(g,$"{item.Count:N0}",rowFont,new Rectangle(118,(int)y,120,20),ink,TextFormatFlags.Right|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g,$"{rates.GetValueOrDefault(item.Name)?.PerHour??0:N1}",rowFont,new Rectangle(240,(int)y,104,20),accent,TextFormatFlags.Right|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
+            g.DrawString(LootTrackerSnapshot.DisplayName(item.Name),rowFont,inkBrush,new PointF(12,y));
+            TextRenderer.DrawText(g,snapshot.AmountText(item.Name),rowFont,new Rectangle(118,(int)y,120,20),ink,TextFormatFlags.Right|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
+            TextRenderer.DrawText(g,snapshot.RateText(item.Name,"N1"),rowFont,new Rectangle(240,(int)y,104,20),accent,TextFormatFlags.Right|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
             y+=24;
         }
         g.DrawLine(border,10,y,Width-10,y);y+=8;
@@ -213,7 +209,7 @@ internal sealed partial class LootTrackerOverlay : Form
         y+=5;
         foreach(var drop in snapshot.RecentDrops.Take(2))
         {TextRenderer.DrawText(g,$"{drop.Source}: {drop.Name}",detailFont,new Rectangle(12,(int)y,Width-24,17),accent,TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);y+=17;}
-        g.DrawString($"Gold = amount  ·  Pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(12,Height-18));
+        g.DrawString($"Gold = net wallet  ·  Pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(12,Height-18));
     }
 
     static string FormatDuration(TimeSpan duration)

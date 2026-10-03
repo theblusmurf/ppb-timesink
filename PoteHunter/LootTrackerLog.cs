@@ -13,10 +13,11 @@ public sealed class LootTrackerLog
     static readonly string[] TrackedNames = ["Silvin", "Mithril", "Iternium", "Fehu", "Gold", "Gems"];
     static readonly string[] SourceNames = ["Mimic", "Tribal", "Pulkhan", "Tower"];
     static readonly string Header = string.Join(",", new[] { "TimestampLocal", "Reason", "Zone", "PendingKills", "SessionElapsed", "RateWindowElapsed" }
-        .Concat(TrackedNames.Select(name => name + "Total"))
-        .Concat(TrackedNames.Select(name => name + "PerHour"))
+        .Concat(TrackedNames.Select(name => name=="Gold"?"GoldNetTotal":name + "Total"))
+        .Concat(TrackedNames.Select(name => name=="Gold"?"GoldNetPerHour":name + "PerHour"))
         .Concat(SourceNames.Select(name => name + "Kills"))
-        .Concat(SourceNames.Select(name => name + "Drops")));
+        .Concat(SourceNames.Select(name => name + "Drops"))
+        .Concat(new[]{"WalletKnown","WalletCharacter","WalletCurrent","WalletBaseline","WalletReadUtc","WalletStatus","DetectedGoldEstimate"}));
     readonly object gate = new();
 
     public string FilePath { get; }
@@ -39,6 +40,11 @@ public sealed class LootTrackerLog
                 if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
                 using var stream = new FileStream(FilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
                 bool writeHeader = stream.Length == 0;
+                if(!writeHeader)
+                {
+                    using var reader=new StreamReader(stream,Encoding.UTF8,true,1024,leaveOpen:true);
+                    if(reader.ReadLine()!=Header)throw new IOException("Loot log schema differs; preserving the existing file");
+                }
                 stream.Seek(0, SeekOrigin.End);
                 using var writer = new StreamWriter(stream, new UTF8Encoding(false));
                 if (writeHeader) writer.WriteLine(Header);
@@ -68,10 +74,13 @@ public sealed class LootTrackerLog
             FormatDuration(snapshot.Elapsed),
             FormatDuration(snapshot.RateElapsed)
         };
-        values.AddRange(TrackedNames.Select(name => totals.GetValueOrDefault(name).ToString(CultureInfo.InvariantCulture)));
-        values.AddRange(TrackedNames.Select(name => rates.GetValueOrDefault(name).ToString("F2", CultureInfo.InvariantCulture)));
+        values.AddRange(TrackedNames.Select(name => name=="Gold" && !snapshot.Wallet.Known?"":totals.GetValueOrDefault(name).ToString(CultureInfo.InvariantCulture)));
+        values.AddRange(TrackedNames.Select(name => name=="Gold" && !snapshot.Wallet.Known?"":rates.GetValueOrDefault(name).ToString("F2", CultureInfo.InvariantCulture)));
         values.AddRange(SourceNames.Select(name => sources.GetValueOrDefault(name)?.Kills.ToString(CultureInfo.InvariantCulture) ?? "0"));
         values.AddRange(SourceNames.Select(name => sources.GetValueOrDefault(name)?.Drops.ToString(CultureInfo.InvariantCulture) ?? "0"));
+        values.AddRange(new[]{snapshot.Wallet.Known.ToString(),snapshot.Wallet.Character,
+            snapshot.Wallet.Current?.ToString(CultureInfo.InvariantCulture)??"",snapshot.Wallet.Baseline?.ToString(CultureInfo.InvariantCulture)??"",
+            snapshot.Wallet.ReadUtc?.ToString("O",CultureInfo.InvariantCulture)??"",snapshot.Wallet.Status,snapshot.DetectedGoldEstimate.ToString(CultureInfo.InvariantCulture)});
         return string.Join(',', values.Select(Csv));
     }
 
@@ -92,21 +101,27 @@ public sealed class LootTrackerLog
         try
         {
             var tracker = new LootTracker();
+            tracker.ObserveWallet(new(true,1000,"Test",DateTime.UtcNow,"Verified"));
             tracker.ObserveDrops([], 8);
             tracker.RecordKill(new Entity(10, 0x80001753, "Mimic", new(0, 0), 0), new(0, 0), 8);
             tracker.ObserveDrops([
                 new GroundItem(1, 1, -2147483551, "Gold", new(0, 0), 0),
                 new GroundItem(2, 2, -2147483529, "Gold", new(0, 0), 0)], 8);
             var log = new LootTrackerLog(path);
+            tracker.ObserveWallet(new(true,1216,"Test",DateTime.UtcNow,"Verified"));
             if (!log.TrySave(tracker.Snapshot(), "Reset") || !File.Exists(path)) throw new Exception("Event log was not written.");
             string[] lines = File.ReadAllLines(path);
             if (lines.Length != 2 || !lines[0].Contains("TimestampLocal", StringComparison.Ordinal) || !lines[1].Contains("\"Reset\"", StringComparison.Ordinal))
                 throw new Exception("Event log header or reason was invalid.");
-            int goldColumn = Array.IndexOf(lines[0].Split(','), "GoldTotal");
+            int goldColumn = Array.IndexOf(lines[0].Split(','), "GoldNetTotal");
             if (goldColumn < 0 || lines[1].Split(',')[goldColumn] != "\"216\"")
                 throw new Exception("The event log recorded pile counts instead of the gold amount.");
             if (!log.TrySave(tracker.Snapshot(), "Death") || File.ReadAllLines(path).Length != 3)
                 throw new Exception("Event log did not append a second event.");
+            tracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Unavailable"));
+            if(!log.TrySave(tracker.Snapshot(),"Reset timer") || File.ReadAllLines(path)[3].Split(',')[goldColumn]!="\"\"")throw new Exception("Unknown wallet was logged as zero");
+            string legacy=System.IO.Path.Combine(directory,"legacy.csv");File.WriteAllText(legacy,"GoldTotal\n123\n");
+            if(new LootTrackerLog(legacy).TrySave(tracker.Snapshot(),"Death") || File.ReadAllText(legacy)!="GoldTotal\n123\n")throw new Exception("New wallet rows were mixed into a legacy drop-estimate log");
         }
         finally
         {

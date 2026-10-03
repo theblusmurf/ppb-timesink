@@ -140,6 +140,50 @@ public static class ProfileDiscovery
         if(evidence[0].CapturedRva!=sceneRva || evidence.Max(e=>e.CodeRva)-evidence.Min(e=>e.CodeRva)>0x1000)return [];
         return evidence;
     }
+    // Gold is the first currency passed to the shared formatter by both inventory panels.
+    // Capture its member offset instead of assuming that every client has the same scene layout.
+    public static IReadOnlyList<SignatureEvidence> WalletEvidence(string path,uint sceneRva)
+        =>WalletEvidence(File.ReadAllBytes(path),sceneRva);
+
+    static IReadOnlyList<SignatureEvidence> WalletEvidence(byte[] bytes,uint sceneRva)
+    {
+        var image=new PeImage(bytes);
+        var rules=new[]{
+            new Rule("Wallet Akhan scene","8B 3D ?? ?? ?? ?? 89 BD C4 FE FF FF 8B 01 FF 50 40",2),
+            new Rule("Wallet Akhan display","8B 9D CC FE FF FF FF B7 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 8B 44 02 00 00 83 C4 04 50 E8 ?? ?? ?? ?? FF B7 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 8B 48 02 00 00 83 C4 04 50 E8 ?? ?? ?? ?? FF B7 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 8B 4C 02 00 00 83 C4 04 50 E8 ?? ?? ?? ??"),
+            new Rule("Wallet Human scene","8B 3D ?? ?? ?? ?? 89 BD C0 FE FF FF 8B 01 FF 50 40",2),
+            new Rule("Wallet Human display","8B 9D C0 FE FF FF FF B3 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 8F 5C 02 00 00 83 C4 04 50 E8 ?? ?? ?? ?? FF B3 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 8F 60 02 00 00 83 C4 04 50 E8 ?? ?? ?? ?? FF B3 ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 8F 64 02 00 00 83 C4 04 50 E8 ?? ?? ?? ??")};
+        var result=new List<SignatureEvidence>();
+        foreach(var rule in rules)
+        {
+            var found=image.Find(new Pattern(rule.Pattern));if(found.Count!=1)return [];
+            uint? captured=null;
+            if(rule.CaptureOffset>=0)
+            {
+                uint address=image.U32Rva(found[0]+(uint)rule.CaptureOffset);
+                if(address<image.ImageBase || address-image.ImageBase!=sceneRva)return [];
+                captured=address-image.ImageBase;
+            }
+            result.Add(new(rule.Name,found[0],rule.Pattern,rule.CaptureOffset,captured));
+        }
+        for(int i=0;i<4;i+=2)
+            if(result[i+1].CodeRva<=result[i].CodeRva || result[i+1].CodeRva-result[i].CodeRva>0x2000)return [];
+        uint field=image.U32Rva(result[1].CodeRva+8);
+        if(field is <0x100 or >0x400 || field!=image.U32Rva(result[3].CodeRva+8))return [];
+        // Both panels must use the same three currency formatters and text setters.
+        long? formatter=null,setter=null;
+        foreach(var panel in new[]{result[1],result[3]})
+            for(uint n=0;n<3;n++)
+            {
+                uint call=panel.CodeRva+12+n*26;
+                long target=call+5+(int)image.U32Rva(call+1);
+                long textTarget=call+20+(int)image.U32Rva(call+16);
+                if(formatter.HasValue && formatter!=target || setter.HasValue && setter!=textTarget)return [];
+                formatter=target;setter=textTarget;
+            }
+        return result;
+    }
+
     public static SignatureEvidence? OptionalEvidence(string path,string name,string pattern)
     {
         var image=new PeImage(File.ReadAllBytes(path));
@@ -253,6 +297,43 @@ public static class ProfileDiscovery
         if(!rejected) throw new Exception("Malformed client image was accepted");
         _=signatures.Value;
         CheckLayoutCatalogs();
+        CheckWalletLayouts();
+    }
+
+    static void CheckWalletLayouts()
+    {
+        byte[] fixture=new byte[0x5000];
+        void U16(int at,ushort value)=>BitConverter.TryWriteBytes(fixture.AsSpan(at),value);
+        void U32(int at,uint value)=>BitConverter.TryWriteBytes(fixture.AsSpan(at),value);
+        U16(0,0x5a4d);U32(0x3c,0x80);U32(0x80,0x4550);U16(0x84,0x14c);U16(0x86,1);
+        U16(0x94,0xe0);U16(0x98,0x10b);U32(0xb4,0x400000);U32(0xd0,0x5000);
+        U32(0x180,0x4000);U32(0x184,0x1000);U32(0x188,0x4000);U32(0x18c,0x1000);U32(0x19c,0x60000020);
+        byte[] scene=Convert.FromHexString("8B3D0048400089BDC4FEFFFF8B01FF5040");
+        scene.CopyTo(fixture,0x1100);scene[8]=0xc0;scene.CopyTo(fixture,0x2100);
+        void Panel(int at,byte register,byte local,byte control,uint member)
+        {
+            byte[] prefix=[0x8b,0x9d,local,0xfe,0xff,0xff];prefix.CopyTo(fixture,at);
+            for(int i=0;i<3;i++)
+            {
+                int p=at+6+i*26;
+                byte[] code=[0xff,register,0,0,0,0,0xe8,0,0,0,0,0x8b,register==0xb7?(byte)0x8b:(byte)0x8f,(byte)(control+i*4),2,0,0,0x83,0xc4,4,0x50,0xe8,0,0,0,0];
+                code.CopyTo(fixture,p);U32(p+2,i==0?member:i==1?0x16au:0x3dfcu);
+                U32(p+7,unchecked((uint)(0x4000-(p+11))));U32(p+22,unchecked((uint)(0x4100-(p+26))));
+            }
+        }
+        Panel(0x1200,0xb7,0xcc,0x44,0x177);Panel(0x2200,0xb3,0xc0,0x5c,0x177);
+        if(WalletEvidence(fixture,0x4800).Count!=4)throw new Exception("Independent wallet display proof was not accepted");
+        void Reject(int at,uint value)
+        {
+            byte[] corrupt=(byte[])fixture.Clone();BitConverter.TryWriteBytes(corrupt.AsSpan(at),value);
+            if(WalletEvidence(corrupt,0x4800).Count!=0)throw new Exception("Conflicting wallet display proof was accepted");
+        }
+        Reject(0x2102,0x404804);Reject(0x2208,0x178);Reject(0x1208,0);Reject(0x220d,1);
+        byte[] duplicate=(byte[])fixture.Clone();fixture.AsSpan(0x1200,84).CopyTo(duplicate.AsSpan(0x3200));
+        if(WalletEvidence(duplicate,0x4800).Count!=0)throw new Exception("Ambiguous wallet display code was accepted");
+        // Older layout offsets are extracted from the display instructions too.
+        Panel(0x1200,0xb7,0xcc,0x44,0x14f);Panel(0x2200,0xb3,0xc0,0x5c,0x14f);
+        if(WalletEvidence(fixture,0x4800).Count!=4)throw new Exception("A verified alternate wallet member offset was not discovered");
     }
 
     // Construct file-backed PE fixtures, without copying or publishing game data.

@@ -490,7 +490,7 @@ public sealed partial class HunterForm
         var sample=new LootTrackerSnapshot(8,0,[new("Mimic",12,38,[]),new("Tribal",9,24,[]),new("Pulkhan",7,19,[]),new("Tower",5,12,[])],
             [new("Mimic","Gold (215)",new(0,0),DateTime.UnixEpoch),new("Tribal","Emerald",new(0,0),DateTime.UnixEpoch)],
             names.Select((name,i)=>new LootTrackerItemSummary(name,totals[i])).ToArray(),DateTime.UnixEpoch,TimeSpan.FromMinutes(32),DateTime.UnixEpoch,TimeSpan.FromMinutes(30),
-            names.Select((name,i)=>new LootTrackerRateSummary(name,totals[i]*2)).ToArray());
+            names.Select((name,i)=>new LootTrackerRateSummary(name,totals[i]*2)).ToArray()){Wallet=new(true,"Preview",56084,51471,4613,DateTime.UtcNow,"Preview wallet data")};
         using var gallery=new Bitmap(790,740);using var galleryGraphics=Graphics.FromImage(gallery);galleryGraphics.Clear(Color.FromArgb(27,25,23));
         galleryGraphics.DrawString("Loot overlay choices · preview data",Font,Brushes.Wheat,new PointF(15,5));
         using(var preview=new LootTrackerOverlay(()=>sample))

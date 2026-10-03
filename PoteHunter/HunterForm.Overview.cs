@@ -36,7 +36,8 @@ public sealed partial class HunterForm
                 throw new Exception("Overview healer state differs from detailed settings.");
             compactMode.SelectedIndex = 0; refreshOverview?.Invoke();
             foreach(string name in new[] { "Gold", "Silvin", "Mithril", "Iternium", "Fehu", "Gems" })
-                if(!Find<Label>("overviewResource"+name).Text.StartsWith(name+"\n")) throw new Exception("Overview resource missing: "+name);
+                if(!Find<Label>("overviewResource"+name).Text.StartsWith(LootTrackerSnapshot.DisplayName(name)+"\n")) throw new Exception("Overview resource missing: "+name);
+            if(Find<Label>("overviewResourceGold").Text!="Gold (net)\n—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
             using var preview = new Bitmap(Width, Height);
             DrawToBitmap(preview, new Rectangle(Point.Empty, Size));
@@ -172,7 +173,7 @@ public sealed partial class HunterForm
             resources.Controls.Add(value); resourceLabels.Add(resource, value);
         }
         CompactAdd(session, resources);
-        priorityHint.SetToolTip(session, "Detected-drop estimates from the existing session tracker; these are not verified wallet earnings. Rates use active farming time.");
+        priorityHint.SetToolTip(session, "Gold is actual wallet change from the session baseline, including costs and other income. Other resources are detected-drop estimates. Rates use active farming time.");
 
         refreshOverview = () =>
         {
@@ -212,10 +213,10 @@ public sealed partial class HunterForm
                 }
                 var snapshot = lootTracker.Snapshot();
                 string duration = $"{(int)snapshot.RateElapsed.TotalHours:00}:{snapshot.RateElapsed.Minutes:00}:{snapshot.RateElapsed.Seconds:00}";
-                double goldPerHour = snapshot.HourlyLoot.FirstOrDefault(v => v.Name == "Gold")?.PerHour ?? 0;
-                sessionInfo.Text = $"Active time  {duration}     ·     Gold / hour  {goldPerHour:N0}     ·     Detected drops";
+                sessionInfo.Text = $"Active time  {duration}     ·     Gold / hour  {snapshot.RateText("Gold")}     ·     Net wallet gold";
                 foreach(var (name, label) in resourceLabels)
-                    label.Text = name+"\n"+(snapshot.TrackedLoot.FirstOrDefault(v => v.Name == name)?.Count ?? 0).ToString("N0", CultureInfo.CurrentCulture);
+                    label.Text = LootTrackerSnapshot.DisplayName(name)+"\n"+snapshot.AmountText(name);
+                priorityHint.SetToolTip(resourceLabels["Gold"],snapshot.Wallet.Known?$"Wallet {snapshot.Wallet.Current:N0} · Baseline {snapshot.Wallet.Baseline:N0} · {snapshot.Wallet.Status}":snapshot.Wallet.Status);
             }
             finally { syncing = false; }
         };

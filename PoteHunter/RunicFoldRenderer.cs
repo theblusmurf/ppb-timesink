@@ -60,15 +60,13 @@ internal static class RunicFoldRenderer
             Text(g,"drag to move","Segoe UI",11,new(636,14,90,25),Brass);
             for(int row=0;row<3;row++)for(int col=0;col<3;col++)
             {using var brush=new SolidBrush(Brass);g.FillEllipse(brush,620+col*4,22+row*4,2,2);}
-            var totals=snapshot.TrackedLoot.ToDictionary(item=>item.Name,item=>item.Count,StringComparer.OrdinalIgnoreCase);
-            var rates=snapshot.HourlyLoot.ToDictionary(item=>item.Name,item=>item.PerHour,StringComparer.OrdinalIgnoreCase);
             for(int i=0;i<Resources.Length;i++)
             {
                 string name=Resources[i];float x=22+i%3*236,y=65+i/3*92;
                 Icon(g,name,new(x,y,58,62));
-                Text(g,name,"Georgia",18,new(x+68,y+1,155,25),Ivory);
-                Text(g,$"{totals.GetValueOrDefault(name):N0}","Consolas",27,new(x+68,y+24,155,30),Ivory);
-                Text(g,$"{rates.GetValueOrDefault(name):N0}/h","Consolas",15,new(x+68,y+55,155,22),Brass);
+                Text(g,LootTrackerSnapshot.DisplayName(name),"Georgia",18,new(x+68,y+1,155,25),Ivory);
+                Text(g,snapshot.AmountText(name),"Consolas",27,new(x+68,y+24,155,30),Ivory);
+                Text(g,$"{snapshot.RateText(name)}/h","Consolas",15,new(x+68,y+55,155,22),Brass);
             }
             using var footer=new GraphicsPath();footer.AddPolygon([new(280,244),new(460,244),new(474,258),new(460,272),new(280,272),new(266,258)]);
             Stroke(g,footer,Brass,1.4f);
