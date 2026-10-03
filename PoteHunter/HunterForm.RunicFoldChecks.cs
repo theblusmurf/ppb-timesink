@@ -32,12 +32,14 @@ public sealed partial class HunterForm
         using(var empty=RunicFoldRenderer.Render(sample with{TrackedLoot=[],HourlyLoot=[],Sources=[],Elapsed=TimeSpan.Zero,RateElapsed=TimeSpan.Zero},100))
             empty.Save(Path.Combine(AppContext.BaseDirectory,"runic-fold-empty.png"));
         using var native=new LootTrackerOverlay(()=>sample){Location=new Point(-20000,-20000)};
-        _=native.Handle;IntPtr foreground=GetForegroundWindow();
+        _=native.Handle;
+        native.FitToArea(Screen.FromPoint(native.Location).WorkingArea.Size);
+        IntPtr foreground=GetForegroundWindow();
         for(int cycle=0;cycle<4;cycle++)
         {
             native.SetDesign(1);native.SetScale(cycle%2==0?50:200);native.PresentTransparentOverlay();
             if(!native.HasNonActivatingStyles || native.Size!=RunicFoldRenderer.SizeAt(native.EffectiveScalePercent))
-                throw new Exception("Runic Fold lost passive styles or native scaled dimensions.");
+                throw new Exception($"Runic Fold lost passive styles or native scaled dimensions: passive={native.HasNonActivatingStyles}, actual={native.Size}, expected={RunicFoldRenderer.SizeAt(native.EffectiveScalePercent)}, requested={native.ScalePercent}, fitted={native.EffectiveScalePercent}, DPI={native.DeviceDpi}.");
             native.SetDesign(cycle%2==0?2:3);
         }
         native.SetDesign(1);native.SetScale(200);native.FitToArea(new Size(800,400));native.PresentTransparentOverlay();
