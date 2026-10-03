@@ -1,5 +1,11 @@
 # Release notes
 
+## Release1.86
+
+- Add a dark forest/iron background to Runic Fold and Runic Strip. Navigation > Background opacity % adjusts just the background from 0% (fully transparent) to 100% (solid) in 5% steps; start at 40%. Keep text, icons and brass trim bright instead of fading the whole overlay.
+- Save opacity independently of style, position and size, including changes while hunting. Reuse it across both transparent styles and retain header dragging, passive-window behavior and screen fitting. Existing Dungeon HUD/Parchment Ledger presentations and loot calculations are unchanged.
+- Validate background alpha at 0/40/100%, unchanged foreground artwork, multiple sizes, bounded/saved settings and native presentation without focus changes. Build, offline and UI checks pass without live game input or replacing the running app.
+
 ## Release1.85
 
 - Apply the selected Runic Fold loot overlay: two rows of three resources, outlined ivory text, brass frame details and native vector icons on a transparent background. Show Silvin as a plain grey low-tier metal ingot; retain Gold, Mithril, Iternium, Fehu and Gems.

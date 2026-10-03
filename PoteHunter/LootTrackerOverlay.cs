@@ -26,6 +26,8 @@ internal sealed partial class LootTrackerOverlay : Form
     Point dragOffset;
     int design=-1;
     int scalePercent=100;
+    int backgroundOpacityPercent=LootOverlayBackground.DefaultOpacityPercent;
+    internal int BackgroundOpacityPercent=>backgroundOpacityPercent;
     int screenScaleLimit=200;
     internal bool IsTransparentDesign=>design is 1 or 3;
     Size availableArea=new(10000,10000);
@@ -47,6 +49,12 @@ internal sealed partial class LootTrackerOverlay : Form
         // must use fresh layered-window state when switching presentations.
         if(changesTransparency && IsHandleCreated)RecreateHandle();
         RefreshSnapshot();
+    }
+
+    internal void SetBackgroundOpacity(int value)
+    {
+        value=Math.Clamp(value,0,100);if(backgroundOpacityPercent==value)return;
+        backgroundOpacityPercent=value;RefreshSnapshot();
     }
 
     internal void SetScale(int value)
@@ -115,8 +123,8 @@ internal sealed partial class LootTrackerOverlay : Form
     {
         if(IsTransparentDesign)
         {
-            if(design==1)RunicFoldRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent);
-            else RunicStripRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent);
+            if(design==1)RunicFoldRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
+            else RunicStripRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
             return;
         }
         base.OnPaint(e);

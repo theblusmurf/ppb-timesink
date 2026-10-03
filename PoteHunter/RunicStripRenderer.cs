@@ -18,7 +18,7 @@ internal static class RunicStripRenderer
         return new((int)Math.Round(LogicalSize.Width*scale),(int)Math.Round(LogicalSize.Height*scale));
     }
 
-    internal static Bitmap Render(LootTrackerSnapshot snapshot,int percent)
+    internal static Bitmap Render(LootTrackerSnapshot snapshot,int percent,int backgroundOpacityPercent=0)
     {
         Size size=SizeAt(percent);
         var bitmap=new Bitmap(size.Width,size.Height,PixelFormat.Format32bppPArgb);
@@ -26,13 +26,13 @@ internal static class RunicStripRenderer
         {
             using var graphics=Graphics.FromImage(bitmap);
             graphics.Clear(Color.Transparent);
-            Draw(graphics,snapshot,percent);
+            Draw(graphics,snapshot,percent,backgroundOpacityPercent);
             return bitmap;
         }
         catch {bitmap.Dispose();throw;}
     }
 
-    internal static void Draw(Graphics graphics,LootTrackerSnapshot snapshot,int percent)
+    internal static void Draw(Graphics graphics,LootTrackerSnapshot snapshot,int percent,int backgroundOpacityPercent=0)
     {
         var state=graphics.Save();
         try
@@ -41,6 +41,7 @@ internal static class RunicStripRenderer
             graphics.ScaleTransform(scale,scale);
             graphics.SmoothingMode=SmoothingMode.AntiAlias;
             graphics.PixelOffsetMode=PixelOffsetMode.HighQuality;
+            LootOverlayBackground.Draw(graphics,LogicalSize,backgroundOpacityPercent);
             Text(graphics,"SPOILS OF THE HUNT","Georgia",16,new(10,7,425,28),Brass);
             Text(graphics,Duration(snapshot.Elapsed),"Consolas",13,new(525,9,145,24),Muted,true);
             var totals=snapshot.TrackedLoot.ToDictionary(item=>item.Name,item=>item.Count,StringComparer.OrdinalIgnoreCase);

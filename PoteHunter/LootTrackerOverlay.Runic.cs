@@ -11,7 +11,7 @@ internal sealed partial class LootTrackerOverlay
     internal void PresentTransparentOverlay()
     {
         if(!IsTransparentDesign || !IsHandleCreated || IsDisposed)return;
-        using var bitmap=design==1?RunicFoldRenderer.Render(snapshotProvider(),EffectiveScalePercent):RunicStripRenderer.Render(snapshotProvider(),EffectiveScalePercent);
+        using var bitmap=design==1?RunicFoldRenderer.Render(snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent):RunicStripRenderer.Render(snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
         IntPtr screen=GetDC(IntPtr.Zero),memory=IntPtr.Zero,handle=IntPtr.Zero,original=IntPtr.Zero;
         try
         {

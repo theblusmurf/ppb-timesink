@@ -18,7 +18,7 @@ internal static class RunicFoldRenderer
         return new((int)Math.Round(LogicalSize.Width*scale),(int)Math.Round(LogicalSize.Height*scale));
     }
 
-    internal static Bitmap Render(LootTrackerSnapshot snapshot,int percent)
+    internal static Bitmap Render(LootTrackerSnapshot snapshot,int percent,int backgroundOpacityPercent=0)
     {
         Size size=SizeAt(percent);
         var bitmap=new Bitmap(size.Width,size.Height,PixelFormat.Format32bppPArgb);
@@ -26,19 +26,20 @@ internal static class RunicFoldRenderer
         {
             using var graphics=Graphics.FromImage(bitmap);
             graphics.Clear(Color.Transparent);
-            Draw(graphics,snapshot,percent);
+            Draw(graphics,snapshot,percent,backgroundOpacityPercent);
             return bitmap;
         }
         catch {bitmap.Dispose();throw;}
     }
 
-    internal static void Draw(Graphics g,LootTrackerSnapshot snapshot,int percent)
+    internal static void Draw(Graphics g,LootTrackerSnapshot snapshot,int percent,int backgroundOpacityPercent=0)
     {
         var state=g.Save();
         try
         {
             g.ScaleTransform(Math.Clamp(percent,50,200)/100f,Math.Clamp(percent,50,200)/100f);
             g.SmoothingMode=SmoothingMode.AntiAlias;g.PixelOffsetMode=PixelOffsetMode.HighQuality;
+            LootOverlayBackground.Draw(g,LogicalSize,backgroundOpacityPercent);
             using var frame=new GraphicsPath();
             frame.AddPolygon([new(14,8),new(220,8),new(236,27),new(220,46),new(14,46),new(4,27)]);
             frame.StartFigure();frame.AddLines([new(226,8),new(716,8),new(736,27),new(716,46),new(226,46)]);

@@ -34,5 +34,6 @@
   "AvoidNames": [],
   "LootTrackerDesign": 1,
   "LootTrackerDesignVersion": 2,
-  "LootTrackerScalePercent": 100
+  "LootTrackerScalePercent": 100,
+  "LootTrackerBackgroundOpacityPercent": 40
 }
