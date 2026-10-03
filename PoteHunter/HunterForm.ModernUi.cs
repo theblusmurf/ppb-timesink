@@ -16,18 +16,18 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    const int UiCornerRadius = 6;
-    // Field Console: forest surfaces, brass accents and quiet status colors.
-    static readonly Color UiWindow = Color.FromArgb(13, 26, 21);
-    static readonly Color UiSidebar = Color.FromArgb(26, 41, 34);
-    static readonly Color UiSurface = Color.FromArgb(26, 41, 34);
-    static readonly Color UiRaised = Color.FromArgb(34, 54, 43);
-    static readonly Color UiBorder = Color.FromArgb(61, 78, 62);
-    static readonly Color UiText = Color.FromArgb(227, 235, 218);
-    static readonly Color UiMuted = Color.FromArgb(169, 185, 165);
-    static readonly Color UiAccent = Color.FromArgb(201, 183, 121);
-    static readonly Color UiAccentDark = Color.FromArgb(65, 76, 43);
-    static readonly Color UiDanger = Color.FromArgb(215, 137, 115);
+    const int UiCornerRadius = 3;
+    // Ironbound: dark iron/forest surfaces, aged brass and warm ivory text.
+    static readonly Color UiWindow = Color.FromArgb(12, 23, 19);
+    static readonly Color UiSidebar = Color.FromArgb(22, 36, 29);
+    static readonly Color UiSurface = Color.FromArgb(22, 36, 29);
+    static readonly Color UiRaised = Color.FromArgb(31, 47, 37);
+    static readonly Color UiBorder = Color.FromArgb(116, 103, 66);
+    static readonly Color UiText = Color.FromArgb(238, 231, 211);
+    static readonly Color UiMuted = Color.FromArgb(184, 189, 166);
+    static readonly Color UiAccent = Color.FromArgb(211, 184, 116);
+    static readonly Color UiAccentDark = Color.FromArgb(68, 71, 43);
+    static readonly Color UiDanger = Color.FromArgb(226, 146, 121);
 
     /// <summary>
     /// Rehomes the constructor-built controls in the compact application shell.
@@ -37,7 +37,7 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PoteHunter";
+        Text = "PoteHunter · Ironbound";
         Font = new Font("Segoe UI", 10f);
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
@@ -102,10 +102,12 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Text = "PoteHunter   /   FIELD CONSOLE II", Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold",16f), ForeColor = UiAccent,
+            Name = "ironboundMasthead", Text = "PoteHunter   /   IRONBOUND", Dock = DockStyle.Fill,
+            Padding = new Padding(40, 0, 0, 0),
+            Font = new Font("Georgia",16f), ForeColor = UiAccent,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
         },0,0);
+        masthead.Controls[0].Paint += (_, e) => DrawIronboundShield(e.Graphics, new Rectangle(3, 14, 27, 30));
         masthead.Controls.Add(new Label
         {
             Text = AppUpdates.CurrentVersion, Dock = DockStyle.Fill,
@@ -139,7 +141,7 @@ public sealed partial class HunterForm
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent,55));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent,45));
-        var pageTitle = new Label {Dock=DockStyle.Fill,Text="Setup",Font=new Font("Segoe UI Semibold",17f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
+        var pageTitle = new Label {Dock=DockStyle.Fill,Text="Setup",Font=new Font("Georgia",17f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
         var pageSubtitle = new Label {Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=UiMuted,TextAlign=ContentAlignment.TopLeft,Margin=Padding.Empty};
         heading.Controls.Add(pageTitle,0,0);heading.Controls.Add(pageSubtitle,0,1);header.Controls.Add(heading,0,0);
         var pagePickers = new Panel {Dock=DockStyle.Fill,Margin=new Padding(4,12,8,0),BackColor=UiWindow};
@@ -203,7 +205,7 @@ public sealed partial class HunterForm
         {
             var button=new Button{Text=name,Tag=pages[0],FlatStyle=FlatStyle.Flat,BackColor=UiSidebar,ForeColor=UiMuted,
                 Name="fieldNav"+name,TextAlign=ContentAlignment.MiddleCenter,Size=new Size(105,34),Margin=new Padding(0,0,5,0),Padding=Padding.Empty,Font=new Font("Segoe UI Semibold",10f)};
-            button.FlatAppearance.BorderSize=0;button.Cursor=Cursors.Hand;
+            button.FlatAppearance.BorderSize=1;button.FlatAppearance.BorderColor=UiBorder;button.Cursor=Cursors.Hand;
             button.FlatAppearance.MouseOverBackColor=UiRaised;
             RoundControl(button,UiCornerRadius);nav.Controls.Add(button);
             ComboBox? picker=null;
@@ -224,7 +226,8 @@ public sealed partial class HunterForm
             pageSubtitle.AutoEllipsis=true;
             foreach(var (button,pages,picker) in navButtons)
             {
-                bool active=pages.Contains(selected);button.BackColor=active?UiAccentDark:UiSidebar;button.ForeColor=active?UiText:UiMuted;
+                bool active=pages.Contains(selected);button.BackColor=active?UiAccentDark:UiSidebar;button.ForeColor=active?UiAccent:UiMuted;
+                button.FlatAppearance.BorderColor=active?UiAccent:UiBorder;
                 if(picker!=null){picker.Visible=active;if(active)picker.SelectedItem=selected;}
             }
         }
@@ -333,7 +336,7 @@ public sealed partial class HunterForm
             {
                 number.BackColor = UiRaised;
                 number.ForeColor = UiText;
-                number.BorderStyle = BorderStyle.None;
+                number.BorderStyle = BorderStyle.FixedSingle;
             }
             else if (control is ListView rows)
             {
@@ -405,8 +408,8 @@ public sealed partial class HunterForm
     static void StyleActionButton(Button button, Color background, Color foreground)
     {
         button.FlatStyle = FlatStyle.Flat;
-        button.FlatAppearance.BorderSize = 0;
-        button.FlatAppearance.BorderColor = background == UiRaised ? UiBorder : background;
+        button.FlatAppearance.BorderSize = 1;
+        button.FlatAppearance.BorderColor = background == UiAccent ? UiAccent : UiBorder;
         button.BackColor = background;
         button.ForeColor = foreground;
         button.Padding = new Padding(6, 2, 6, 2);

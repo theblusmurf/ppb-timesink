@@ -16,7 +16,7 @@ internal sealed class FieldVitalMeter : Control
         this.resource=resource;this.fill=fill;
         ReadingText=$"{resource} unknown";
         Dock=DockStyle.Fill;Margin=new Padding(7,3,7,3);
-        Font=new Font("Consolas",8.5f);ForeColor=Color.FromArgb(227,235,218);
+        Font=new Font("Consolas",8.5f);ForeColor=Color.FromArgb(238,231,211);
         AccessibleName=$"{resource} reading";AccessibleRole=AccessibleRole.StaticText;
         SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);
     }
@@ -41,7 +41,7 @@ internal sealed class FieldVitalMeter : Control
     {
         base.OnPaint(e);
         var track=new Rectangle(0,Math.Max(0,Height-4),Width,3);
-        using var background=new SolidBrush(Color.FromArgb(55,80,62));
+        using var background=new SolidBrush(Color.FromArgb(65,73,48));
         using var bar=new SolidBrush(fill);
         e.Graphics.FillRectangle(background,track);
         e.Graphics.FillRectangle(bar,new Rectangle(track.X,track.Y,(int)(track.Width*fraction),track.Height));

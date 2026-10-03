@@ -1,5 +1,11 @@
 # Release notes
 
+## Release1.84
+
+- Apply the selected Ironbound medieval interface: deep forest and dark iron surfaces, warm brass outlines, ivory text, serif headings and restrained shield/engraved corner details. Preserve compact native forms, keyboard focus and all existing settings bindings.
+- Carry the shared palette through Overview, Setup, Support, Monitor, Navigation, Advanced and Index, including the HP/MP status strip and Windows title bar. Keep the existing transparent loot and route overlays.
+- Validate the Release build, offline checks, all page previews, minimum-size layouts, group-healer mode and settings/recovery control access. Existing combat, revival, repair, routes and updater behavior are unchanged.
+
 ## Release1.83
 
 - Fix custom repair hammer recognition when a saved selection includes a translucent panel edge or changing world pixels. Add a bounded, exact-position icon structure check with independent inventory recognition; keep separate repair question/Yes, focus, pointer, identity, health and cancellation checks. Existing saved profiles remain compatible.
