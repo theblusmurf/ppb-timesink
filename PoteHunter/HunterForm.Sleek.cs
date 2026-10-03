@@ -14,7 +14,7 @@ public sealed partial class HunterForm
         CompactAdd(card, new Label
         {
             Name = "ironboundCardHeading", Text = "◇  " + title, AutoSize = true, ForeColor = UiAccent, UseMnemonic = false,
-            Font = new Font("Georgia", 10f, FontStyle.Bold),
+            Font = new Font("Georgia", 11f, FontStyle.Regular),
             Margin = new Padding(0, 0, 0, 8)
         });
         card.Paint += (_, e) =>

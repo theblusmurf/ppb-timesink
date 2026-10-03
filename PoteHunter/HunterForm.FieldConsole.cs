@@ -16,7 +16,7 @@ internal sealed class FieldVitalMeter : Control
         this.resource=resource;this.fill=fill;
         ReadingText=$"{resource} unknown";
         Dock=DockStyle.Fill;Margin=new Padding(7,3,7,3);
-        Font=new Font("Consolas",8.5f);ForeColor=Color.FromArgb(238,231,211);
+        Font=new Font("Consolas",8.5f);ForeColor=ImperialTheme.Text;
         AccessibleName=$"{resource} reading";AccessibleRole=AccessibleRole.StaticText;
         SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);
     }
@@ -41,7 +41,7 @@ internal sealed class FieldVitalMeter : Control
     {
         base.OnPaint(e);
         var track=new Rectangle(0,Math.Max(0,Height-4),Width,3);
-        using var background=new SolidBrush(Color.FromArgb(65,73,48));
+        using var background=new SolidBrush(ImperialTheme.Raised);
         using var bar=new SolidBrush(fill);
         e.Graphics.FillRectangle(background,track);
         e.Graphics.FillRectangle(bar,new Rectangle(track.X,track.Y,(int)(track.Width*fraction),track.Height));
@@ -54,10 +54,18 @@ public sealed partial class HunterForm
 {
     void CheckFieldConsoleUi(TabControl tabs)
     {
+        var sidebar=Controls.Find("imperialSidebar",true).Single();
+        var banner=Controls.Find("imperialBanner",true).Single();
+        var sidebarRight=PointToClient(sidebar.PointToScreen(new Point(sidebar.Width,0))).X;
+        if(sidebarRight>PointToClient(tabs.PointToScreen(Point.Empty)).X || banner.Height<80 ||
+            banner.Bottom>tabs.Top || !banner.Parent!.ClientRectangle.Contains(banner.Bounds))
+            throw new Exception("Imperial sidebar overlaps page content or banner is clipped.");
+        if(ImperialTheme.Logo.Value.Width<1 || ImperialTheme.Banner.Value.Width<1)
+            throw new Exception("Imperial embedded reference artwork is unavailable.");
         foreach(string name in new[]{"Overview","Setup","Support","Monitor","Navigation","Advanced","Index"})
         {
             var button=(Button)Controls.Find("fieldNav"+name,true).Single();
-            if(!button.Visible || button.Right>button.Parent!.ClientSize.Width)
+            if(!button.Visible || !button.Parent!.ClientRectangle.Contains(button.Bounds))
                 throw new Exception("Field Console navigation is clipped: "+name);
             button.PerformClick();Application.DoEvents();
             var picker=Controls.Find("fieldPicker"+name,true).OfType<ComboBox>().SingleOrDefault();
@@ -103,6 +111,6 @@ public sealed partial class HunterForm
         }
         compactMode.SelectedIndex=originalMode;PerformLayout();Application.DoEvents();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"field-console-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
-        {Passed=true,Checks=new[]{"all top navigation sections accessible","all grouped pages selectable","minimum-size columns and actions fit","unknown/zero/full/over-max vitals","no new game queries or input"}}));
+        {Passed=true,Checks=new[]{"all sidebar navigation sections accessible","all grouped pages selectable","minimum-size columns and actions fit","unknown/zero/full/over-max vitals","no new game queries or input"}}));
     }
 }

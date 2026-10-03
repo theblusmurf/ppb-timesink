@@ -8,9 +8,9 @@ internal static class RunicStripRenderer
 {
     internal static readonly Size LogicalSize=new(680,184);
     static readonly string[] Resources=["Gold","Silvin","Mithril","Iternium","Fehu","Gems"];
-    static readonly Color Ink=Color.FromArgb(247,239,217);
-    static readonly Color Muted=Color.FromArgb(205,191,163);
-    static readonly Color Brass=Color.FromArgb(237,200,125);
+    static readonly Color Ink=ImperialTheme.Text;
+    static readonly Color Muted=ImperialTheme.Muted;
+    static readonly Color Brass=ImperialTheme.Gold;
 
     internal static Size SizeAt(int percent)
     {

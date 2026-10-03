@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.90
+
+- Apply the approved Imperial Command interface inspired by PlayPOTE: midnight panels, gold trim, a permanent sidebar, public website banner artwork and serif headings. Reuse the existing controls, page selectors, settings and running-state guards.
+- Apply matching loot, radar and saved-route overlays. Imperial HUD replaces the Dungeon HUD presentation at the same saved style index, with the approved item images, aligned totals/rates and bounded source/recent-drop rows. Runic Fold and Runic Strip share the palette; preserve saved style, position, size and background opacity.
+- Make Primary routes gold, Alternative 1 blue and Alternative 2 rose consistently in radar and the route overlay. Keep monster/engagement/obstacle colors and passive window behavior.
+- Validate the native sidebar, all pages, minimum-size controls, settings bindings, transparent background/scaling and overlay passivity with offline checks. Preserve target-specific routes, wallet calculations, recovery and profiles. Live gameplay and the installed application are not changed by development checks.
+
 ## Release1.89
 
 - Save a separate Primary route and two alternatives for each target preset or custom name filter. Changing the selected target loads its routes in Overview, Navigation, radar and the route overlay; capitalization and outer spaces do not create duplicate sets. An empty filter has its own All targets set.

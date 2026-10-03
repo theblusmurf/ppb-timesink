@@ -46,7 +46,7 @@ public sealed partial class HunterForm
     void InitializeNavigationOverlay(FlowLayoutPanel navControls)
     {
         ArgumentNullException.ThrowIfNull(navControls);
-        lootTrackerDesign.Items.AddRange(["Dungeon HUD","Runic Fold","Parchment Ledger","Runic Strip"]);
+        lootTrackerDesign.Items.AddRange(["Imperial HUD","Runic Fold","Parchment Ledger","Runic Strip"]);
         lootTrackerDesign.SelectedIndex=1;
         navControls.WrapContents=true;navControls.AutoSize=true;navControls.Dock=DockStyle.Top;
         navControls.ParentChanged+=(_,_)=>
@@ -410,7 +410,7 @@ public sealed partial class HunterForm
             if(width<100 || height<100)HideRouteOverlay();
             else
             {
-                routeOverlay??=new NavigationOverlay(DrawRouteOverlay,"SAVED ROUTES  ·  10m start corridor","Primary: violet  ·  Alt 1: gold  ·  Alt 2: coral  ·  You: white");
+                routeOverlay??=new NavigationOverlay(DrawRouteOverlay,"SAVED ROUTES  ·  10m start corridor","Primary: gold  ·  Alt 1: blue  ·  Alt 2: rose  ·  You: white");
                 routeOverlay.Bounds=new(clientBounds.Right-NavigationOverlayMargin-width,clientBounds.Bottom-NavigationOverlayMargin-height,width,height);
                 if(!routeOverlay.Visible)routeOverlay.Show();
                 routeOverlay.Invalidate();
@@ -481,14 +481,14 @@ public sealed partial class HunterForm
     static void DrawSavedRouteOverlay(Graphics g,Size size,(int Slot,SavedNavigationRoute Route)[] routes,Vec position)
     {
         g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        g.Clear(Color.FromArgb(19,25,30));
+        g.Clear(ImperialTheme.Window);
         if(routes.Length==0){using var emptyFont=new Font("Segoe UI",9);g.DrawString("No routes for this target in this zone.\nHome: start · End: save at anchor",emptyFont,Brushes.Wheat,new PointF(12,15));return;}
         var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).Append(position).Where(p=>p.Finite).ToArray();
         double minX=points.Min(p=>p.X)-12,maxX=points.Max(p=>p.X)+12,minY=points.Min(p=>p.Y)-12,maxY=points.Max(p=>p.Y)+12;
         float scale=(float)Math.Min((size.Width-32)/Math.Max(1,maxX-minX),(size.Height-32)/Math.Max(1,maxY-minY));
         float left=(size.Width-(float)(maxX-minX)*scale)/2,top=(size.Height-(float)(maxY-minY)*scale)/2;
         PointF Project(Vec p)=>new(left+(float)(p.X-minX)*scale,top+(float)(maxY-p.Y)*scale);
-        Color[] colors=[Color.MediumPurple,Color.Gold,Color.Coral];
+        Color[] colors=[ImperialTheme.Gold,ImperialTheme.RouteBlue,ImperialTheme.RouteRose];
         using var labelFont=new Font("Segoe UI",8f,FontStyle.Bold);
         foreach(var (slot,route) in routes)
         {
@@ -545,7 +545,7 @@ public sealed partial class HunterForm
             var points=Enumerable.Range(0,21).Select(n=>new Vec((i-1)*n*1.7,n*3)).Reverse().ToArray();
             routes[i]=(i,new SavedNavigationRoute(8,points[0],i,points,DateTime.UnixEpoch));
         }
-        using var routePreview=new NavigationOverlay((graphics,size)=>DrawSavedRouteOverlay(graphics,size,routes,new(0,10)),"SAVED ROUTES · 10m start corridor","Primary: violet · Alt 1: gold · Alt 2: coral · You: white"){Size=new(450,450)};
+        using var routePreview=new NavigationOverlay((graphics,size)=>DrawSavedRouteOverlay(graphics,size,routes,new(0,10)),"SAVED ROUTES · 10m start corridor","Primary: gold · Alt 1: blue · Alt 2: rose · You: white"){Size=new(450,450)};
         if(!routePreview.HasPassiveWindowStyles)throw new Exception("Route overlay can intercept input or activate the game.");
         using var routeBitmap=new Bitmap(450,450);routePreview.DrawToBitmap(routeBitmap,new Rectangle(0,0,450,450));routeBitmap.Save(Path.Combine(AppContext.BaseDirectory,"route-overlay-preview.png"));
         lootTrackerDesign.SelectedIndex=1;

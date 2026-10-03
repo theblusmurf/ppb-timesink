@@ -18,10 +18,10 @@ internal sealed partial class LootTrackerOverlay : Form
     const uint SwpNosize=0x0001;
     readonly Func<LootTrackerSnapshot> snapshotProvider;
     readonly Action<Point>? positionCommitted;
-    readonly Font titleFont=new("Segoe UI Semibold",9f,FontStyle.Bold);
+    readonly Font titleFont=new("Georgia",10f,FontStyle.Regular);
     readonly Font rowFont=new("Segoe UI",8.5f);
     readonly Font detailFont=new("Segoe UI",7.5f);
-    readonly Pen framePen=new(Color.FromArgb(180,218,165,32),1f);
+    readonly Pen framePen=new(ImperialTheme.Gold,1f);
     bool dragging;
     Point dragOffset;
     int design=-1;
@@ -43,7 +43,7 @@ internal sealed partial class LootTrackerOverlay : Form
         design=value;
         screenScaleLimit=AreaScaleLimit(availableArea);
         Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,390):new Size(390,330);
-        BackColor=value==2?Color.FromArgb(221,204,164):Color.FromArgb(15,22,31);
+        BackColor=value==2?Color.FromArgb(221,204,164):ImperialTheme.Window;
         Opacity=IsTransparentDesign?1:.94;
         // SetLayeredWindowAttributes (Form.Opacity) and per-pixel composition
         // must use fresh layered-window state when switching presentations.
@@ -84,7 +84,7 @@ internal sealed partial class LootTrackerOverlay : Form
     {
         this.snapshotProvider=snapshotProvider??throw new ArgumentNullException(nameof(snapshotProvider));
         this.positionCommitted=positionCommitted;
-        AutoScaleMode=AutoScaleMode.None;BackColor=Color.FromArgb(15,22,31);DoubleBuffered=true;
+        AutoScaleMode=AutoScaleMode.None;BackColor=ImperialTheme.Window;DoubleBuffered=true;
         FormBorderStyle=FormBorderStyle.None;Opacity=.94;ShowIcon=false;ShowInTaskbar=false;
         StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(390,330);
         Cursor=Cursors.SizeAll;
@@ -131,49 +131,7 @@ internal sealed partial class LootTrackerOverlay : Form
         e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
         e.Graphics.Clear(BackColor);
         if(design!=0){DrawParchment(e.Graphics,snapshotProvider());return;}
-        e.Graphics.DrawRectangle(framePen,0,0,Math.Max(0,ClientSize.Width-1),Math.Max(0,ClientSize.Height-1));
-        using var headerBrush=new SolidBrush(Color.FromArgb(42,52,43));
-        e.Graphics.FillRectangle(headerBrush,1,1,ClientSize.Width-2,HeaderHeight-1);
-        using var titleBrush=new SolidBrush(Color.FromArgb(255,238,160));
-        e.Graphics.DrawString("DUNGEON HUD  ·  drag header to move",titleFont,titleBrush,new PointF(9,7));
-        e.Graphics.DrawLine(framePen,0,HeaderHeight-1,ClientSize.Width,HeaderHeight-1);
-        LootTrackerSnapshot snapshot=snapshotProvider();
-        using var textBrush=new SolidBrush(Color.FromArgb(235,240,244));
-        using var mutedBrush=new SolidBrush(Color.FromArgb(175,196,203,210));
-        using var accentBrush=new SolidBrush(Color.FromArgb(255,215,120));
-        float y=HeaderHeight+7;
-        e.Graphics.DrawString($"Tracked loot  ·  Gold is net wallet  ·  Elapsed {FormatDuration(snapshot.Elapsed)}",detailFont,mutedBrush,new PointF(10,y));y+=16;
-        e.Graphics.DrawString($"Active earning time {FormatDuration(snapshot.RateElapsed)}  ·  per hour",detailFont,mutedBrush,new PointF(10,y));y+=15;
-        for(int i=0;i<snapshot.TrackedLoot.Count;i+=2)
-        {
-            var left=snapshot.TrackedLoot[i];
-            e.Graphics.DrawString($"{LootTrackerSnapshot.DisplayName(left.Name)}: {snapshot.AmountText(left.Name)} ({snapshot.RateText(left.Name,"N1")}/h)",rowFont,textBrush,new PointF(10,y));
-            if(i+1<snapshot.TrackedLoot.Count)
-            {
-                var right=snapshot.TrackedLoot[i+1];
-                e.Graphics.DrawString($"{LootTrackerSnapshot.DisplayName(right.Name)}: {snapshot.AmountText(right.Name)} ({snapshot.RateText(right.Name,"N1")}/h)",rowFont,textBrush,new PointF(205,y));
-            }
-            y+=17;
-        }
-        y+=3;e.Graphics.DrawLine(Pens.DimGray,8,y,ClientSize.Width-8,y);y+=5;
-        e.Graphics.DrawString("Tracked targets",detailFont,mutedBrush,new PointF(10,y));y+=16;
-        foreach(var source in snapshot.Sources)
-        {
-            string line=$"{source.Source,-8} {source.Kills,3} kills  ·  {source.Drops,3} drops";
-            e.Graphics.DrawString(line,rowFont,textBrush,new PointF(10,y));y+=18;
-        }
-        y+=3;e.Graphics.DrawLine(Pens.DimGray,8,y,ClientSize.Width-8,y);y+=5;
-        e.Graphics.DrawString(snapshot.RecentDrops.Count==0?"Recent drops: waiting for a tracked kill":"Recent drops",detailFont,mutedBrush,new PointF(10,y));y+=16;
-        if(snapshot.RecentDrops.Count>0)
-        {
-            foreach(var drop in snapshot.RecentDrops.Take(4))
-            {
-                string name=drop.Name.Length>25?drop.Name[..22]+"…":drop.Name;
-                if(y>ClientSize.Height-30)break;
-                e.Graphics.DrawString($"{drop.Source}: {name}",detailFont,accentBrush,new PointF(12,y));y+=15;
-            }
-        }
-        e.Graphics.DrawString($"Zone {snapshot.Zone}  ·  pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(10,ClientSize.Height-14));
+        DrawImperialHud(e.Graphics,snapshotProvider());
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -193,7 +151,7 @@ internal sealed partial class LootTrackerOverlay : Form
         using var heading=new Font("Georgia",11,FontStyle.Bold);
         g.DrawString("Parchment Ledger",heading,inkBrush,new PointF(10,6));
         g.DrawString("drag header to move",detailFont,mutedBrush,new PointF(210,9));
-        g.DrawString($"Session {FormatDuration(snapshot.Elapsed)}  ·  Active {FormatDuration(snapshot.RateElapsed)}  ·  Zone {snapshot.Zone}",detailFont,mutedBrush,new PointF(10,37));
+        g.DrawString($"Session {FormatDuration(snapshot.Elapsed)}  Â·  Active {FormatDuration(snapshot.RateElapsed)}  Â·  Zone {snapshot.Zone}",detailFont,mutedBrush,new PointF(10,37));
         g.DrawString("Collected",detailFont,mutedBrush,new PointF(154,61));g.DrawString("Per hour",detailFont,mutedBrush,new PointF(270,61));
         float y=82;
         foreach(var item in snapshot.TrackedLoot)
@@ -205,11 +163,11 @@ internal sealed partial class LootTrackerOverlay : Form
         }
         g.DrawLine(border,10,y,Width-10,y);y+=8;
         foreach(var source in snapshot.Sources)
-        {g.DrawString($"{source.Source}  ·  {source.Kills:N0} kills  ·  {source.Drops:N0} drops",detailFont,inkBrush,new PointF(12,y));y+=19;}
+        {g.DrawString($"{source.Source}  Â·  {source.Kills:N0} kills  Â·  {source.Drops:N0} drops",detailFont,inkBrush,new PointF(12,y));y+=19;}
         y+=5;
         foreach(var drop in snapshot.RecentDrops.Take(2))
         {TextRenderer.DrawText(g,$"{drop.Source}: {drop.Name}",detailFont,new Rectangle(12,(int)y,Width-24,17),accent,TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);y+=17;}
-        g.DrawString($"Gold = net wallet  ·  Pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(12,Height-18));
+        g.DrawString($"Gold = net wallet  Â·  Pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(12,Height-18));
     }
 
     static string FormatDuration(TimeSpan duration)

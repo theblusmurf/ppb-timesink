@@ -21,15 +21,15 @@ internal sealed class NavigationOverlay : Form
 
     readonly Action<Graphics, Size> drawNavigation;
     readonly string title,legend;
-    readonly Font titleFont = new("Segoe UI Semibold", 9f, FontStyle.Bold);
-    readonly Pen framePen = new(Color.FromArgb(110, 93, 222, 179), 1f);
+    readonly Font titleFont = new("Georgia", 10f, FontStyle.Regular);
+    readonly Pen framePen = new(ImperialTheme.Gold, 1f);
 
     public NavigationOverlay(Action<Graphics, Size> drawNavigation,string title="POTE RADAR",string legend="Monsters: red/orange  •  engaged: teal ring  •  treasure boxes: gold live / amber remembered")
     {
         this.title=title;this.legend=legend;
         this.drawNavigation = drawNavigation ?? throw new ArgumentNullException(nameof(drawNavigation));
         AutoScaleMode = AutoScaleMode.None;
-        BackColor = Color.FromArgb(10, 20, 34);
+        BackColor = ImperialTheme.Window;
         DoubleBuffered = true;
         FormBorderStyle = FormBorderStyle.None;
         Opacity = .85;
@@ -91,7 +91,8 @@ internal sealed class NavigationOverlay : Form
         base.OnPaint(e);
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         e.Graphics.DrawRectangle(framePen, 0, 0, Math.Max(0, ClientSize.Width - 1), Math.Max(0, ClientSize.Height - 1));
-        e.Graphics.DrawString(title, titleFont, Brushes.WhiteSmoke, new PointF(10, 6));
+        using var titleBrush = new SolidBrush(ImperialTheme.Gold);
+        e.Graphics.DrawString(title, titleFont, titleBrush, new PointF(10, 5));
         e.Graphics.DrawLine(framePen, 0, HeaderHeight - 1, ClientSize.Width, HeaderHeight - 1);
 
         var mapSize = new Size(ClientSize.Width, Math.Max(0, ClientSize.Height - HeaderHeight - FooterHeight));
@@ -108,7 +109,7 @@ internal sealed class NavigationOverlay : Form
             e.Graphics.Restore(state);
         }
         using var footerFont = new Font("Segoe UI", 7f);
-        using var footerBrush = new SolidBrush(Color.FromArgb(220, 210, 220, 230));
+        using var footerBrush = new SolidBrush(ImperialTheme.Text);
         e.Graphics.DrawString(legend,
             footerFont, footerBrush, new PointF(7, ClientSize.Height - FooterHeight + 2));
     }

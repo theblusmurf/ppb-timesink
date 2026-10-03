@@ -18,7 +18,7 @@ internal static class LootOverlayBackground
         panel.AddArc(right-radius*2,bottom-radius*2,radius*2,radius*2,0,90);
         panel.AddArc(left,bottom-radius*2,radius*2,radius*2,90,90);
         panel.CloseFigure();
-        using var fill=new SolidBrush(Color.FromArgb(alpha,18,23,20));
+        using var fill=new SolidBrush(Color.FromArgb(alpha,ImperialTheme.Window));
         graphics.FillPath(fill,panel);
     }
 }

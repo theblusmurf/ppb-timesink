@@ -8,9 +8,9 @@ internal static class RunicFoldRenderer
 {
     internal static readonly Size LogicalSize=new(740,280);
     static readonly string[] Resources=["Gold","Silvin","Mithril","Iternium","Fehu","Gems"];
-    static readonly Color Brass=Color.FromArgb(222,182,101);
-    static readonly Color Ivory=Color.FromArgb(247,239,217);
-    static readonly Color Shadow=Color.FromArgb(220,25,22,17);
+    static readonly Color Brass=ImperialTheme.Gold;
+    static readonly Color Ivory=ImperialTheme.Text;
+    static readonly Color Shadow=Color.FromArgb(220,ImperialTheme.Window);
 
     internal static Size SizeAt(int percent)
     {

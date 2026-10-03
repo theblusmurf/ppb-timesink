@@ -835,8 +835,8 @@ public sealed partial class HunterForm : Form
         foreach(var zone in avoidZones) {var p=Project(zone.Center);float r=(float)(zone.Radius+1)*scale;g.DrawEllipse(avoidPen,p.X-r,p.Y-r,r*2,r*2);}
         if(showNavigationRoutes.Checked)
         {
-            var savedPens=new[]{new Pen(Color.MediumPurple,2),new Pen(Color.Gold,2),new Pen(Color.Coral,2)};
-            var savedBrushes=new[]{new SolidBrush(Color.MediumPurple),new SolidBrush(Color.Gold),new SolidBrush(Color.Coral)};
+            var savedPens=new[]{new Pen(ImperialTheme.Gold,2),new Pen(ImperialTheme.RouteBlue,2),new Pen(ImperialTheme.RouteRose,2)};
+            var savedBrushes=new[]{new SolidBrush(ImperialTheme.Gold),new SolidBrush(ImperialTheme.RouteBlue),new SolidBrush(ImperialTheme.RouteRose)};
             try
             {
                 foreach(var (slot,saved) in navigation.SavedRoutesForZone(navigationZone))

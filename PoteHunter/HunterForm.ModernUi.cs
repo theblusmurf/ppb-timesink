@@ -17,16 +17,16 @@ internal sealed class HeaderlessTabControl : TabControl
 public sealed partial class HunterForm
 {
     const int UiCornerRadius = 3;
-    // Ironbound: dark iron/forest surfaces, aged brass and warm ivory text.
-    static readonly Color UiWindow = Color.FromArgb(12, 23, 19);
-    static readonly Color UiSidebar = Color.FromArgb(22, 36, 29);
-    static readonly Color UiSurface = Color.FromArgb(22, 36, 29);
-    static readonly Color UiRaised = Color.FromArgb(31, 47, 37);
-    static readonly Color UiBorder = Color.FromArgb(116, 103, 66);
-    static readonly Color UiText = Color.FromArgb(238, 231, 211);
-    static readonly Color UiMuted = Color.FromArgb(184, 189, 166);
-    static readonly Color UiAccent = Color.FromArgb(211, 184, 116);
-    static readonly Color UiAccentDark = Color.FromArgb(68, 71, 43);
+    // Imperial Command: PlayPOTE midnight surfaces and warm gold trim.
+    static readonly Color UiWindow = Color.FromArgb(11, 11, 18);
+    static readonly Color UiSidebar = Color.FromArgb(21, 21, 31);
+    static readonly Color UiSurface = Color.FromArgb(21, 21, 31);
+    static readonly Color UiRaised = Color.FromArgb(28, 28, 42);
+    static readonly Color UiBorder = Color.FromArgb(42, 42, 58);
+    static readonly Color UiText = Color.FromArgb(232, 232, 240);
+    static readonly Color UiMuted = Color.FromArgb(154, 154, 171);
+    static readonly Color UiAccent = Color.FromArgb(207, 174, 106);
+    static readonly Color UiAccentDark = Color.FromArgb(49, 42, 33);
     static readonly Color UiDanger = Color.FromArgb(226, 146, 121);
 
     /// <summary>
@@ -37,12 +37,12 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PoteHunter · Ironbound";
+        Text = "PoteHunter · Imperial Command";
         Font = new Font("Segoe UI", 10f);
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
-        MinimumSize = new Size(960, 680);
-        Size = new Size(1200, 850);
+        MinimumSize = new Size(1120, 760);
+        Size = new Size(1280, 940);
         BackColor = UiWindow;
         ForeColor = UiText;
         Padding = Padding.Empty;
@@ -102,7 +102,7 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Name = "ironboundMasthead", Text = "PoteHunter   /   IRONBOUND", Dock = DockStyle.Fill,
+            Name = "ironboundMasthead", Text = "PoteHunter   /   IMPERIAL COMMAND", Dock = DockStyle.Fill,
             Padding = new Padding(40, 0, 0, 0),
             Font = new Font("Georgia",16f), ForeColor = UiAccent,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
@@ -248,6 +248,7 @@ public sealed partial class HunterForm
         // legacy composition tree so it cannot affect sizing or tab order.
         Controls.Remove(legacyRoot);
         legacyRoot.Dispose();
+        ApplyImperialShell(shell, masthead, nav, header, tabs, footer);
         Controls.Add(shell);
         shell.BringToFront();
 
