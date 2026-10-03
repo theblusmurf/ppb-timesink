@@ -13,10 +13,12 @@ internal sealed record LoginStep(string Name,bool Password,RepairPatch Marker,Re
 internal sealed record ClientRecoveryProfile(int Version,bool Enabled,string Executable,string Hash,int Width,int Height,
     string ProtectedPassword,LoginStep[] Steps)
 {
+    public LauncherCalibration? Launcher { get; init; }
     internal static string PathName=>Path.Combine(AppContext.BaseDirectory,"client-recovery-profile.json");
     internal static ClientRecoveryProfile? Read()=>File.Exists(PathName)?JsonSerializer.Deserialize<ClientRecoveryProfile>(File.ReadAllText(PathName)):null;
     internal void Validate()
     {
+        Launcher?.Validate();
         if(Version!=1 || Width<320 || Height<200 || Steps is not {Length:>=1 and <=8} ||
             !Path.IsPathFullyQualified(Executable) || !Path.GetFileName(Executable).Equals("client.exe",StringComparison.OrdinalIgnoreCase) ||
             Hash.Length!=64 || !Hash.All(Uri.IsHexDigit) || Steps[^1].Password || Steps.Count(s=>s.Password)!=1 ||
@@ -26,6 +28,11 @@ internal sealed record ClientRecoveryProfile(int Version,bool Enabled,string Exe
                 !new Rectangle(0,0,Width,Height).Contains(step.Point) ||
                 !step.Password && (step.Button?.Valid(new(Width,Height))!=true || step.Marker.Bounds.IntersectsWith(step.Button.Bounds)))
                 throw new InvalidOperationException("A login screen/button selection is invalid. Capture it again.");
+    }
+    internal void VerifyLauncher()
+    {
+        VerifyFile();
+        (Launcher ?? throw new InvalidOperationException("Choose and capture the game launcher Play/Start button in Login setup. Existing login steps are retained.")).VerifyFile();
     }
     internal void VerifyFile()
     {
@@ -37,6 +44,25 @@ internal sealed record ClientRecoveryProfile(int Version,bool Enabled,string Exe
     internal void Save()
     {
         Validate();var temporary=PathName+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(this,new JsonSerializerOptions{WriteIndented=true}));File.Move(temporary,PathName,true);
+    }
+}
+
+internal sealed record LauncherCalibration(string Executable,string Hash,int Width,int Height,LoginStep Play)
+{
+    internal void Validate()
+    {
+        if(!Path.IsPathFullyQualified(Executable) || !Path.GetExtension(Executable).Equals(".exe",StringComparison.OrdinalIgnoreCase) ||
+            Path.GetFileName(Executable).Equals("client.exe",StringComparison.OrdinalIgnoreCase) || Hash.Length!=64 || !Hash.All(Uri.IsHexDigit) ||
+            Width<320 || Height<200 || Play==null || Play.Password || string.IsNullOrWhiteSpace(Play.Name) ||
+            !Play.Marker.Valid(new(Width,Height)) || Play.Button?.Valid(new(Width,Height))!=true ||
+            Play.Marker.Bounds.IntersectsWith(Play.Button.Bounds) || !new Rectangle(0,0,Width,Height).Contains(Play.Point))
+            throw new InvalidOperationException("Capture the launcher screen and its Play/Start button. The launcher must be different from client.exe.");
+    }
+    internal void VerifyFile()
+    {
+        Validate();
+        if(!File.Exists(Executable) || !ClientRecoveryProfile.FileHash(Executable).Equals(Hash,StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The game launcher changed or is missing. Recalibrate its Play/Start button.");
     }
 }
 
@@ -87,7 +113,12 @@ internal static class ClientRecoveryPolicy
         Func<LoginStep,CancellationToken,Task> perform,Func<int,CancellationToken,Task> delay,Func<long> now,CancellationToken token)
     {
         profile.Validate();
-        foreach(var step in profile.Steps)
+        await RunRecognizedSteps(profile.Steps,recognize,perform,delay,now,token);
+    }
+    internal static async Task RunRecognizedSteps(IEnumerable<LoginStep> steps,Func<LoginStep,bool> recognize,
+        Func<LoginStep,CancellationToken,Task> perform,Func<int,CancellationToken,Task> delay,Func<long> now,CancellationToken token)
+    {
+        foreach(var step in steps)
         {
             long deadline=now()+30000;int stable=0;
             while(stable<2){token.ThrowIfCancellationRequested();if(now()>=deadline)throw new InvalidOperationException($"Login screen not recognized: {step.Name}. Recovery stopped without repeating clicks.");stable=recognize(step)?stable+1:0;await delay(200,token);}
@@ -98,8 +129,10 @@ internal static class ClientRecoveryPolicy
 }
 
 // Separate pre-login input surface: never weakens the connected-world input gate.
-internal sealed class LoginSurface(Process process,GameWindow.Candidate identity,ClientRecoveryProfile profile)
+internal sealed class LoginSurface(Process process,GameWindow.Candidate identity,ClientRecoveryProfile profile,bool launcher=false)
 {
+    string Executable=>launcher?profile.Launcher!.Executable:profile.Executable;
+    Size FrameSize=>launcher?new(profile.Launcher!.Width,profile.Launcher.Height):new(profile.Width,profile.Height);
     [StructLayout(LayoutKind.Sequential)] struct Mouse{public int X,Y;public uint Data,Flags,Time;public nuint Extra;}
     [StructLayout(LayoutKind.Sequential)] struct Keyboard{public ushort Key,Scan;public uint Flags,Time;public nuint Extra;}
     [StructLayout(LayoutKind.Explicit)] struct Union{[FieldOffset(0)] public Mouse Mouse;[FieldOffset(0)] public Keyboard Keyboard;}
@@ -111,7 +144,7 @@ internal sealed class LoginSurface(Process process,GameWindow.Candidate identity
         token.ThrowIfCancellationRequested();
         if(process.HasExited || !GameWindow.CheckInput(identity,process.Id,!process.HasExited).Allowed)
             throw new OperationCanceledException("Client login stopped: window ownership, focus or process changed.");
-        if(!NavigationOverlay.TryGetClientScreenBounds((nint)identity.Handle,out var bounds) || bounds.Size!=new Size(profile.Width,profile.Height) || !SystemInformation.VirtualScreen.Contains(bounds))
+        if(!NavigationOverlay.TryGetClientScreenBounds((nint)identity.Handle,out var bounds) || bounds.Size!=FrameSize || !SystemInformation.VirtualScreen.Contains(bounds))
             throw new InvalidOperationException("Client window size/visibility changed. Recalibrate login setup.");
     }
     internal Bitmap Capture(CancellationToken token)
@@ -125,8 +158,8 @@ internal sealed class LoginSurface(Process process,GameWindow.Candidate identity
     void Release(Packet packet){SendInput(1,[packet],Marshal.SizeOf<Packet>());}
     internal async Task Act(LoginStep step,CancellationToken token)
     {
-        profile.VerifyFile();
-        if(!string.Equals(process.MainModule?.FileName,profile.Executable,StringComparison.OrdinalIgnoreCase))
+        if(launcher){profile.VerifyLauncher();if(step.Password)throw new InvalidOperationException("Passwords are only entered in the game client.");}else profile.VerifyFile();
+        if(!string.Equals(process.MainModule?.FileName,Executable,StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Login process executable identity changed.");
         Check(token);NavigationOverlay.TryGetClientScreenBounds((nint)identity.Handle,out var bounds);
         var point=new Point(bounds.X+step.Point.X,bounds.Y+step.Point.Y);

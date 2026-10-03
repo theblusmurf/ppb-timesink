@@ -19,12 +19,27 @@ internal static class ClientRecoveryChecks
         var profile=new ClientRecoveryProfile(1,false,@"C:\Game\client.exe",new string('a',64),640,480,encrypted,
             [new("Password",true,marker,null,new(120,120)),new("Login",false,marker,button,button.Center),new("Enter game",false,marker,button,button.Center)]);
         profile.Validate();Require(!JsonSerializer.Serialize(profile).Contains(password),"plaintext secret serialized");
+        var launcher=new LauncherCalibration(@"C:\Game\PlayPOTE-Launcher.exe",new string('b',64),640,480,new("Launcher Play",false,marker,button,button.Center));
+        launcher.Validate();
+        var upgraded=profile with{Launcher=launcher};upgraded.Validate();
+        var restored=JsonSerializer.Deserialize<ClientRecoveryProfile>(JsonSerializer.Serialize(upgraded))!;
+        restored.Validate();Require(restored.Launcher?.Executable==launcher.Executable && restored.Launcher.Play.Point==launcher.Play.Point && restored.ProtectedPassword==profile.ProtectedPassword && restored.Steps.Length==profile.Steps.Length,"launcher migration discarded existing calibration/secret");
+        foreach(var bad in new[]{launcher with{Executable=profile.Executable},launcher with{Play=profile.Steps[0]},launcher with{Width=0},launcher with{Play=launcher.Play with{Button=marker}},launcher with{Hash="invalid"}})
+        {bool failed=false;try{bad.Validate();}catch(InvalidOperationException){failed=true;}Require(failed,"invalid launcher accepted");}
         var folder=Path.Combine(Path.GetTempPath(),"PPB-client-check-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
         var executable=Path.Combine(folder,"client.exe");
         try
         {
             File.WriteAllText(executable,"offline fixture, never executable");
             var verified=profile with{Executable=executable,Hash=ClientRecoveryProfile.FileHash(executable)};verified.VerifyFile();
+            bool missingLauncher=false;try{verified.VerifyLauncher();}catch(InvalidOperationException){missingLauncher=true;}Require(missingLauncher,"legacy direct-client launch remained allowed");
+            var launcherExecutable=Path.Combine(folder,"PlayPOTE-Launcher.exe");File.WriteAllText(launcherExecutable,"launcher fixture, never executable");
+            try
+            {
+                var launchVerified=verified with{Launcher=launcher with{Executable=launcherExecutable,Hash=ClientRecoveryProfile.FileHash(launcherExecutable)}};launchVerified.VerifyLauncher();
+                File.AppendAllText(launcherExecutable,"changed");bool launchRejected=false;try{launchVerified.VerifyLauncher();}catch(InvalidOperationException){launchRejected=true;}Require(launchRejected,"changed launcher accepted");
+            }
+            finally{File.Delete(launcherExecutable);}
             File.AppendAllText(executable,"changed");bool rejected=false;try{verified.VerifyFile();}catch(InvalidOperationException){rejected=true;}
             Require(rejected,"changed executable accepted");
         }
@@ -33,6 +48,10 @@ internal static class ClientRecoveryChecks
         Task Delay(int ms,CancellationToken ct){ct.ThrowIfCancellationRequested();now+=ms;return Task.CompletedTask;}
         await ClientRecoveryPolicy.RunSteps(profile,_=>{observations++;return true;},(step,ct)=>{actions.Add(step.Name);return Task.CompletedTask;},Delay,()=>now,default);
         Require(actions.SequenceEqual(new[]{"Password","Login","Enter game"}) && observations==6,"step order or single-action gates");
+        actions.Clear();now=0;observations=0;
+        await ClientRecoveryPolicy.RunRecognizedSteps([launcher.Play],_=>{observations++;return true;},(step,ct)=>{actions.Add(step.Name);return Task.CompletedTask;},Delay,()=>now,default);
+        await ClientRecoveryPolicy.RunSteps(profile,_=>{observations++;return true;},(step,ct)=>{actions.Add(step.Name);return Task.CompletedTask;},Delay,()=>now,default);
+        Require(actions.SequenceEqual(new[]{"Launcher Play","Password","Login","Enter game"}) && observations==8,"launcher must precede login with one recognized click");
         actions.Clear();now=0;bool timeout=false;
         try{await ClientRecoveryPolicy.RunSteps(profile,_=>false,(step,ct)=>{actions.Add(step.Name);return Task.CompletedTask;},Delay,()=>now,default);}catch(InvalidOperationException){timeout=true;}
         Require(timeout && actions.Count==0 && now<=30200,"unrecognized screen sent input or timeout exceeded");
@@ -53,6 +72,6 @@ internal static class ClientRecoveryChecks
             !ClientRecoveryPolicy.SameCharacter(saved,"Test",6,"Mimic") && !ClientRecoveryPolicy.SameCharacter(saved,"Test",5,"Tribal"),"resume identity guard");
         Require(RecoveryTravel.Nearest(route,new(0,0)).Distance==0 && RecoveryTravel.Nearest(route,new(11,0)).Distance>10,"route corridor guard");
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"client-recovery-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,
-            Checks=new[]{"DPAPI round trip; no plaintext serialization","ordered single actions with two recognition observations","unrecognized screen timeout without input","cancellation stops remaining steps","paired screen/button gating","invalid profiles rejected","manual stop/live-process/route guards","character/zone/target identity","route corridor"}}));
+            Checks=new[]{"DPAPI round trip; no plaintext serialization","launcher calibration retains login steps/secret","direct-client launcher rejected","changed/missing launcher rejected","launcher Play once before login","ordered single actions with two recognition observations","unrecognized screen timeout without input","cancellation stops remaining steps","paired screen/button gating","invalid profiles rejected","manual stop/live-process/route guards","character/zone/target identity","route corridor"}}));
     }
 }

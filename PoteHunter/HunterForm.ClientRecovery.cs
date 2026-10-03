@@ -29,7 +29,7 @@ public sealed partial class HunterForm
         autoClientRecovery.CheckedChanged+=(_,_)=>
         {
             if(clientRecoveryProfile==null){autoClientRecovery.Checked=false;clientRecoveryStatus.Text="Complete Login setup before enabling recovery.";return;}
-            try{clientRecoveryProfile=clientRecoveryProfile with{Enabled=autoClientRecovery.Checked};clientRecoveryProfile.Save();if(!autoClientRecovery.Checked)CancelClientRecovery();}
+            try{if(autoClientRecovery.Checked)clientRecoveryProfile.VerifyLauncher();clientRecoveryProfile=clientRecoveryProfile with{Enabled=autoClientRecovery.Checked};clientRecoveryProfile.Save();if(!autoClientRecovery.Checked)CancelClientRecovery();}
             catch(Exception ex){autoClientRecovery.Checked=false;clientRecoveryStatus.Text=ex.Message;}
         };
         setupClientRecovery.Click+=async(_,_)=>await ConfigureClientLogin();
@@ -43,7 +43,7 @@ public sealed partial class HunterForm
         if(options.GroupMode || options.HealerMode)return "Client recovery currently requires solo hunting. Turn it off for group/healer mode.";
         try
         {
-            var profile=clientRecoveryProfile ?? throw new InvalidOperationException("Complete Login setup before enabling client recovery.");profile.VerifyFile();
+            var profile=clientRecoveryProfile ?? throw new InvalidOperationException("Complete Login setup before enabling client recovery.");profile.VerifyLauncher();
             if(!profile.Hash.Equals(world.ClientHash,StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Login setup belongs to a different client build. Calibrate the connected client.");
             var self=world.LocalPlayer();
@@ -120,13 +120,60 @@ public sealed partial class HunterForm
         try{if(!string.Equals(process.MainModule?.FileName,profile.Executable,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A different client executable is running. Recovery will not launch a duplicate.");return process;}
         catch{process.Dispose();throw;}
     }
+    static Process? FindConfiguredLauncher(LauncherCalibration launcher)
+    {
+        var found=Process.GetProcessesByName(Path.GetFileNameWithoutExtension(launcher.Executable));
+        if(found.Length>1){foreach(var item in found)item.Dispose();throw new InvalidOperationException("Multiple game launchers are running. Keep only one before recovery.");}
+        if(found.Length==0)return null;
+        var process=found[0];
+        try{if(!string.Equals(process.MainModule?.FileName,launcher.Executable,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A different launcher executable is running.");return process;}
+        catch{process.Dispose();throw;}
+    }
+    static GameWindow.Candidate? LauncherWindow(Process process)
+    {
+        var report=GameWindow.Inspect(process);
+        var windows=report.Candidates.Where(c=>c.ProcessId==process.Id && c.DirectProcessId==process.Id && c.Visible && c.Owner==0 && c.ClientWidth>=320 && c.ClientHeight>=200).ToArray();
+        if(windows.Length>1)throw new InvalidOperationException("Multiple launcher windows are visible. Close extra launcher dialogs before recovery.");
+        return windows.SingleOrDefault();
+    }
+    async Task<Process> LaunchClientThroughLauncher(ClientRecoveryProfile profile,CancellationToken token)
+    {
+        profile.VerifyLauncher();token.ThrowIfCancellationRequested();var launcher=profile.Launcher!;
+        using var process=FindConfiguredLauncher(launcher) ?? Process.Start(new ProcessStartInfo(launcher.Executable){WorkingDirectory=Path.GetDirectoryName(launcher.Executable)!,UseShellExecute=true})
+            ?? throw new InvalidOperationException("The game launcher could not be started.");
+        message="Waiting for the game launcher Play/Start button.";
+        GameWindow.Candidate? identity=null;long readyDeadline=Environment.TickCount64+30000;
+        while(identity==null)
+        {
+            token.ThrowIfCancellationRequested();
+            if(process.HasExited || Environment.TickCount64>=readyDeadline)throw new InvalidOperationException("The launcher did not open a usable window within 30 seconds.");
+            identity=LauncherWindow(process);if(identity==null)await Task.Delay(500,token);
+        }
+        Input.SetForegroundWindow((nint)identity.Handle);await Task.Delay(250,token);
+        var surface=new LoginSurface(process,identity,profile,true);
+        await ClientRecoveryPolicy.RunRecognizedSteps([launcher.Play],step=>surface.Recognize(step,token),async(step,ct)=>
+        {
+            using var alreadyRunning=FindConfiguredClient(profile);
+            if(alreadyRunning!=null)throw new InvalidOperationException("A client appeared before Play was clicked. Recovery stopped to avoid launching a duplicate.");
+            await surface.Act(step,ct);TraceLog.Record("client launcher Play completed",new{Confirmed=true});
+        },Task.Delay,()=>Environment.TickCount64,token);
+        message="Launcher Play clicked once. Waiting for Client.exe.";
+        long deadline=Environment.TickCount64+90000;
+        while(Environment.TickCount64<deadline)
+        {
+            token.ThrowIfCancellationRequested();profile.VerifyFile();
+            var client=FindConfiguredClient(profile);if(client!=null)return client;
+            await Task.Delay(500,token);
+        }
+        throw new InvalidOperationException("The launcher did not start the calibrated Client.exe within 90 seconds. Play was not repeated.");
+    }
     async Task RunClientLogin(bool relaunch,CancellationToken token)
     {
         var profile=clientRecoveryProfile ?? throw new InvalidOperationException("Configure Login setup first.");profile.VerifyFile();
         if(connected && world.ClientProcessAlive)throw new InvalidOperationException("Disconnect/log out to the login screen before testing login. No input sent.");
-        using var process=FindConfiguredClient(profile) ?? (relaunch?Process.Start(new ProcessStartInfo(profile.Executable){WorkingDirectory=Path.GetDirectoryName(profile.Executable)!,UseShellExecute=true}):null)
-            ?? throw new InvalidOperationException("Open the configured client at its login screen before testing.");
-        if(relaunch){message="Client relaunched. Waiting for login window.";await Task.Delay(3000,token);}
+        var existing=FindConfiguredClient(profile);bool launched=existing==null;
+        using var process=existing ?? await LaunchClientThroughLauncher(profile,token);
+        if(launched){message="Client opened through launcher. Waiting for login window.";await Task.Delay(3000,token);}
         GameWindow.Candidate? identity=null;long deadline=Environment.TickCount64+30000;
         while(identity==null)
         {
@@ -135,7 +182,7 @@ public sealed partial class HunterForm
             if(report.SelectedHandle!=0)identity=report.Candidates.Single(c=>c.Handle==report.SelectedHandle);
             else await Task.Delay(500,token);
         }
-        if(relaunch){Input.SetForegroundWindow((nint)identity.Handle);await Task.Delay(250,token);}
+        if(relaunch || launched){Input.SetForegroundWindow((nint)identity.Handle);await Task.Delay(250,token);}
         var surface=new LoginSurface(process,identity,profile);
         await ClientRecoveryPolicy.RunSteps(profile,step=>surface.Recognize(step,token),async(step,ct)=>
         {
@@ -163,14 +210,18 @@ public sealed partial class HunterForm
     }
     internal Form CreateClientLoginSetup()
     {
-        var dialog=new LoginSetupDialog{Text="PPB · Login setup",Size=new(730,740),MinimumSize=new(650,610),StartPosition=FormStartPosition.CenterParent,BackColor=UiWindow,ForeColor=UiText,Font=Font};
+        var dialog=new LoginSetupDialog{Text="PPB · Login setup",Size=new(730,850),MinimumSize=new(650,610),StartPosition=FormStartPosition.CenterParent,BackColor=UiWindow,ForeColor=UiText,Font=Font};
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new(16)};dialog.Controls.Add(layout);
-        var instructions=new Label{AutoSize=true,MaximumSize=new(660,0),Text="Choose client.exe. Add login steps in order, including one password-field step followed by Login and character/Enter Game buttons. Open each screen manually before Capture. Capture with the password EMPTY and the pointer away from the control. Static screen text and buttons must be distinct. Setup sends no game input.\n\nPassword is saved only with Windows account encryption. Blank keeps the existing secret. Your saved account name stays in the game."};layout.Controls.Add(instructions);
+        var instructions=new Label{AutoSize=true,MaximumSize=new(660,0),Text="Choose the game launcher and capture its Play/Start button first. Keep client.exe selected separately for verification and login captures; PPB never starts it directly. Add one password-field step followed by Login and character/Enter Game buttons. Open each screen manually before Capture. Capture with the game password EMPTY and pointer away. Select static screen text distinct from the button. Setup sends no game input.\n\nPassword stays encrypted for this Windows account. Blank keeps the existing secret. Your saved account name stays in the game."};layout.Controls.Add(instructions);
+        LauncherCalibration? launcher=clientRecoveryProfile?.Launcher;
+        var launcherPath=new TextBox{Width=620,ReadOnly=true,Text=launcher?.Executable??""};layout.Controls.Add(launcherPath);
+        var launcherActions=new FlowLayoutPanel{AutoSize=true};var browseLauncher=new Button{Text="Choose game launcher",AutoSize=true};var captureLauncher=new Button{Text="Capture launcher Play · 5s",AutoSize=true};launcherActions.Controls.AddRange([browseLauncher,captureLauncher]);layout.Controls.Add(launcherActions);
+        var launcherStatus=new Label{AutoSize=true,Text=launcher==null?"Launcher Play/Start not captured.":"Launcher Play/Start captured."};layout.Controls.Add(launcherStatus);
         var executable=new TextBox{Width=620,ReadOnly=true,Text=clientRecoveryProfile?.Executable??""};layout.Controls.Add(executable);
         var browse=new Button{Text="Choose client.exe",AutoSize=true};layout.Controls.Add(browse);
         var password=new TextBox{Width=350,UseSystemPasswordChar=true,MaxLength=256};layout.Controls.Add(new Label{Text="Local password (never enter it in chat)",AutoSize=true});layout.Controls.Add(password);
         var list=new ListBox{Width=620,Height=150};layout.Controls.Add(list);
-        var name=new TextBox{Width=280,MaxLength=60,Text="Login"};var kind=new CheckBox{Text="This step fills the password field",AutoSize=true};layout.Controls.Add(name);layout.Controls.Add(kind);
+        var name=new TextBox{Width=280,MaxLength=60,Text="Login"};var kind=new CheckBox{Text="This step fills the password field",AutoSize=true};layout.Controls.Add(new Label{Text="Login step name",AutoSize=true});layout.Controls.Add(name);layout.Controls.Add(kind);
         var actions=new FlowLayoutPanel{AutoSize=true};var capture=new Button{Text="Capture next step · 5s",AutoSize=true};var remove=new Button{Text="Remove last",AutoSize=true};var save=new Button{Text="Save setup",AutoSize=true};actions.Controls.AddRange([capture,remove,save]);layout.Controls.Add(actions);
         var status=new Label{AutoSize=true,MaximumSize=new(640,0)};layout.Controls.Add(status);
         var steps=clientRecoveryProfile?.Steps.ToList()??[];int width=clientRecoveryProfile?.Width??0,height=clientRecoveryProfile?.Height??0;
@@ -179,10 +230,35 @@ public sealed partial class HunterForm
         remove.Click+=(_,_)=>{if(steps.Count>0){steps.RemoveAt(steps.Count-1);Refresh();}};
         bool capturing=false;
         dialog.FormClosing+=(_,e)=>{if(capturing){e.Cancel=true;status.Text="Wait for the capture countdown to finish.";}};
+        browseLauncher.Click+=(_,_)=>{using var picker=new OpenFileDialog{Title="Choose PlayPOTE launcher (not Client.exe)",Filter="Game launcher|*.exe",CheckFileExists=true};if(picker.ShowDialog(dialog)==DialogResult.OK){launcherPath.Text=Path.GetFullPath(picker.FileName);launcher=null;launcherStatus.Text="Capture the launcher's Play/Start button.";}};
+        captureLauncher.Click+=async(_,_)=>
+        {
+            capturing=true;actions.Enabled=password.Enabled=browse.Enabled=launcherActions.Enabled=false;
+            try
+            {
+                if(!File.Exists(launcherPath.Text) || Path.GetFileName(launcherPath.Text).Equals("client.exe",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Choose the game launcher, not Client.exe.");
+                var selected=new LauncherCalibration(launcherPath.Text,ClientRecoveryProfile.FileHash(launcherPath.Text),0,0,null!);
+                using var process=FindConfiguredLauncher(selected)??throw new InvalidOperationException("Open the game launcher manually and display Play/Start first.");
+                for(int s=5;s>0;s--){status.Text=$"Switch to the launcher with the pointer away from Play · {s}s";await Task.Delay(1000);}
+                var identity=LauncherWindow(process)??throw new InvalidOperationException("Launcher window unavailable.");
+                if(!NavigationOverlay.TryGetClientScreenBounds((nint)identity.Handle,out var bounds))throw new InvalidOperationException("Launcher bounds unavailable.");
+                selected=selected with{Width=bounds.Width,Height=bounds.Height};
+                var temporary=new ClientRecoveryProfile(1,false,executable.Text,"",0,0,"",[]){Launcher=selected};
+                using var frame=new LoginSurface(process,identity,temporary,true).Capture(default);dialog.Activate();
+                using var editor=RepairSetupForm.ForLogin(frame,false,UiWindow,UiText);editor.Text="PPB launcher setup · Play/Start";
+                if(editor.ShowDialog(dialog)==DialogResult.OK && editor.Selection is {} captured)
+                {
+                    selected=selected with{Play=new("Launcher Play",false,captured.Marker,captured.Button,captured.Click)};selected.VerifyFile();launcher=selected;
+                    launcherStatus.Text="Launcher Play/Start captured.";status.Text="Continue capturing the client login steps below.";
+                }
+            }
+            catch(Exception ex){status.Text=ex.Message;}
+            finally{capturing=false;actions.Enabled=password.Enabled=browse.Enabled=launcherActions.Enabled=true;}
+        };
         capture.Click+=async(_,_)=>
         {
             if(steps.Count>=8){status.Text="Maximum eight steps. Remove the last step to recapture.";return;}
-            capturing=true;actions.Enabled=false;password.Enabled=false;browse.Enabled=false;
+            capturing=true;actions.Enabled=false;password.Enabled=false;browse.Enabled=false;launcherActions.Enabled=false;
             try
             {
                 if(!File.Exists(executable.Text) || name.Text.Trim().Length==0)throw new InvalidOperationException("Choose client.exe and name this step.");
@@ -199,14 +275,14 @@ public sealed partial class HunterForm
                 {steps.Add(new(name.Text.Trim(),kind.Checked,selected.Marker,selected.Button,selected.Click));width=frame.Width;height=frame.Height;Refresh();status.Text="Step captured. Manually open the next screen, then capture it.";}
             }
             catch(Exception ex){status.Text=ex.Message;}
-            finally{capturing=false;actions.Enabled=true;password.Enabled=true;browse.Enabled=true;}
+            finally{capturing=false;actions.Enabled=true;password.Enabled=true;browse.Enabled=true;launcherActions.Enabled=true;}
         };
         save.Click+=(_,_)=>
         {
             try
             {
                 string secret=password.Text.Length>0?LoginSecret.Protect(password.Text):clientRecoveryProfile?.ProtectedPassword??"";
-                var profile=new ClientRecoveryProfile(1,false,executable.Text,ClientRecoveryProfile.FileHash(executable.Text),width,height,secret,steps.ToArray());profile.VerifyFile();profile.Save();
+                var profile=new ClientRecoveryProfile(1,false,executable.Text,ClientRecoveryProfile.FileHash(executable.Text),width,height,secret,steps.ToArray()){Launcher=launcher};profile.VerifyLauncher();profile.Save();
                 clientRecoveryProfile=profile;autoClientRecovery.Checked=false;password.Clear();clientRecoveryStatus.Text="Login setup saved. Test from the login screen, then enable client recovery.";dialog.DialogResult=DialogResult.OK;
             }
             catch(Exception ex){status.Text=ex.Message;}
@@ -219,7 +295,7 @@ public sealed partial class HunterForm
         using var dialog=CreateClientLoginSetup();((LoginSetupDialog)dialog).PreviewOnly=true;dialog.StartPosition=FormStartPosition.Manual;dialog.Location=new(-30000,-30000);dialog.Show();dialog.PerformLayout();Application.DoEvents();
         var children=dialog.Controls[0].Controls.Cast<Control>().ToArray();
         if(!children.OfType<TextBox>().Any(t=>t.UseSystemPasswordChar && t.MaxLength==256) ||
-            !children.OfType<ListBox>().Any() || !children.Any(c=>c.Text=="Choose client.exe"))
+            !children.OfType<ListBox>().Any() || !children.Any(c=>c.Text=="Choose client.exe") || !children.OfType<FlowLayoutPanel>().Any(p=>p.Controls.Cast<Control>().Any(c=>c.Text=="Capture launcher Play · 5s")))
             throw new Exception("Login setup must expose a masked local password, step list and client picker.");
         using var preview=new Bitmap(dialog.Width,dialog.Height);dialog.DrawToBitmap(preview,new Rectangle(Point.Empty,dialog.Size));
         preview.Save(Path.Combine(AppContext.BaseDirectory,"ui-client-login-setup.png"));

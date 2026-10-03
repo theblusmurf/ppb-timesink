@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.93
+
+- Client crash recovery starts the configured game launcher instead of Client.exe. Setup now captures a separate paired launcher screen marker and Play/Start button. Recovery clicks Play once, waits up to 90 seconds for the verified Client.exe, then continues the saved password/login/character sequence and route return.
+- Keep client.exe selected for identity checks and login calibration. Existing saved login steps and Windows-encrypted password remain compatible; add the launcher calibration before enabling recovery. Launcher executable changes require a new Play capture. PPB never starts Client.exe directly.
+- Test login can exercise launcher startup when the game client is closed; when the calibrated client already exists, it tests only login. Multiple/mismatched launcher or client processes, focus loss, missing controls, changed executable or timeout stop without repeated Play clicks. F9 cancellation and existing revival/repair, combat, loot and route behavior remain intact.
+- Offline checks cover launcher/login ordering, single recognized Play action, invalid or changed launchers and preservation of existing login calibration. Live launcher startup and full recovery require local calibration and testing.
+
 ## Release1.92
 
 - Setup > Death recovery adds Login setup, Test login and an independent client crash recovery toggle. Calibrate up to eight ordered screen/button steps, including one password field, login, character and Enter Game. Setup captures cropped static markers and never clicks the game; Test login performs the saved sequence once and leaves hunting stopped.
