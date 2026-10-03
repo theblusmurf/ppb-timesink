@@ -85,6 +85,7 @@ public sealed partial class HunterForm
         CompactAdd(deathSettings,CompactRow("Revival",Caption("Delay (s)"),revivalDelaySeconds,Caption("Key"),reviveKey));
         CompactAdd(deathSettings,CompactRow("After return",farmOnArrival));
         AddRepairSettings(deathSettings);
+        AddClientRecoverySettings(deathSettings);
         CompactAdd(deathSettings,new Label{Text="Record routes with Home / End in Navigation. Turning revival off stops the hunt on death.",AutoSize=true,MaximumSize=new Size(580,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,4)});
         var advanced=CompactCard("ADVANCED SETTINGS");advanced.Visible=false;
         CompactAdd(advanced,CompactRow("Social",greetPlayers));

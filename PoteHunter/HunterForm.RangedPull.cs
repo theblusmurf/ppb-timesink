@@ -100,6 +100,7 @@ public sealed partial class HunterForm
                     throw new Exception("Combined healer/group controls did not persist alongside potion settings.");
                 form.CheckCompactControls();
                 form.CheckRevivalSetupUi();
+                form.CheckClientRecoveryUi();
                 form.compactMode.SelectedIndex=0;
                 form.autoRepair.Checked=true;form.PerformLayout();Application.DoEvents();
                 var deathCard=(TableLayoutPanel)form.autoRepair.Parent!.Parent!.Parent!;

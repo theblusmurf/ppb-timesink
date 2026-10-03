@@ -76,3 +76,5 @@ Death recovery (Setup, combat modes):
 - Repair stops on missing controls or a stuck dialog, without retrying Yes.
   UI completion does not independently verify durability. The shipped checks
   are offline; verify repair, revival, and return in your client.
+
+Client crash recovery: Setup > Death recovery > Login setup. Capture login steps with password empty, save password locally, test from login screen, then enable Relaunch client + login + return. Requires a recorded route for solo targets. F9 cancels. Carry client-recovery-profile.json across portable upgrades; it contains private calibrated patches and a Windows-account-encrypted secret. Never publish this file.

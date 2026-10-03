@@ -28,11 +28,17 @@ internal sealed class RepairSetupForm : Form
         opening?"Click the place you normally click to OPEN the Revive dialog. This image editor sends no game input. Then choose Save selection."
             :"Click the center of the REVIVE button in this image. This image editor sends no game input. Then choose Save selection.",opening);
 
+    internal static RepairSetupForm ForLogin(Bitmap image,bool password,Color background,Color foreground)=>new(image,background,foreground,
+        "PPB login setup · "+(password?"password field":"screen/button"),
+        "Drag around distinctive STATIC text identifying this login screen. Exclude account names, password, animated artwork and changing text. Then choose Next.",
+        password?"Click the centre of the EMPTY password field in this image. No game input is sent.":
+            "Click the centre of the button or character entry in this image. Choose a distinctive area with text/icon detail. No game input is sent.",password);
+
     RepairSetupForm(Bitmap image,Color background,Color foreground,string title,string markerInstruction,string buttonInstruction,bool pointOnly)
     {
         this.image=image;
         Text=title;
-        next.Text=pointOnly?"Next: opening click":"Next: choose button";
+        next.Text=pointOnly?"Next: choose point":"Next: choose button";
         BackColor=background;ForeColor=foreground;Font=new Font("Segoe UI",10);
         Size=new(1050,760);MinimumSize=new(760,560);StartPosition=FormStartPosition.CenterParent;
         var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3};
@@ -52,7 +58,7 @@ internal sealed class RepairSetupForm : Form
             instruction.Text=markerInstruction;
         }
         MarkerInstruction();
-        reset.Click+=(_,_)=>{marker=null;canvas.ChoosePoint=false;canvas.Selected=Rectangle.Empty;next.Enabled=false;next.Text=pointOnly?"Next: opening click":"Next: choose button";MarkerInstruction();canvas.Invalidate();};
+        reset.Click+=(_,_)=>{marker=null;canvas.ChoosePoint=false;canvas.Selected=Rectangle.Empty;next.Enabled=false;next.Text=pointOnly?"Next: choose point":"Next: choose button";MarkerInstruction();canvas.Invalidate();};
         canvas.SelectionChanged+=(_,_)=>next.Enabled=!canvas.Selected.IsEmpty;
         next.Click+=(_,_)=>
         {

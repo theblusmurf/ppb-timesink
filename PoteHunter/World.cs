@@ -66,6 +66,11 @@ public sealed partial class World : IDisposable
     internal static bool IsProcessAlive(SafeProcessHandle? gameHandle) => gameHandle != null &&
         !gameHandle.IsInvalid && !gameHandle.IsClosed && GetExitCodeProcess(gameHandle, out uint code) && code == 259;
     public int Pid => process?.Id ?? 0;
+    internal bool ClientProcessAlive=>IsProcessAlive(handle);
+    internal bool ClientProcessExited
+    {
+        get{try{return process!=null && process.HasExited;}catch(System.ComponentModel.Win32Exception){return false;}catch(InvalidOperationException){return false;}}
+    }
     public string ClientHash => profile.Sha256;
     internal bool ConnectionVerified { get; private set; }
     public bool RestSupported {get;private set;}

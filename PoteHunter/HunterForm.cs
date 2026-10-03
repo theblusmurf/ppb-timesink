@@ -383,11 +383,12 @@ public sealed partial class HunterForm : Form
         timer.Tick += async (_, _) => {
             Tick();
             UpdateNavigationOverlay();
-            if(!connected && !busy && !working && Environment.TickCount64>=nextCharacterReconnect)
+            if(pendingClientResume!=null && !busy && !working && !clientRecoveryRunning) await RecoverClientIfPending();
+            if(!clientRecoveryRunning && pendingClientResume==null && !connected && !busy && !working && Environment.TickCount64>=nextCharacterReconnect)
             { nextCharacterReconnect=Environment.TickCount64+5000; await Connect(); }
         };
         if(!offlinePreview)Shown += async (_, _) => { RegisterKeys(); timer.Start(); await Connect(); };
-        FormClosing += (_, e) => { Stop("Closed."); if (busy || working) { e.Cancel = true; message = "Stopping. Close again when the current operation has finished."; return; } timer.Stop(); DisposeNavigationOverlay(); zoneMapBackground.Dispose(); world.Dispose(); foreach(var registration in hotkeyRegistrations.Where(result=>result.Registered)) Input.UnregisterHotKey(Handle, registration.Id); };
+        FormClosing += (_, e) => { Stop("Closed."); if (busy || working || clientRecoveryRunning) { e.Cancel = true; message = "Stopping. Close again when the current operation has finished."; return; } timer.Stop(); DisposeNavigationOverlay(); zoneMapBackground.Dispose(); world.Dispose(); foreach(var registration in hotkeyRegistrations.Where(result=>result.Registered)) Input.UnregisterHotKey(Handle, registration.Id); };
         Input.Allowed = () => connected && world.CheckInputWindow().Allowed;
         FormClosed += (_,_)=>{DisposeNavigationOverlay();zoneMapBackground.Dispose();};
         WindowsClientInput.Bind(world);
@@ -556,6 +557,7 @@ public sealed partial class HunterForm : Form
         if(busy)return;
         try
         {
+            if(working && !world.ClientProcessAlive && TryQueueClientRecovery())return;
             if (working && !Input.Allowed()) Stop("Stopped: switched away from the game. Recalibrate before starting again.");
             int beforeZone=world.ActiveZone();
             Entity self;
@@ -664,7 +666,7 @@ public sealed partial class HunterForm : Form
                 }), LockedTarget = lockedTarget == null ? null : new { lockedTarget.Name, lockedTarget.DisplayName, lockedTarget.Id, lockedTarget.Generation, lockedTarget.PriorityLootObject }, Status = message, GroundLoot = groundLoot.OrderBy(i => (i.Position-pos).Length).Take(20), PriorityObjects = entities.Where(e => e.PriorityLootObject).OrderBy(e => (e.Position-pos).Length).Select(e => new { e.DisplayName, e.Name, e.Id, e.Model, e.Position, HP = health.GetValueOrDefault(e.Id), Allowed = Targeting.Eligible(e, health.GetValueOrDefault(e.Id), Threat.Unknown, filter.Text, allowedColors) && TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos)==null, Distance = (e.Position-pos).Length }), Monsters = entities.Where(e => e.Monster).OrderBy(e => (e.Position - pos).Length).Select(e => new { e.Name, e.Id, e.Position, HP = health.GetValueOrDefault(e.Id), Difficulty = world.Difficulty(e, level).ToString(), Distance = (e.Position - pos).Length }) });
             }
         }
-        catch (Exception ex) { connected = false; player.Text=""; nextCharacterReconnect=Environment.TickCount64+3000; Stop(ex.Message); WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message }); }
+        catch (Exception ex) { connected = false; player.Text=""; nextCharacterReconnect=Environment.TickCount64+3000; if(!TryQueueClientRecovery())Stop(ex.Message); WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message }); }
     }
     void RecordObservations(Entity self, int level, Dictionary<uint, Health> health)
     {
@@ -777,6 +779,7 @@ public sealed partial class HunterForm : Form
     }
     void Stop(string reason)
     {
+        if(!internalClientStop)CancelClientRecovery();
         try {TraceLog.Record("stop requested",new{Reason=reason,RecoveryPending=deathRecovery.Pending,Reviving=deathRecoveryActive,Returning=deathReturnInProgress,Repairing=repairInProgress});}
         catch(IOException) { }
         catch(UnauthorizedAccessException) { }
@@ -984,14 +987,14 @@ public sealed partial class HunterForm : Form
     }
     async Task StartHunting(long? requestedVersion=null)
     {
-        if(!RequireHotkeys() || busy || working || !connected) return;
+        if(!RequireHotkeys() || busy || working || !connected || clientRecoveryRunning) return;
         long version=requestedVersion ?? ++startVersion;
         if(version!=startVersion) return;
         var readiness=world.CheckInputWindow();
         TraceLog.Record("start requested",readiness);
         if(!readiness.Allowed) { message=readiness.BlockReason!; return; }
         var requested=CurrentOptions();
-        string? routeProblem=StartRecoveryRouteProblem(requested);
+        string? routeProblem=ClientRecoveryStartProblem(requested) ?? StartRecoveryRouteProblem(requested);
         if(routeProblem!=null)
         {
             message=routeProblem;TraceLog.Record("start blocked by recovery route",new{Reason=routeProblem});return;
@@ -1536,7 +1539,7 @@ public sealed partial class HunterForm : Form
     }
     async Task Calibrate()
     {
-        if (!RequireHotkeys() || busy || working || !connected) return;
+        if (!RequireHotkeys() || busy || working || !connected || clientRecoveryRunning) return;
         var readiness=world.CheckInputWindow();
         if (!readiness.Allowed) { message = readiness.BlockReason!; TraceLog.Record("calibration blocked",readiness); return; }
         try
@@ -1649,7 +1652,7 @@ public sealed partial class HunterForm : Form
     }
     async Task Hunt()
     {
-        if (!RequireHotkeys() || busy || working || !connected) return;
+        if (!RequireHotkeys() || busy || working || !connected || clientRecoveryRunning) return;
         if (!Input.Allowed()) { message = "Press F8 while the game is in front."; return; }
         if (CurrentOptions().HealerMode)
         {
@@ -1719,6 +1722,17 @@ public sealed partial class HunterForm : Form
                 }
                 TraceLog.Record("startup route selected",new{Slot=startupSlot,JoinRadius=RecoveryTravel.StartupRadius,Position=world.PlayerPosition(),Anchor=anchor});
             }
+            if(resumingClient is {} resumed)
+            {
+                if(!ClientRecoveryPolicy.SameCharacter(resumed,runCharacter.Name,runZone.Value,o.Target))
+                    throw new InvalidOperationException("Client resume character/zone/targets changed.");
+                var resumeRoute=navigation.GetSavedRoute(resumed.Slot);
+                if(resumeRoute==null || RecoveryTravel.Nearest(resumeRoute,world.PlayerPosition()).Distance>10)
+                    throw new InvalidOperationException("Client resume requires the saved route corridor.");
+                activationRoute=(resumed.Slot,resumeRoute);startupSlot=resumed.Slot;startupRouteTravel=true;
+                anchor=activationLocation=resumed.Anchor;savedHuntHeading=resumed.Heading;savedHuntHeight=resumed.Height;
+                resumingClient=null;
+            }
             if(activationRoute.Route!=null)activeSavedRouteSlot=activationRoute.Slot;
             ApplyRouteProfile(activationRoute.Route);
             // A saved anchor is a standing location, so use a small floor
@@ -1727,6 +1741,7 @@ public sealed partial class HunterForm : Form
             bool startSavedReturn=startupRouteTravel || !o.GroupMode && o.UseAlternativeHuntRoutes && activeRouteProfile!=null &&
                 RecoveryRouting.Occupied(anchor,savedHuntHeight,activeRouteProfile.HuntRadius>0?activeRouteProfile.HuntRadius:(double)o.HuntRadius,entities,runCharacter.Id);
             activeHuntAnchor=activationLocation;
+            ArmClientRecovery(runCharacter,runZone.Value,anchor,savedHuntHeading,savedHuntHeight,o,activeRouteProfile,activeSavedRouteSlot);
             if(o.AutoReviveAfterDeath)
             {
                 string? routeProblem=RecoveryRouting.SavedReturnProblem(activeRouteProfile,runZone.Value,runCharacter.Name,savedHuntHeight,anchor);
@@ -1960,7 +1975,7 @@ public sealed partial class HunterForm : Form
                     if(original)savedHuntHeight=originalSavedPoint.Height;
                     else if(route.Height>0)savedHuntHeight=route.Height;
                     activeSavedRouteSlot=selectedSavedRouteSlot=slot;selectedSavedRoute=route;ApplyRouteProfile(route);
-                    activeHuntAnchor=anchor;activeExcursion=new HuntExcursion(anchor,(double)o.HuntRadius);ResetPath();
+                    activeHuntAnchor=anchor;ArmClientRecovery(runCharacter,runZone.Value,anchor,savedHuntHeading,savedHuntHeight,o,route,slot);activeExcursion=new HuntExcursion(anchor,(double)o.HuntRadius);ResetPath();
                     TraceLog.Record("recovery destination selected",new{Slot=slot,Anchor=anchor,AfterDeath=afterDeath});
                 }
                 bool ChooseDestination()
@@ -3194,9 +3209,9 @@ public sealed partial class HunterForm : Form
         {
             string reason=cancel?.IsCancellationRequested==true?message:ex.Message;
             TraceLog.Record("hunt stopped",new{Reason=reason,RecoveryPending=deathRecovery.Pending});
-            Stop(reason);
+            if(pendingClientResume==null && !TryQueueClientRecovery())Stop(reason);
         }
-        catch (Exception ex) { TraceLog.Record("hunt failed", new { Error = ex.Message }); Stop(ex.Message); }
+        catch (Exception ex) { TraceLog.Record("hunt failed", new { Error = ex.Message }); if(!TryQueueClientRecovery())Stop(ex.Message); }
         finally { navigation.EndRecording();faultDeathWatch.Reset();deathRecoveryActive=false;deathRecovery.Reset();deathReturnInProgress=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;navigationInputOwned=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
     }
 

@@ -22,12 +22,12 @@ New-Item -ItemType Directory -Path $test | Out-Null
 $sentinel='preserve-user-settings'
 Set-Content -LiteralPath (Join-Path $test 'settings.json') -Value $sentinel
 Set-Content -LiteralPath (Join-Path $test 'navigation-routes.json') -Value $sentinel
-foreach($name in 'repair-profile.json','revival-profile.json','loot-history.csv','session-log.txt') {
+foreach($name in 'repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt') {
     Set-Content -LiteralPath (Join-Path $test $name) -Value $sentinel
 }
 $process=Start-Process -FilePath $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS',('/DIR="'+$test+'"') -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0){throw "Installer smoke test failed: $($process.ExitCode)"}
-foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','loot-history.csv','session-log.txt'){
+foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt'){
     if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Installer changed $name"}
 }
 if(!(Test-Path -LiteralPath (Join-Path $test 'PoteHunter.exe')) -or
@@ -36,12 +36,13 @@ if(!(Test-Path -LiteralPath (Join-Path $test 'PoteHunter.exe')) -or
 $patchTestHost=Join-Path $staging 'PoteHunter/PoteHunter.exe'
 $process=Start-Process -FilePath $patchTestHost -ArgumentList '--patch-install-check',('"'+$installer+'"'),('"'+$test+'"'),$Version,$hash -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $staging 'patch-install-check.json'))){throw "Auto patcher install smoke test failed: $($process.ExitCode)"}
-foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','loot-history.csv','session-log.txt'){
+foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt'){
     if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Auto patcher changed $name"}
 }
 $process=Start-Process -FilePath (Join-Path $test 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $test 'settings.json')) -or !(Test-Path (Join-Path $test 'navigation-routes.json'))){throw 'Uninstall did not preserve user data.'}
-foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','loot-history.csv','session-log.txt'){
+foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt'){
     if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Uninstall changed $name"}
 }
 @{Passed=$true;Version=$Version;Install=$true;Upgrade=$true;AutoPatcherInstall=$true;StartupBlockedDuringPatch=$true;StartupAllowedAfterPatch=$true;ProfilesAndLogsPreserved=$true;UninstallPreservesUserData=$true;SHA256=$hash} | ConvertTo-Json | Set-Content (Join-Path $output 'installer-checks.json')
+

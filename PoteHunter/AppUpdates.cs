@@ -111,7 +111,7 @@ public partial class HunterForm
     DateTime nextPatchCheck=DateTime.MinValue;
     AvailableUpdate? pendingPatch;
     string? stagedPatch;
-    bool PatchIdle=>AutoPatcher.Idle(working,busy,navigation.Recording,Application.OpenForms.Cast<Form>().Any(f=>f.Modal));
+    bool PatchIdle=>AutoPatcher.Idle(working,busy || clientRecoveryRunning || pendingClientResume!=null,navigation.Recording,Application.OpenForms.Cast<Form>().Any(f=>f.Modal));
     internal void ConfigureUpdates()
     {
         Shown+=async(_,_)=>{patchTimer.Start();await CheckAutomaticPatch();};
@@ -186,12 +186,12 @@ public partial class HunterForm
         };
         install.Click+=async(_,_)=>
         {
-            if(!AutoPatcher.Idle(working,busy,navigation.Recording,false)){result.Text="Stop hunting, route recording and setup/tests before installing an update.";return;}
+            if(!AutoPatcher.Idle(working,busy || clientRecoveryRunning || pendingClientResume!=null,navigation.Recording,false)){result.Text="Stop hunting, route recording and setup/tests before installing an update.";return;}
             if(available==null)return;install.Enabled=check.Enabled=false;result.Text="Downloading and verifying installer…";
             try
             {
                 string path=await AppUpdates.Download(available,cancellation.Token);
-                if(!AutoPatcher.Idle(working,busy,navigation.Recording,false) || dialog.IsDisposed)return;
+                if(!AutoPatcher.Idle(working,busy || clientRecoveryRunning || pendingClientResume!=null,navigation.Recording,false) || dialog.IsDisposed)return;
                 if(MessageBox.Show(dialog,$"Install {available.Version}? PPB will close. Your settings and saved routes stay in place.","Install update",MessageBoxButtons.OKCancel)!=DialogResult.OK)return;
                 var start=new ProcessStartInfo(path){UseShellExecute=true};start.ArgumentList.Add("/DIR="+AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
                 Process.Start(start);dialog.Close();Close();

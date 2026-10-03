@@ -25,3 +25,6 @@ radar-preview.png
 ui-page-*.png
 ui-repair-*.png
 ui-revival-*.png
+
+# Private calibrated login screens and Windows-encrypted secret
+client-recovery-profile.json*

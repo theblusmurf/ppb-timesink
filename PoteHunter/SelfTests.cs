@@ -8,6 +8,7 @@ static class SelfTests
     {
         try
         {
+            ClientRecoveryChecks.Run();
             PotionChecks.Run();
             GroupHealerChecks.Run();
             ZoneMapBackground.SelfTest();

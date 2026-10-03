@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.92
+
+- Setup > Death recovery adds Login setup, Test login and an independent client crash recovery toggle. Calibrate up to eight ordered screen/button steps, including one password field, login, character and Enter Game. Setup captures cropped static markers and never clicks the game; Test login performs the saved sequence once and leaves hunting stopped.
+- Save the password locally using Windows account encryption. Credentials never enter logs, settings, process arguments, clipboard, Git or release packages. Existing saved account name remains in the game. Local setup survives updates; changed executable/window dimensions require recalibration.
+- On an unexpected client exit during solo hunting, retain character, zone, target selection, anchor/facing and the compatible saved route. Relaunch one verified client, recognize each step before one action, confirm the correct living character, return along the saved route and resume. F9/manual Stop cancels recovery; focus loss, wrong character/zone, missing UI or route stops it without blind retries. Login and startup deadlines are bounded. Group/healer recovery is not supported.
+- Offline validation covers ordered/single actions, recognition timeout, cancellation, protected password round trip, invalid setup and identity/route guards. Windows packaging checks verify the build and installer; live login/input and full crash recovery require the user's local calibration and test. Existing revival/repair, target routes, wallet tracking, PPB UI and updater remain intact.
+
 ## Release1.91
 
 - Apply the selected Crownfire design: warmer charcoal/ember-gold panels, illustrated target presets, icon navigation/actions, and native keyboard-accessible recovery switches. Keep the existing sidebar and two-column section layout.
