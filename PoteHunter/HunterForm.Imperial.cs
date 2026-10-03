@@ -26,19 +26,19 @@ public sealed partial class HunterForm
         brand.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         brand.RowStyles.Add(new RowStyle(SizeType.Absolute,70)); brand.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         brand.Controls.Add(new PictureBox {Name="imperialLogo",Image=ImperialTheme.Logo.Value,SizeMode=PictureBoxSizeMode.Zoom,
-            Dock=DockStyle.Fill,Margin=new Padding(5,0,5,4),AccessibleName="Priston Tale logo"},0,0);
-        brand.Controls.Add(new Label {Text="POTEHUNTER",Dock=DockStyle.Fill,Font=new Font("Georgia",11f),
+            Dock=DockStyle.Fill,Margin=new Padding(5,0,5,4),AccessibleName="Path of the Emperor logo"},0,0);
+        brand.Controls.Add(new Label {Text="PPB",Dock=DockStyle.Fill,Font=new Font("Georgia",11f),
             ForeColor=UiAccent,TextAlign=ContentAlignment.TopCenter,Margin=Padding.Empty},0,1);
         sidebar.Controls.Add(brand,0,0);
         nav.FlowDirection=FlowDirection.TopDown; nav.WrapContents=false; nav.AutoScroll=true;
         nav.BackColor=UiSidebar; nav.Padding=Padding.Empty;
         foreach(var button in nav.Controls.OfType<Button>())
         {
-            button.Size=new Size(124,40);button.Margin=new Padding(0,0,0,6);
-            button.TextAlign=ContentAlignment.MiddleLeft;button.Padding=new Padding(10,0,0,0);
+            button.Size=new Size(124,44);button.Margin=new Padding(0,0,0,6);
+            button.TextAlign=ContentAlignment.MiddleLeft;button.Padding=Padding.Empty;
         }
         sidebar.Controls.Add(nav,0,1);
-        sidebar.Controls.Add(new Label {Text="IMPERIAL COMMAND\n\nLocal settings & profiles\nSaved target routes\nF8 start · F9 stop",
+        sidebar.Controls.Add(new Label {Text="CROWNFIRE\n\nLocal settings & profiles\nSaved target routes\nF8 start · F9 stop",
             Dock=DockStyle.Fill,ForeColor=UiMuted,Font=new Font("Segoe UI",8f),Margin=Padding.Empty},0,2);
         shell.Controls.Add(sidebar,0,0);shell.SetRowSpan(sidebar,4);
 

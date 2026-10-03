@@ -6,13 +6,13 @@
 #endif
 [Setup]
 AppId={{EAACF1DA-2231-4E70-A901-30D01AEECA30}
-AppName=PoteHunter
+AppName=PPB
 AppVersion={#Copy(ReleaseTag,8,100)}
-AppVerName=PoteHunter {#ReleaseTag}
+AppVerName=PPB {#ReleaseTag}
 AppPublisher=theblusmurf
 AppPublisherURL=https://github.com/theblusmurf/PoteHunter
 DefaultDirName={localappdata}\Programs\PoteHunter
-DefaultGroupName=PoteHunter
+DefaultGroupName=PPB
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -31,8 +31,11 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]
 Source: "{#PackageSource}\*"; DestDir: "{app}"; Excludes: "settings.json"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#PackageSource}\settings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
+[InstallDelete]
+Type: files; Name: "{autoprograms}\PoteHunter.lnk"
+Type: files; Name: "{autodesktop}\PoteHunter.lnk"
 [Icons]
-Name: "{autoprograms}\PoteHunter"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\PoteHunter"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\PPB"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\PPB"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 [Run]
-Filename: "{app}\PoteHunter.exe"; Description: "Launch PoteHunter"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\PoteHunter.exe"; Description: "Launch PPB"; Flags: nowait postinstall skipifsilent

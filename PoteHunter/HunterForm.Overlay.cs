@@ -46,7 +46,7 @@ public sealed partial class HunterForm
     void InitializeNavigationOverlay(FlowLayoutPanel navControls)
     {
         ArgumentNullException.ThrowIfNull(navControls);
-        lootTrackerDesign.Items.AddRange(["Imperial HUD","Runic Fold","Parchment Ledger","Runic Strip"]);
+        lootTrackerDesign.Items.AddRange(["Crownfire HUD","Runic Fold","Parchment Ledger","Runic Strip"]);
         lootTrackerDesign.SelectedIndex=1;
         navControls.WrapContents=true;navControls.AutoSize=true;navControls.Dock=DockStyle.Top;
         navControls.ParentChanged+=(_,_)=>

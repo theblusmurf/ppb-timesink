@@ -1,3 +1,5 @@
+using System.Drawing.Drawing2D;
+
 namespace PoteHunter;
 
 internal sealed partial class LootTrackerOverlay
@@ -5,45 +7,36 @@ internal sealed partial class LootTrackerOverlay
     void DrawImperialHud(Graphics g,LootTrackerSnapshot snapshot)
     {
         using var gold=new SolidBrush(ImperialTheme.Gold);
-        using var surface=new SolidBrush(ImperialTheme.Surface);
-        using var divider=new Pen(ImperialTheme.Border);
-        g.FillRectangle(surface,1,1,Width-2,HeaderHeight-1);
+        using var header=new LinearGradientBrush(new Rectangle(0,0,Width,HeaderHeight),ImperialTheme.Raised,ImperialTheme.Window,90);
+        g.FillRectangle(header,0,0,Width,HeaderHeight);
         g.DrawRectangle(framePen,0,0,Width-1,Height-1);
         g.DrawLine(framePen,0,HeaderHeight,Width,HeaderHeight);
-        g.DrawString("LOOT TRACKER",titleFont,gold,new PointF(10,6));
-        Text("drag header to move",detailFont,ImperialTheme.Muted,new(240,9,138,17),true);
+        g.DrawString("PPB · LOOT TRACKER",titleFont,gold,new PointF(10,6));
         Text($"Session {FormatDuration(snapshot.Elapsed)}  ·  Active {FormatDuration(snapshot.RateElapsed)}",detailFont,ImperialTheme.Muted,new(10,37,Width-20,16));
-        Text("Gold is net wallet · other totals are detected drops",detailFont,ImperialTheme.Muted,new(10,52,Width-20,16));
-        Text("RESOURCE",detailFont,ImperialTheme.Muted,new(10,68,130,16));
-        Text("TOTAL",detailFont,ImperialTheme.Muted,new(155,68,92,16),true);
-        Text("PER HOUR",detailFont,ImperialTheme.Muted,new(250,68,128,16),true);
+        Text("Gold: net wallet · other totals are detected drops",detailFont,ImperialTheme.Muted,new(10,53,Width-20,16));
         string[] names=["Gold","Silvin","Mithril","Iternium","Fehu","Gems"];
-        int y=85;
-        foreach(string name in names)
+        for(int i=0;i<names.Length;i++)
         {
-            if(name=="Gold")
-            {
-                g.FillEllipse(gold,13,y+2,14,14);g.DrawEllipse(framePen,11,y+5,14,14);
-            }
-            else GameLootIcons.Draw(g,name,new RectangleF(10,y,24,22));
-            Text(LootTrackerSnapshot.DisplayName(name),rowFont,ImperialTheme.Text,new(40,y,114,22));
-            Text(snapshot.AmountText(name),rowFont,ImperialTheme.Text,new(155,y,92,22),true);
-            Text(snapshot.RateText(name,"N1"),rowFont,ImperialTheme.Gold,new(250,y,128,22),true);
-            y+=22;
+            string name=names[i];int x=10+i%3*125,y=76+i/3*83;
+            using var shape=CrownfireControls.Frame(new RectangleF(x,y,119,77));
+            using var fill=new SolidBrush(ImperialTheme.Raised);
+            using var edge=new Pen(ImperialTheme.Border);
+            g.FillPath(fill,shape);g.DrawPath(edge,shape);
+            if(name=="Gold"){g.FillEllipse(gold,x+9,y+8,20,20);g.DrawEllipse(framePen,x+6,y+11,20,20);}
+            else GameLootIcons.Draw(g,name,new RectangleF(x+7,y+6,30,28));
+            Text(LootTrackerSnapshot.DisplayName(name),rowFont,ImperialTheme.Text,new(x+41,y+5,74,25));
+            Text(snapshot.AmountText(name),rowFont,ImperialTheme.Gold,new(x+7,y+34,105,22));
+            Text(snapshot.RateText(name,"N1")+" /h",detailFont,ImperialTheme.Muted,new(x+7,y+57,105,16));
         }
-        g.DrawLine(divider,10,y+1,Width-10,y+1);y+=5;
-        Text("TRACKED TARGETS",detailFont,ImperialTheme.Muted,new(10,y,Width-20,16));y+=16;
+        int row=245;
         foreach(var source in snapshot.Sources.Take(4))
         {
-            Text($"{source.Source} · {source.Kills:N0} kills · {source.Drops:N0} drops",detailFont,ImperialTheme.Text,new(10,y,Width-20,14));y+=14;
+            Text($"{source.Source} · {source.Kills:N0} kills · {source.Drops:N0} drops",detailFont,ImperialTheme.Text,new(10,row,Width-20,14));row+=14;
         }
-        if(y<=Height-32)
-            Text(snapshot.RecentDrops.Count==0?"Recent drops: waiting for a tracked kill":$"Recent: {snapshot.RecentDrops[0].Source} · {snapshot.RecentDrops[0].Name}",
-                detailFont,ImperialTheme.Gold,new(10,y,Width-20,16));
-        Text($"Zone {snapshot.Zone} · Pending kills {snapshot.PendingKills}",detailFont,ImperialTheme.Muted,new(10,Height-17,Width-20,16));
+        Text($"Zone {snapshot.Zone} · Pending kills {snapshot.PendingKills} · drag header to move",detailFont,ImperialTheme.Muted,new(10,Height-19,Width-20,16));
 
-        void Text(string value,Font font,Color color,Rectangle bounds,bool right=false) =>
+        void Text(string value,Font font,Color color,Rectangle bounds) =>
             TextRenderer.DrawText(g,value,font,bounds,color,TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|
-                TextFormatFlags.NoPrefix|TextFormatFlags.NoPadding|(right?TextFormatFlags.Right:TextFormatFlags.Left));
+                TextFormatFlags.NoPrefix|TextFormatFlags.NoPadding|TextFormatFlags.Left);
     }
 }

@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.91
+
+- Apply the selected Crownfire design: warmer charcoal/ember-gold panels, illustrated target presets, icon navigation/actions, and native keyboard-accessible recovery switches. Keep the existing sidebar and two-column section layout.
+- Rename the displayed application, Windows product metadata, installer and shortcuts to PPB. Retain the existing executable, installation directory, updater feed/asset names and application identity for seamless upgrades and data preservation.
+- Match loot, radar and route overlay colors to Crownfire; preserve six approved resource icons, actual-wallet gold accounting, saved size/opacity/position, route colors and passive overlay behavior.
+- Validate existing combat/recovery/target-route settings bindings and running-state locks with offline checks and rendered UI review. No live gameplay or installed-app replacement performed.
+
+
 ## Release1.90
 
 - Apply the approved Imperial Command interface inspired by PlayPOTE: midnight panels, gold trim, a permanent sidebar, public website banner artwork and serif headings. Reuse the existing controls, page selectors, settings and running-state guards.

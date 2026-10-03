@@ -1,4 +1,4 @@
-# PoteHunter
+# PPB
 
 **Advanced > Navigation** has a separate **Show route overlay** toggle for
 an automatically fitted map of Primary and both Alternative paths, saved

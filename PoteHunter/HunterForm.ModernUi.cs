@@ -16,17 +16,17 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    const int UiCornerRadius = 3;
+    const int UiCornerRadius = 8;
     // Imperial Command: PlayPOTE midnight surfaces and warm gold trim.
-    static readonly Color UiWindow = Color.FromArgb(11, 11, 18);
-    static readonly Color UiSidebar = Color.FromArgb(21, 21, 31);
-    static readonly Color UiSurface = Color.FromArgb(21, 21, 31);
-    static readonly Color UiRaised = Color.FromArgb(28, 28, 42);
-    static readonly Color UiBorder = Color.FromArgb(42, 42, 58);
-    static readonly Color UiText = Color.FromArgb(232, 232, 240);
-    static readonly Color UiMuted = Color.FromArgb(154, 154, 171);
-    static readonly Color UiAccent = Color.FromArgb(207, 174, 106);
-    static readonly Color UiAccentDark = Color.FromArgb(49, 42, 33);
+    static readonly Color UiWindow = Color.FromArgb(14, 13, 14);
+    static readonly Color UiSidebar = Color.FromArgb(26, 23, 24);
+    static readonly Color UiSurface = Color.FromArgb(26, 23, 24);
+    static readonly Color UiRaised = Color.FromArgb(36, 30, 29);
+    static readonly Color UiBorder = Color.FromArgb(84, 58, 37);
+    static readonly Color UiText = Color.FromArgb(243, 234, 219);
+    static readonly Color UiMuted = Color.FromArgb(181, 166, 150);
+    static readonly Color UiAccent = Color.FromArgb(231, 181, 91);
+    static readonly Color UiAccentDark = Color.FromArgb(55, 39, 23);
     static readonly Color UiDanger = Color.FromArgb(226, 146, 121);
 
     /// <summary>
@@ -37,7 +37,7 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PoteHunter · Imperial Command";
+        Text = "PPB · Crownfire";
         Font = new Font("Segoe UI", 10f);
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
@@ -72,7 +72,7 @@ public sealed partial class HunterForm
         tabs.SelectedIndex = 0;
         var indexPage=new TabPage("Index"){AutoScroll=true,Padding=new Padding(16)};
         indexPage.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(620,0),Text=
-            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PoteHunter in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nChoose a target preset or name filter in Overview first. Each target selection has its own Primary route and two alternatives; custom filters are separate, and capitalization does not matter. Older routes are preserved as unassigned: select the correct target, then use Assign existing routes in Navigation on an empty set. In Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Revive + return to anchor and Resume farming on arrival. Enable alternatives in Navigation and record them for the same target selection from the same revival start for occupied-spot fallback. Startup, recovery and fallback only use that target's routes. Changing targets during recording cancels the unfinished route; clearing target routes leaves other selections intact. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
+            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PPB in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nChoose a target preset or name filter in Overview first. Each target selection has its own Primary route and two alternatives; custom filters are separate, and capitalization does not matter. Older routes are preserved as unassigned: select the correct target, then use Assign existing routes in Navigation on an empty set. In Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Revive + return to anchor and Resume farming on arrival. Enable alternatives in Navigation and record them for the same target selection from the same revival start for occupied-spot fallback. Startup, recovery and fallback only use that target's routes. Changing targets during recording cancels the unfinished route; clearing target routes leaves other selections intact. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
         tabs.TabPages.Add(indexPage);
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } groupLayout &&
             groupLayout.Controls.OfType<FlowLayoutPanel>().FirstOrDefault() is { } groupHeader)
@@ -102,7 +102,7 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Name = "ironboundMasthead", Text = "PoteHunter   /   IMPERIAL COMMAND", Dock = DockStyle.Fill,
+            Name = "ironboundMasthead", Text = "PPB   /   CROWNFIRE", Dock = DockStyle.Fill,
             Padding = new Padding(40, 0, 0, 0),
             Font = new Font("Georgia",16f), ForeColor = UiAccent,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
@@ -141,7 +141,7 @@ public sealed partial class HunterForm
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent,55));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent,45));
-        var pageTitle = new Label {Dock=DockStyle.Fill,Text="Setup",Font=new Font("Georgia",17f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
+        var pageTitle = new Label {Dock=DockStyle.Fill,Text="Setup",Font=new Font("Georgia",19f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
         var pageSubtitle = new Label {Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=UiMuted,TextAlign=ContentAlignment.TopLeft,Margin=Padding.Empty};
         heading.Controls.Add(pageTitle,0,0);heading.Controls.Add(pageSubtitle,0,1);header.Controls.Add(heading,0,0);
         var pagePickers = new Panel {Dock=DockStyle.Fill,Margin=new Padding(4,12,8,0),BackColor=UiWindow};
@@ -149,7 +149,7 @@ public sealed partial class HunterForm
         var actions = new FlowLayoutPanel {AutoSize=true,Anchor=AnchorStyles.Right,WrapContents=false,Margin=Padding.Empty};
         actions.Controls.AddRange([connect,start,stop]);connect.Text="Connect";start.Text="Start  F8";stop.Text="Stop  F9";
         foreach(var action in new[]{connect,start,stop})
-        {action.AutoSize=false;action.Size=new Size(94,34);action.Margin=new Padding(5,0,0,0);}
+        {action.AutoSize=false;action.Size=new Size(114,36);action.Margin=new Padding(5,0,0,0);}
         header.Controls.Add(actions,2,0);shell.Controls.Add(header,0,2);shell.Controls.Add(tabs,0,3);
 
         var footer = new TableLayoutPanel
@@ -303,6 +303,8 @@ public sealed partial class HunterForm
     {
         foreach (Control control in root.Controls)
         {
+            if(control is Button crownButton)CrownfireControls.Button(crownButton);
+            if(control is CheckBox crownToggle)CrownfireControls.Toggle(crownToggle);
             if (control is TabPage or Panel or TableLayoutPanel or FlowLayoutPanel)
             {
                 if (control.BackColor == SystemColors.Control || control is TabPage)

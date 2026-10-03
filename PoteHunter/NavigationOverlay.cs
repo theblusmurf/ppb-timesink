@@ -24,7 +24,7 @@ internal sealed class NavigationOverlay : Form
     readonly Font titleFont = new("Georgia", 10f, FontStyle.Regular);
     readonly Pen framePen = new(ImperialTheme.Gold, 1f);
 
-    public NavigationOverlay(Action<Graphics, Size> drawNavigation,string title="POTE RADAR",string legend="Monsters: red/orange  •  engaged: teal ring  •  treasure boxes: gold live / amber remembered")
+    public NavigationOverlay(Action<Graphics, Size> drawNavigation,string title="PPB RADAR",string legend="Monsters: red/orange  •  engaged: teal ring  •  treasure boxes: gold live / amber remembered")
     {
         this.title=title;this.legend=legend;
         this.drawNavigation = drawNavigation ?? throw new ArgumentNullException(nameof(drawNavigation));
@@ -91,6 +91,8 @@ internal sealed class NavigationOverlay : Form
         base.OnPaint(e);
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         e.Graphics.DrawRectangle(framePen, 0, 0, Math.Max(0, ClientSize.Width - 1), Math.Max(0, ClientSize.Height - 1));
+        using var headerFill=new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(1,1,ClientSize.Width-2,HeaderHeight-2),ImperialTheme.Raised,ImperialTheme.Window,90f);
+        e.Graphics.FillRectangle(headerFill,1,1,ClientSize.Width-2,HeaderHeight-2);
         using var titleBrush = new SolidBrush(ImperialTheme.Gold);
         e.Graphics.DrawString(title, titleFont, titleBrush, new PointF(10, 5));
         e.Graphics.DrawLine(framePen, 0, HeaderHeight - 1, ClientSize.Width, HeaderHeight - 1);

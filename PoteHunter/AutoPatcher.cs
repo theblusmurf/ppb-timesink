@@ -133,7 +133,7 @@ internal static partial class AutoPatcher
             File.WriteAllText(Path.Combine(folder,"worker-ready.txt"),"ready");
             using (var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2))) await parent.WaitForExitAsync(timeout.Token);
             using var mutex = new Mutex(true, GateName, out bool owned);
-            if (!owned) throw new InvalidOperationException("Another PoteHunter instance is starting or patching. Patch deferred.");
+            if (!owned) throw new InvalidOperationException("Another PPB instance is starting or patching. Patch deferred.");
             try
             {
                 RequireGuiExited();
@@ -148,7 +148,7 @@ internal static partial class AutoPatcher
                 Install(installer, request.Directory, request.Update, Path.Combine(folder, "installer.log"));
                 AppUpdates.PatchStatus = "Installed " + request.Update.Version;
                 AppUpdates.BlockedPatch = "";
-                Record("Installation confirmed; reopening PoteHunter with hunting stopped.");
+                Record("Installation confirmed; reopening PPB with hunting stopped.");
             }
             finally { mutex.ReleaseMutex(); }
             // Closing the last handle removes the named gate before GUI startup.
@@ -162,7 +162,7 @@ internal static partial class AutoPatcher
             if (request?.Update?.Version is string failedVersion) AppUpdates.BlockedPatch = failedVersion;
             AppUpdates.PatchStatus = "Automatic patch stopped: " + ex.Message;
             if (log != null) File.AppendAllText(log, DateTime.UtcNow.ToString("O") + " ERROR " + ex.Message + Environment.NewLine);
-            MessageBox.Show(AppUpdates.PatchStatus + "\nUse Setup > Updates to retry manually.\n" + (log ?? ""), "PoteHunter patcher");
+            MessageBox.Show(AppUpdates.PatchStatus + "\nUse Setup > Updates to retry manually.\n" + (log ?? ""), "PPB patcher");
             return 1;
         }
     }
@@ -170,6 +170,6 @@ internal static partial class AutoPatcher
     {
         try { using var gui=Mutex.OpenExisting("Local\\PoteHunter.SingleInstance"); }
         catch(WaitHandleCannotBeOpenedException) { return; }
-        throw new InvalidOperationException("Another PoteHunter instance is running. Patch deferred.");
+        throw new InvalidOperationException("Another PPB instance is running. Patch deferred.");
     }
 }

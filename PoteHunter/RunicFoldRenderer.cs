@@ -63,6 +63,8 @@ internal static class RunicFoldRenderer
             for(int i=0;i<Resources.Length;i++)
             {
                 string name=Resources[i];float x=22+i%3*236,y=65+i/3*92;
+                using(var tile=CrownfireControls.Frame(new RectangleF(x-6,y-4,226,86)))
+                    Stroke(g,tile,Color.FromArgb(146,106,56),1);
                 Icon(g,name,new(x,y,58,62));
                 Text(g,LootTrackerSnapshot.DisplayName(name),"Georgia",18,new(x+68,y+1,155,25),Ivory);
                 Text(g,snapshot.AmountText(name),"Consolas",27,new(x+68,y+24,155,30),Ivory);

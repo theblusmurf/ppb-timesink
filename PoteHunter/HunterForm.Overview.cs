@@ -45,6 +45,18 @@ public sealed partial class HunterForm
                 if(!Find<Label>("overviewResource"+name).Text.StartsWith(LootTrackerSnapshot.DisplayName(name)+"\n")) throw new Exception("Overview resource missing: "+name);
             if(Find<Label>("overviewResourceGold").Text!="Gold (net)\n—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
+            if(Text!="PPB · Crownfire")throw new Exception("PPB title branding was lost.");
+            foreach(string name in new[]{"overviewGamekeeper","overviewRevive","overviewRepair"})
+            {
+                var check=Find<CheckBox>(name);
+                int needed=TextRenderer.MeasureText(check.Text,check.Font,Size.Empty,TextFormatFlags.NoPadding|TextFormatFlags.SingleLine).Width+47;
+                if(check.Width<needed || check.Height<25)throw new Exception("Crownfire switch caption is clipped: "+name);
+            }
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"crownfire-caption-checks.json"),System.Text.Json.JsonSerializer.Serialize(
+                new[]{"overviewGamekeeper","overviewRevive","overviewRepair"}.Select(name=>{
+                    var check=Controls.Find(name,true).OfType<CheckBox>().SingleOrDefault();
+                    return new{Name=name,Text=check?.Text,Width=check?.Width,Height=check?.Height,AutoSize=check?.AutoSize,
+                        Measured=check==null?0:TextRenderer.MeasureText(check.Text,check.Font,Size.Empty,TextFormatFlags.NoPadding|TextFormatFlags.SingleLine).Width};})));
             using var preview = new Bitmap(Width, Height);
             DrawToBitmap(preview, new Rectangle(Point.Empty, Size));
             preview.Save(Path.Combine(AppContext.BaseDirectory, "field-console-ii-minimum.png"));
@@ -104,11 +116,11 @@ public sealed partial class HunterForm
             => new() { Name = name, AutoSize = true, ForeColor = UiMuted, Margin = new Padding(0, 2, 0, 6) };
 
         var targets = CompactCard("TARGET SELECTION"); CompactAdd(left, targets);
-        var targetButtons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = false, Margin = Padding.Empty };
+        var targetButtons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 72, WrapContents = false, Margin = Padding.Empty };
         var targetPresets = new List<(string Name, Button Button)>();
         foreach(string family in new[] { "Mimic", "Pulkhan", "Tribal", "Tower" })
         {
-            var button = new Button { Name = "overviewTarget"+family, Text = family, Size = new Size(106, 36), Margin = new Padding(0, 0, 6, 6), AccessibleDescription = "Select the "+family+" target filter" };
+            var button = new Button { Name = "overviewTarget"+family, Text = family, Size = new Size(106, 66), Margin = new Padding(0, 0, 6, 6), AccessibleDescription = "Select the "+family+" target filter" };
             button.Click += (_, _) => { if(CanEdit(filter)) { filter.Text = family; QueueCompactSave(); } refreshOverview?.Invoke(); };
             targetPresets.Add((family, button)); targetButtons.Controls.Add(button);
         }

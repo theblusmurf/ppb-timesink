@@ -1,9 +1,10 @@
-PoteHunter - Field Console
+PPB - Crownfire
 
 Forest-and-brass theme with top navigation, side-by-side Setup cards, and
 HP/MP status bars. Navigation now has its own top-level button. Monitor and
 Advanced use page selectors beside the page heading. Hover HP/MP for details.
 
+PPB keeps the existing PoteHunter.exe and package names for upgrade compatibility.
 Extract the entire folder and run PoteHunter.exe or Start-Fixed-Detection.cmd.
 Normal executable and packaged launcher starts enable verified native read/input.
 Client connection and Windows export validation are still required before input.
