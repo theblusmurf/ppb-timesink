@@ -68,7 +68,7 @@ public sealed class Options
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
     public bool ShowLootTrackerOverlay { get; set; } = true;
-    public int LootTrackerDesign { get; set; } = 3;
+    public int LootTrackerDesign { get; set; } = 1;
     public int LootTrackerDesignVersion { get; set; }
     public int LootTrackerScalePercent { get; set; } = 100;
     public int LootTrackerOverlayX { get; set; } = -1;
@@ -109,7 +109,7 @@ public sealed class Options
         }
         if(options.MeleeRange<MinimumMeleeRange)options.MeleeRange=MinimumMeleeRange;
         options.RevivalDelaySeconds=Math.Clamp(options.RevivalDelaySeconds,0,600);
-        if(options.LootTrackerDesignVersion<1){options.LootTrackerDesign=3;options.LootTrackerDesignVersion=1;}
+        if(options.LootTrackerDesignVersion<2){options.LootTrackerDesign=1;options.LootTrackerDesignVersion=2;}
         options.LootTrackerDesign=Math.Clamp(options.LootTrackerDesign,0,3);
         options.LootTrackerScalePercent=Math.Clamp(options.LootTrackerScalePercent,50,200);
         return options;

@@ -8,10 +8,10 @@ internal sealed partial class LootTrackerOverlay
     internal bool HasNonActivatingStyles=>(CreateParams.ExStyle&(WsExNoActivate|WsExToolWindow|WsExLayered))==(WsExNoActivate|WsExToolWindow|WsExLayered);
     internal int LayeredPresentationCount {get;private set;}
 
-    internal void PresentRunicStrip()
+    internal void PresentTransparentOverlay()
     {
-        if(design!=3 || !IsHandleCreated || IsDisposed)return;
-        using var bitmap=RunicStripRenderer.Render(snapshotProvider(),EffectiveScalePercent);
+        if(!IsTransparentDesign || !IsHandleCreated || IsDisposed)return;
+        using var bitmap=design==1?RunicFoldRenderer.Render(snapshotProvider(),EffectiveScalePercent):RunicStripRenderer.Render(snapshotProvider(),EffectiveScalePercent);
         IntPtr screen=GetDC(IntPtr.Zero),memory=IntPtr.Zero,handle=IntPtr.Zero,original=IntPtr.Zero;
         try
         {

@@ -32,7 +32,7 @@
   "AntiKillSteal": true,
   "OtherPlayerRadius": 1,
   "AvoidNames": [],
-  "LootTrackerDesign": 3,
-  "LootTrackerDesignVersion": 1,
+  "LootTrackerDesign": 1,
+  "LootTrackerDesignVersion": 2,
   "LootTrackerScalePercent": 100
 }

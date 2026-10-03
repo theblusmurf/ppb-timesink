@@ -27,16 +27,22 @@ internal sealed partial class LootTrackerOverlay : Form
     int design=-1;
     int scalePercent=100;
     int screenScaleLimit=200;
+    internal bool IsTransparentDesign=>design is 1 or 3;
+    Size availableArea=new(10000,10000);
+    Size TransparentLogicalSize=>design==1?RunicFoldRenderer.LogicalSize:RunicStripRenderer.LogicalSize;
+    Size TransparentSize=>design==1?RunicFoldRenderer.SizeAt(EffectiveScalePercent):RunicStripRenderer.SizeAt(EffectiveScalePercent);
     internal int Design=>design;
     internal int ScalePercent=>scalePercent;
     internal int EffectiveScalePercent=>Math.Min(scalePercent,screenScaleLimit);
     internal void SetDesign(int value)
     {
         value=Math.Clamp(value,0,3);if(design==value)return;
-        bool changesTransparency=(design==3)!=(value==3);
-        design=value;Size=value switch{1=>new Size(640,144),2=>new Size(360,390),3=>RunicStripRenderer.SizeAt(EffectiveScalePercent),_=>new Size(390,330)};
+        bool changesTransparency=IsTransparentDesign!=(value is 1 or 3);
+        design=value;
+        screenScaleLimit=AreaScaleLimit(availableArea);
+        Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,390):new Size(390,330);
         BackColor=value==2?Color.FromArgb(221,204,164):Color.FromArgb(15,22,31);
-        Opacity=value==3?1:.94;
+        Opacity=IsTransparentDesign?1:.94;
         // SetLayeredWindowAttributes (Form.Opacity) and per-pixel composition
         // must use fresh layered-window state when switching presentations.
         if(changesTransparency && IsHandleCreated)RecreateHandle();
@@ -47,20 +53,22 @@ internal sealed partial class LootTrackerOverlay : Form
     {
         value=Math.Clamp(value,50,200);if(scalePercent==value)return;
         scalePercent=value;
-        if(design==3){Size=RunicStripRenderer.SizeAt(EffectiveScalePercent);RefreshSnapshot();}
+        if(IsTransparentDesign){Size=TransparentSize;RefreshSnapshot();}
     }
 
     internal void FitToArea(Size available)
     {
-        int limit=(int)Math.Min((long)available.Width*100/RunicStripRenderer.LogicalSize.Width,(long)available.Height*100/RunicStripRenderer.LogicalSize.Height);
-        limit=Math.Clamp(limit,50,200);if(screenScaleLimit==limit)return;
+        availableArea=available;
+        int limit=AreaScaleLimit(available);if(screenScaleLimit==limit)return;
         screenScaleLimit=limit;
-        if(design==3){Size=RunicStripRenderer.SizeAt(EffectiveScalePercent);RefreshSnapshot();}
+        if(IsTransparentDesign){Size=TransparentSize;RefreshSnapshot();}
     }
+
+    int AreaScaleLimit(Size available)=>Math.Clamp((int)Math.Min((long)available.Width*100/TransparentLogicalSize.Width,(long)available.Height*100/TransparentLogicalSize.Height),50,200);
 
     internal void RefreshSnapshot()
     {
-        if(design==3 && IsHandleCreated && Visible)PresentRunicStrip();
+        if(IsTransparentDesign && IsHandleCreated && Visible)PresentTransparentOverlay();
         else Invalidate();
     }
 
@@ -73,7 +81,7 @@ internal sealed partial class LootTrackerOverlay : Form
         StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(390,330);
         Cursor=Cursors.SizeAll;
         SetDesign(0);
-        MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left || e.Y>=(design==3?40*EffectiveScalePercent/100:HeaderHeight))return;dragging=true;dragOffset=e.Location;};
+        MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left || e.Y>=(IsTransparentDesign?(design==1?46:40)*EffectiveScalePercent/100:HeaderHeight))return;dragging=true;dragOffset=e.Location;};
         MouseMove+=(_,e)=>{if(!dragging)return;Location=new Point(Left+e.X-dragOffset.X,Top+e.Y-dragOffset.Y);};
         MouseUp+=(_,e)=>{if(e.Button!=MouseButtons.Left)return;dragging=false;positionCommitted?.Invoke(Location);};
     }
@@ -86,7 +94,7 @@ internal sealed partial class LootTrackerOverlay : Form
         base.SetVisibleCore(true);
         if(IsHandleCreated)
         {
-            if(design==3)PresentRunicStrip();
+            if(IsTransparentDesign)PresentTransparentOverlay();
             ShowWindow(Handle,SwShownoactivate);
             SetWindowPos(Handle,new IntPtr(HWndTopmost),0,0,0,0,SwpNomove|SwpNosize|SwpNoactivate);
         }
@@ -105,15 +113,16 @@ internal sealed partial class LootTrackerOverlay : Form
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        if(design==3)
+        if(IsTransparentDesign)
         {
-            RunicStripRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent);
+            if(design==1)RunicFoldRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent);
+            else RunicStripRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent);
             return;
         }
         base.OnPaint(e);
         e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
         e.Graphics.Clear(BackColor);
-        if(design!=0){DrawAlternate(e.Graphics,snapshotProvider());return;}
+        if(design!=0){DrawParchment(e.Graphics,snapshotProvider());return;}
         e.Graphics.DrawRectangle(framePen,0,0,Math.Max(0,ClientSize.Width-1),Math.Max(0,ClientSize.Height-1));
         using var headerBrush=new SolidBrush(Color.FromArgb(42,52,43));
         e.Graphics.FillRectangle(headerBrush,1,1,ClientSize.Width-2,HeaderHeight-1);
@@ -164,35 +173,23 @@ internal sealed partial class LootTrackerOverlay : Form
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
-        if(design!=3)base.OnPaintBackground(e);
+        if(!IsTransparentDesign)base.OnPaintBackground(e);
     }
 
-    void DrawAlternate(Graphics g,LootTrackerSnapshot snapshot)
+    void DrawParchment(Graphics g,LootTrackerSnapshot snapshot)
     {
-        bool parchment=design==2;
-        Color ink=parchment?Color.FromArgb(62,46,29):Color.FromArgb(239,230,199);
-        Color muted=parchment?Color.FromArgb(112,88,53):Color.FromArgb(177,179,170);
-        Color accent=parchment?Color.FromArgb(114,66,26):Color.FromArgb(229,188,89);
+        
+        Color ink=Color.FromArgb(62,46,29);
+        Color muted=Color.FromArgb(112,88,53);
+        Color accent=Color.FromArgb(114,66,26);
         using var border=new Pen(accent);using var inkBrush=new SolidBrush(ink);using var mutedBrush=new SolidBrush(muted);
-        using var accentBrush=new SolidBrush(accent);using var header=new SolidBrush(parchment?Color.FromArgb(199,176,131):Color.FromArgb(38,40,35));
+        using var accentBrush=new SolidBrush(accent);using var header=new SolidBrush(Color.FromArgb(199,176,131));
         g.FillRectangle(header,0,0,Width,HeaderHeight);g.DrawRectangle(border,0,0,Width-1,Height-1);
-        using var heading=new Font(parchment?"Georgia":"Segoe UI Semibold",parchment?11:9,FontStyle.Bold);
-        g.DrawString(parchment?"Parchment Ledger":"COMPACT RIBBON",heading,inkBrush,new PointF(10,6));
-        g.DrawString("drag header to move",detailFont,mutedBrush,new PointF(parchment?210:495,9));
+        using var heading=new Font("Georgia",11,FontStyle.Bold);
+        g.DrawString("Parchment Ledger",heading,inkBrush,new PointF(10,6));
+        g.DrawString("drag header to move",detailFont,mutedBrush,new PointF(210,9));
         g.DrawString($"Session {FormatDuration(snapshot.Elapsed)}  ·  Active {FormatDuration(snapshot.RateElapsed)}  ·  Zone {snapshot.Zone}",detailFont,mutedBrush,new PointF(10,37));
         var rates=snapshot.HourlyLoot.ToDictionary(item=>item.Name,StringComparer.OrdinalIgnoreCase);
-        if(!parchment)
-        {
-            for(int i=0;i<snapshot.TrackedLoot.Count;i++)
-            {
-                var item=snapshot.TrackedLoot[i];int x=10+i*104;
-                g.DrawString(item.Name,rowFont,mutedBrush,new PointF(x,59));
-                TextRenderer.DrawText(g,$"{item.Count:N0}",titleFont,new Rectangle(x,79,101,21),ink,TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
-                TextRenderer.DrawText(g,$"{rates.GetValueOrDefault(item.Name)?.PerHour??0:N1}/h",detailFont,new Rectangle(x,103,101,17),accent,TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
-            }
-            g.DrawString($"{snapshot.Sources.Sum(source=>source.Kills):N0} kills  ·  {snapshot.Sources.Sum(source=>source.Drops):N0} drops  ·  Gold = amount",detailFont,mutedBrush,new PointF(10,127));
-            return;
-        }
         g.DrawString("Collected",detailFont,mutedBrush,new PointF(154,61));g.DrawString("Per hour",detailFont,mutedBrush,new PointF(270,61));
         float y=82;
         foreach(var item in snapshot.TrackedLoot)

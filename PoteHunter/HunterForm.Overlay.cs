@@ -43,8 +43,8 @@ public sealed partial class HunterForm
     void InitializeNavigationOverlay(FlowLayoutPanel navControls)
     {
         ArgumentNullException.ThrowIfNull(navControls);
-        lootTrackerDesign.Items.AddRange(["Dungeon HUD","Compact Ribbon","Parchment Ledger","Runic Strip"]);
-        lootTrackerDesign.SelectedIndex=3;
+        lootTrackerDesign.Items.AddRange(["Dungeon HUD","Runic Fold","Parchment Ledger","Runic Strip"]);
+        lootTrackerDesign.SelectedIndex=1;
         navControls.WrapContents=true;navControls.AutoSize=true;navControls.Dock=DockStyle.Top;
         navControls.ParentChanged+=(_,_)=>
         {
@@ -91,11 +91,11 @@ public sealed partial class HunterForm
         navControls.Controls.Add(lootTrackerDesign);
         navControls.Controls.Add(lootTrackerScaleLabel);
         navControls.Controls.Add(lootTrackerScale);
-        void UpdateLootSizeVisibility(){lootTrackerScale.Visible=lootTrackerScaleLabel.Visible=lootTrackerDesign.SelectedIndex==3;}
+        void UpdateLootSizeVisibility(){lootTrackerScale.Visible=lootTrackerScaleLabel.Visible=lootTrackerDesign.SelectedIndex is 1 or 3;}
         UpdateLootSizeVisibility();
         priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows all saved paths, anchors, facing and the 10-unit start corridor; auto-fits the full routes.");
-        priorityHint.SetToolTip(lootTrackerDesign,"Runic Strip floats outlined text and icons over the game with no background. Drag its title to move. Design and position are saved; previous designs remain available.");
-        priorityHint.SetToolTip(lootTrackerScale,"Runic Strip size: 50% to 200% in 5% steps. Text, icons and spacing scale together; your size is saved. Automatically fits smaller screens.");
+        priorityHint.SetToolTip(lootTrackerDesign,"Runic Fold and Runic Strip float outlined text and resource icons over the game with no background. Drag the header to move. Design, size and position are saved. Silvin is a low-tier metal.");
+        priorityHint.SetToolTip(lootTrackerScale,"Transparent loot overlay size: 50% to 200% in 5% steps. Text, icons and spacing scale together; your size is saved. Automatically fits smaller screens.");
         navControls.Controls.Add(guideTreasureChests);
         navControls.Controls.Add(showTreasureChestMarkers);
         navControls.Controls.Add(sizeLabel);
@@ -203,7 +203,7 @@ public sealed partial class HunterForm
             try
             {
                 var saved=Options.Read();saved.LootTrackerDesign=Math.Clamp(lootTrackerDesign.SelectedIndex,0,3);
-                saved.LootTrackerDesignVersion=1;saved.LootTrackerScalePercent=(int)lootTrackerScale.Value;saved.Save();
+                saved.LootTrackerDesignVersion=2;saved.LootTrackerScalePercent=(int)lootTrackerScale.Value;saved.Save();
             }
             catch(Exception ex){message=ex.Message;}
         }
@@ -217,7 +217,7 @@ public sealed partial class HunterForm
         options.ShowNavigationRoutes = showNavigationRoutes.Checked;
         options.ShowRouteOverlay = showRouteOverlay.Checked;
         options.LootTrackerDesign = Math.Clamp(lootTrackerDesign.SelectedIndex,0,3);
-        options.LootTrackerDesignVersion=1;
+        options.LootTrackerDesignVersion=2;
         options.LootTrackerScalePercent=(int)lootTrackerScale.Value;
         options.ShowLootTrackerOverlay = showLootTrackerOverlay.Checked;
         options.NavigationOverlaySize = (int)navigationOverlaySize.Value;
@@ -381,8 +381,8 @@ public sealed partial class HunterForm
         if (showLootTrackerOverlay.Checked)
         {
             lootTrackerOverlay ??= new LootTrackerOverlay(lootTracker.Snapshot, CommitLootTrackerPosition);
-            lootTrackerOverlay.FitToArea(Screen.FromRectangle(clientBounds).WorkingArea.Size);
             lootTrackerOverlay.SetDesign(lootTrackerDesign.SelectedIndex);
+            lootTrackerOverlay.FitToArea(Screen.FromRectangle(clientBounds).WorkingArea.Size);
             lootTrackerOverlay.SetScale((int)lootTrackerScale.Value);
             if(lootTrackerOverlay.Visible)
             {
@@ -481,20 +481,21 @@ public sealed partial class HunterForm
             [new("Mimic","Gold (215)",new(0,0),DateTime.UnixEpoch),new("Tribal","Emerald",new(0,0),DateTime.UnixEpoch)],
             names.Select((name,i)=>new LootTrackerItemSummary(name,totals[i])).ToArray(),DateTime.UnixEpoch,TimeSpan.FromMinutes(32),DateTime.UnixEpoch,TimeSpan.FromMinutes(30),
             names.Select((name,i)=>new LootTrackerRateSummary(name,totals[i]*2)).ToArray());
-        using var gallery=new Bitmap(790,580);using var galleryGraphics=Graphics.FromImage(gallery);galleryGraphics.Clear(Color.FromArgb(27,25,23));
+        using var gallery=new Bitmap(790,740);using var galleryGraphics=Graphics.FromImage(gallery);galleryGraphics.Clear(Color.FromArgb(27,25,23));
         galleryGraphics.DrawString("Loot overlay choices · preview data",Font,Brushes.Wheat,new PointF(15,5));
         using(var preview=new LootTrackerOverlay(()=>sample))
         {
-            Point[] positions=[new(15,32),new(75,430),new(415,32)];
+            Point[] positions=[new(15,32),new(25,440),new(415,32)];
             for(int style=0;style<3;style++)
             {
-                preview.SetDesign(style);using var bitmap=new Bitmap(preview.Width,preview.Height);
-                preview.DrawToBitmap(bitmap,new Rectangle(Point.Empty,preview.Size));bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"loot-overlay-design-{style}.png"));
+                preview.SetDesign(style);using var bitmap=style==1?RunicFoldRenderer.Render(sample,100):new Bitmap(preview.Width,preview.Height);
+                if(style!=1)preview.DrawToBitmap(bitmap,new Rectangle(Point.Empty,preview.Size));bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"loot-overlay-design-{style}.png"));
                 galleryGraphics.DrawImageUnscaled(bitmap,positions[style]);
             }
             preview.SetDesign(99);if(preview.Design!=3)throw new Exception("Invalid loot design was not bounded.");
         }
         CheckRunicStripOverlay(sample);
+        CheckRunicFoldOverlay(sample);
         gallery.Save(Path.Combine(AppContext.BaseDirectory,"loot-overlay-choices.png"));
         var routes=new (int Slot,SavedNavigationRoute Route)[3];
         for(int i=0;i<3;i++)
@@ -505,7 +506,7 @@ public sealed partial class HunterForm
         using var routePreview=new NavigationOverlay((graphics,size)=>DrawSavedRouteOverlay(graphics,size,routes,new(0,10)),"SAVED ROUTES · 10m start corridor","Primary: violet · Alt 1: gold · Alt 2: coral · You: white"){Size=new(450,450)};
         if(!routePreview.HasPassiveWindowStyles)throw new Exception("Route overlay can intercept input or activate the game.");
         using var routeBitmap=new Bitmap(450,450);routePreview.DrawToBitmap(routeBitmap,new Rectangle(0,0,450,450));routeBitmap.Save(Path.Combine(AppContext.BaseDirectory,"route-overlay-preview.png"));
-        lootTrackerDesign.SelectedIndex=3;
+        lootTrackerDesign.SelectedIndex=1;
     }
 
     void CommitLootTrackerPosition(Point location)

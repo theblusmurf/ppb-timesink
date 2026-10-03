@@ -8,14 +8,14 @@ public sealed partial class HunterForm
     {
         lootTrackerDesign.SelectedIndex=3;lootTrackerScale.Value=135;CurrentOptions().Save();
         var saved=Options.Read();
-        if(saved.LootTrackerDesign!=3 || saved.LootTrackerScalePercent!=135 || saved.LootTrackerDesignVersion!=1)
+        if(saved.LootTrackerDesign!=3 || saved.LootTrackerScalePercent!=135 || saved.LootTrackerDesignVersion!=2)
             throw new Exception("Runic Strip design/size did not persist.");
         lootTrackerDesign.SelectedIndex=1;CurrentOptions().Save();
         if(Options.Read().LootTrackerDesign!=1)throw new Exception("Upgrade migration overwrote a subsequent design choice.");
         File.WriteAllText(Options.PathName,"{\"LootTrackerDesign\":0,\"LootTrackerScalePercent\":999,\"LootTrackerOverlayX\":37,\"LootTrackerOverlayY\":48}");
         var migrated=Options.Read();
-        if(migrated.LootTrackerDesign!=3 || migrated.LootTrackerScalePercent!=200 || migrated.LootTrackerOverlayX!=37 || migrated.LootTrackerOverlayY!=48)
-            throw new Exception("Runic Strip migration lost overlay position or size bounds.");
+        if(migrated.LootTrackerDesign!=1 || migrated.LootTrackerScalePercent!=200 || migrated.LootTrackerOverlayX!=37 || migrated.LootTrackerOverlayY!=48)
+            throw new Exception("Runic Fold migration lost overlay position or size bounds.");
         migrated.LootTrackerDesign=2;migrated.Save();
         if(Options.Read().LootTrackerDesign!=2)throw new Exception("Migration did not preserve the next chosen design.");
         lootTrackerDesign.SelectedIndex=3;lootTrackerScale.Value=100;CurrentOptions().Save();
@@ -54,7 +54,7 @@ public sealed partial class HunterForm
         IntPtr foreground=GetForegroundWindow();
         for(int cycle=0;cycle<4;cycle++)
         {
-            native.SetDesign(3);native.SetScale(cycle%2==0?50:200);native.PresentRunicStrip();
+            native.SetDesign(3);native.SetScale(cycle%2==0?50:200);native.PresentTransparentOverlay();
             if(!native.HasNonActivatingStyles || native.Size!=RunicStripRenderer.SizeAt(native.EffectiveScalePercent))
                 throw new Exception($"Runic Strip lost passive styles or scaled size: passive={native.HasNonActivatingStyles}, actual={native.Size}, expected={RunicStripRenderer.SizeAt(native.EffectiveScalePercent)}, requested={native.ScalePercent}, fitted={native.EffectiveScalePercent}, DPI={native.DeviceDpi}.");
             native.SetDesign(cycle%3);
@@ -66,7 +66,7 @@ public sealed partial class HunterForm
         native.FitToArea(new Size(800,400));
         if(native.Width>800 || native.Height>400 || native.ScalePercent!=200 || native.EffectiveScalePercent>=200)
             throw new Exception("Screen fitting cropped the strip or discarded the requested size.");
-        native.PresentRunicStrip();
+        native.PresentTransparentOverlay();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"runic-strip-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
         {
             Passed=true,NativePresentations=native.LayeredPresentationCount,Renders=renders,

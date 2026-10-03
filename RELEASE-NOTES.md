@@ -1,5 +1,11 @@
 # Release notes
 
+## Release1.85
+
+- Apply the selected Runic Fold loot overlay: two rows of three resources, outlined ivory text, brass frame details and native vector icons on a transparent background. Show Silvin as a plain grey low-tier metal ingot; retain Gold, Mithril, Iternium, Fehu and Gems.
+- Display live full totals, hourly rates, session/active timers, zone and kill/drop totals. Keep header dragging, saved position and 50–200% sizing; fit both transparent designs to the screen without changing the saved size. Replace the old Compact Ribbon with Runic Fold and select it once on upgrade, preserving subsequent design choices.
+- Validate transparent alpha, scaling, large amounts, empty/long sessions, saved choice/position and passive native composition across opaque/transparent switches. Loot calculations, logs, combat, routes, revival, repair and updater behavior are unchanged. No live game input or running-app replacement was performed.
+
 ## Release1.84
 
 - Apply the selected Ironbound medieval interface: deep forest and dark iron surfaces, warm brass outlines, ivory text, serif headings and restrained shield/engraved corner details. Preserve compact native forms, keyboard focus and all existing settings bindings.
