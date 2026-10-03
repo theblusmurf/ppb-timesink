@@ -73,6 +73,7 @@ internal static class RunicFoldRenderer
             using var footer=new GraphicsPath();footer.AddPolygon([new(280,244),new(460,244),new(474,258),new(460,272),new(280,272),new(266,258)]);
             Stroke(g,footer,Brass,1.4f);
             Text(g,$"{snapshot.Sources.Sum(source=>source.Kills):N0} kills  ·  {snapshot.Sources.Sum(source=>source.Drops):N0} drops","Segoe UI",14,new(280,245,180,25),Ivory,true);
+            LootOverlayResetButtons.Draw(g,1,LogicalSize);
         }
         finally {g.Restore(state);}
     }

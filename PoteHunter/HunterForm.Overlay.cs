@@ -168,9 +168,23 @@ public sealed partial class HunterForm
             message=navigation.ClearSavedRoute()?$"Routes cleared for {navigation.RouteTargetLabel}.":navigation.Status;
             RefreshSavedNavigationRouteStatus(); navigationCanvas.Invalidate();
         };
-        resetLootTracker.Click += (_, _) => { bool saved = SaveLootLog("Reset loot"); lootTracker.Reset(); if (saved) message = "Loot totals reset."; UpdateNavigationOverlay(); };
-        resetLootTimer.Click += (_, _) => { bool saved = SaveLootLog("Reset timer"); lootTracker.ResetTimer(); if (saved) message = "Loot earning timer reset."; UpdateNavigationOverlay(); };
+        resetLootTracker.Click += (_, _) => ResetTrackedLoot();
+        resetLootTimer.Click += (_, _) => ResetTrackedLootTimer();
         RefreshNavigationRecordingControls();
+    }
+
+    void ResetTrackedLoot()
+    {
+        bool saved=SaveLootLog("Reset loot");lootTracker.Reset();
+        if(saved)message="Loot totals reset.";
+        UpdateNavigationOverlay();
+    }
+
+    void ResetTrackedLootTimer()
+    {
+        bool saved=SaveLootLog("Reset timer");lootTracker.ResetTimer();
+        if(saved)message="Loot earning timer reset.";
+        UpdateNavigationOverlay();
     }
 
     void StartNavigationRouteRecording()
@@ -420,7 +434,7 @@ public sealed partial class HunterForm
 
         if (showLootTrackerOverlay.Checked)
         {
-            lootTrackerOverlay ??= new LootTrackerOverlay(lootTracker.Snapshot, CommitLootTrackerPosition);
+            lootTrackerOverlay ??= new LootTrackerOverlay(lootTracker.Snapshot, CommitLootTrackerPosition,ResetTrackedLoot,ResetTrackedLootTimer);
             lootTrackerOverlay.SetDesign(lootTrackerDesign.SelectedIndex);
             lootTrackerOverlay.FitToArea(Screen.FromRectangle(clientBounds).WorkingArea.Size);
             lootTrackerOverlay.SetScale((int)lootTrackerScale.Value);

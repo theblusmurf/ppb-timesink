@@ -55,6 +55,7 @@ internal static class RunicStripRenderer
             using var line=new Pen(Color.FromArgb(160,Brass),1);
             graphics.DrawLine(line,258,173,322,173);graphics.DrawLine(line,354,173,418,173);
             Icon(graphics,"Gems",new(331,166,14,14));
+            LootOverlayResetButtons.Draw(graphics,3,LogicalSize);
         }
         finally {graphics.Restore(state);}
     }

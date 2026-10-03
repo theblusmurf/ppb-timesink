@@ -33,14 +33,17 @@ public sealed partial class HunterForm
         {
             using var bitmap=RunicStripRenderer.Render(sample,percent);
             if(bitmap.Size!=RunicStripRenderer.SizeAt(percent))throw new Exception("Runic Strip dimensions did not scale together.");
-            int transparent=0,visible=0,partial=0;
+            int transparent=0,visible=0,partial=0,passivePixels=0;
             for(int y=0;y<bitmap.Height;y++)for(int x=0;x<bitmap.Width;x++)
             {
-                int alpha=bitmap.GetPixel(x,y).A;
+                var logical=new PointF(x*100f/percent,y*100f/percent);
+                if(RectangleF.Inflate(LootOverlayResetButtons.LootBounds(3,RunicStripRenderer.LogicalSize),2,2).Contains(logical) ||
+                   RectangleF.Inflate(LootOverlayResetButtons.TimerBounds(3,RunicStripRenderer.LogicalSize),2,2).Contains(logical))continue;
+                passivePixels++;int alpha=bitmap.GetPixel(x,y).A;
                 if(alpha==0)transparent++;else visible++;
                 if(alpha>0 && alpha<255)partial++;
             }
-            if(transparent<bitmap.Width*bitmap.Height*.65 || visible<100 || partial<100 || bitmap.GetPixel(0,0).A!=0 || bitmap.GetPixel(bitmap.Width/2,bitmap.Height-1).A!=0)
+            if(transparent<passivePixels*.65 || visible<100 || partial<100 || bitmap.GetPixel(0,0).A!=0 || bitmap.GetPixel(bitmap.Width/2,bitmap.Height-1).A!=0)
                 throw new Exception("Runic Strip has a background or lacks antialiased transparent text.");
             bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"runic-strip-{percent}.png"));
             renders.Add(new{Percent=percent,bitmap.Width,bitmap.Height,TransparentPixels=transparent,VisiblePixels=visible,PartialAlphaPixels=partial});

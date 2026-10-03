@@ -990,3 +990,9 @@
 Windows releases include a **Patch notes** section generated from the commits since the previous release tag. Each release also lists the packaged ZIP and SHA256 sidecar, followed by the current feature and validation notes.
 
 Keep commit subjects specific and user-facing so the generated notes explain what changed without requiring a separate manual edit for every build.
+# Release1.95 — Loot overlay reset buttons
+
+- Add Reset loot and Reset timer directly to all four loot tracker overlays. Buttons scale with Runic Fold/Strip and remain clickable with a fully transparent background; header dragging and non-activating game focus are retained.
+- Share the existing Navigation reset actions: save the current log before resetting. Reset loot starts fresh session totals and wallet baseline; Reset timer restarts the earning-rate window while retaining totals and wallet baseline.
+- Validate scaled hit areas, one action per click, cancelled releases, opaque layered button pixels, reset semantics and rendered layouts. No live game input or installed settings changes during validation.
+

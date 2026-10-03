@@ -18,6 +18,9 @@ internal sealed partial class LootTrackerOverlay : Form
     const uint SwpNosize=0x0001;
     readonly Func<LootTrackerSnapshot> snapshotProvider;
     readonly Action<Point>? positionCommitted;
+    readonly Action? resetLoot;
+    readonly Action? resetTimer;
+    int pressedReset;
     readonly Font titleFont=new("Georgia",10f,FontStyle.Regular);
     readonly Font rowFont=new("Segoe UI",8.5f);
     readonly Font detailFont=new("Segoe UI",7.5f);
@@ -42,7 +45,7 @@ internal sealed partial class LootTrackerOverlay : Form
         bool changesTransparency=IsTransparentDesign!=(value is 1 or 3);
         design=value;
         screenScaleLimit=AreaScaleLimit(availableArea);
-        Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,390):new Size(390,330);
+        Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,422):new Size(390,362);
         BackColor=value==2?Color.FromArgb(221,204,164):ImperialTheme.Window;
         Opacity=IsTransparentDesign?1:.94;
         // SetLayeredWindowAttributes (Form.Opacity) and per-pixel composition
@@ -80,18 +83,37 @@ internal sealed partial class LootTrackerOverlay : Form
         else Invalidate();
     }
 
-    public LootTrackerOverlay(Func<LootTrackerSnapshot> snapshotProvider,Action<Point>? positionCommitted=null)
+    public LootTrackerOverlay(Func<LootTrackerSnapshot> snapshotProvider,Action<Point>? positionCommitted=null,Action? resetLoot=null,Action? resetTimer=null)
     {
         this.snapshotProvider=snapshotProvider??throw new ArgumentNullException(nameof(snapshotProvider));
         this.positionCommitted=positionCommitted;
+        this.resetLoot=resetLoot;this.resetTimer=resetTimer;
         AutoScaleMode=AutoScaleMode.None;BackColor=ImperialTheme.Window;DoubleBuffered=true;
         FormBorderStyle=FormBorderStyle.None;Opacity=.94;ShowIcon=false;ShowInTaskbar=false;
         StartPosition=FormStartPosition.Manual;TopMost=false;Size=new Size(390,330);
         Cursor=Cursors.SizeAll;
         SetDesign(0);
-        MouseDown+=(_,e)=>{if(e.Button!=MouseButtons.Left || e.Y>=(IsTransparentDesign?(design==1?46:40)*EffectiveScalePercent/100:HeaderHeight))return;dragging=true;dragOffset=e.Location;};
-        MouseMove+=(_,e)=>{if(!dragging)return;Location=new Point(Left+e.X-dragOffset.X,Top+e.Y-dragOffset.Y);};
-        MouseUp+=(_,e)=>{if(e.Button!=MouseButtons.Left)return;dragging=false;positionCommitted?.Invoke(Location);};
+        MouseDown+=(_,e)=>
+        {
+            if(e.Button!=MouseButtons.Left)return;
+            pressedReset=ResetActionAt(e.Location);
+            if(pressedReset!=0){Capture=true;return;}
+            if(e.Y>=(IsTransparentDesign?(design==1?46:40)*EffectiveScalePercent/100:HeaderHeight))return;
+            dragging=true;dragOffset=e.Location;Capture=true;
+        };
+        MouseMove+=(_,e)=>
+        {
+            if(dragging)Location=new Point(Left+e.X-dragOffset.X,Top+e.Y-dragOffset.Y);
+            else Cursor=ResetActionAt(e.Location)!=0?Cursors.Hand:Cursors.SizeAll;
+        };
+        MouseUp+=(_,e)=>
+        {
+            if(e.Button!=MouseButtons.Left)return;
+            int action=pressedReset;bool moved=dragging;pressedReset=0;dragging=false;Capture=false;
+            if(action!=0 && action==ResetActionAt(e.Location))InvokeReset(action);
+            else if(moved)positionCommitted?.Invoke(Location);
+        };
+        MouseCaptureChanged+=(_,_)=>{if(!Capture){pressedReset=0;dragging=false;}};
     }
 
     protected override bool ShowWithoutActivation=>true;
@@ -130,8 +152,24 @@ internal sealed partial class LootTrackerOverlay : Form
         base.OnPaint(e);
         e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
         e.Graphics.Clear(BackColor);
-        if(design!=0){DrawParchment(e.Graphics,snapshotProvider());return;}
-        DrawImperialHud(e.Graphics,snapshotProvider());
+        if(design!=0)DrawParchment(e.Graphics,snapshotProvider());
+        else DrawImperialHud(e.Graphics,snapshotProvider());
+        LootOverlayResetButtons.Draw(e.Graphics,design,ClientSize);
+    }
+
+    internal int ResetActionAt(Point point)
+    {
+        float scale=IsTransparentDesign?EffectiveScalePercent/100f:1;
+        Size logical=IsTransparentDesign?TransparentLogicalSize:ClientSize;
+        var position=new PointF(point.X/scale,point.Y/scale);
+        return LootOverlayResetButtons.LootBounds(design,logical).Contains(position)?1:
+            LootOverlayResetButtons.TimerBounds(design,logical).Contains(position)?2:0;
+    }
+
+    internal void InvokeReset(int action)
+    {
+        if(action==1)resetLoot?.Invoke();else if(action==2)resetTimer?.Invoke();
+        RefreshSnapshot();
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)

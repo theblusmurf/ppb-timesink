@@ -35,10 +35,15 @@ public sealed partial class HunterForm
         {
             using var bitmap=RunicFoldRenderer.Render(sample,percent);
             if(bitmap.Size!=RunicFoldRenderer.SizeAt(percent))throw new Exception("Runic Fold size failed to scale.");
-            int transparent=0,partial=0;
+            int transparent=0,partial=0,passivePixels=0;
             for(int y=0;y<bitmap.Height;y++)for(int x=0;x<bitmap.Width;x++)
-            {int alpha=bitmap.GetPixel(x,y).A;if(alpha==0)transparent++;if(alpha>0 && alpha<255)partial++;}
-            if(transparent<bitmap.Width*bitmap.Height*.65 || partial<100 || bitmap.GetPixel(0,0).A!=0)
+            {
+                var logical=new PointF(x*100f/percent,y*100f/percent);
+                if(RectangleF.Inflate(LootOverlayResetButtons.LootBounds(1,RunicFoldRenderer.LogicalSize),2,2).Contains(logical) ||
+                   RectangleF.Inflate(LootOverlayResetButtons.TimerBounds(1,RunicFoldRenderer.LogicalSize),2,2).Contains(logical))continue;
+                passivePixels++;int alpha=bitmap.GetPixel(x,y).A;if(alpha==0)transparent++;if(alpha>0 && alpha<255)partial++;
+            }
+            if(transparent<passivePixels*.65 || partial<100 || bitmap.GetPixel(0,0).A!=0)
                 throw new Exception("Runic Fold has an opaque background or lost antialiasing.");
             bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"runic-fold-{percent}.png"));
             renders.Add(new{Percent=percent,bitmap.Width,bitmap.Height,TransparentPixels=transparent,PartialAlphaPixels=partial});

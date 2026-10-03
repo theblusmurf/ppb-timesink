@@ -4,6 +4,36 @@ public sealed partial class HunterForm
 {
     void CheckLootBackground(LootTrackerSnapshot sample)
     {
+        int lootResets=0,timerResets=0,moves=0;
+        using(var buttons=new LootTrackerOverlay(()=>sample,_=>moves++,()=>lootResets++,()=>timerResets++){Location=new Point(-20000,-20000)})
+        {
+            _=buttons.Handle;
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            void Mouse(string method,Point point)=>typeof(Control).GetMethod(method,flags)!.Invoke(buttons,[new MouseEventArgs(MouseButtons.Left,1,point.X,point.Y,0)]);
+            foreach(int style in new[]{0,1,2,3})foreach(int percent in new[]{50,100,200})
+            {
+                buttons.SetDesign(style);buttons.SetScale(percent);
+                float scale=buttons.IsTransparentDesign?buttons.EffectiveScalePercent/100f:1;
+                Size logical=style==1?RunicFoldRenderer.LogicalSize:style==3?RunicStripRenderer.LogicalSize:buttons.ClientSize;
+                foreach(int action in new[]{1,2})
+                {
+                    RectangleF bounds=action==1?LootOverlayResetButtons.LootBounds(style,logical):LootOverlayResetButtons.TimerBounds(style,logical);
+                    Point center=new((int)((bounds.X+bounds.Width/2)*scale),(int)((bounds.Y+bounds.Height/2)*scale));
+                    if(buttons.ResetActionAt(center)!=action)throw new Exception("Scaled reset hit area mismatch.");
+                    int before=action==1?lootResets:timerResets;
+                    Mouse("OnMouseDown",center);Mouse("OnMouseUp",center);
+                    if((action==1?lootResets:timerResets)!=before+1 || moves!=0)throw new Exception("Reset click did not dispatch exactly once or committed a drag.");
+                    Mouse("OnMouseDown",center);Mouse("OnMouseUp",new Point(0,0));
+                    if((action==1?lootResets:timerResets)!=before+1)throw new Exception("Released-outside reset fired.");
+                    using var bitmap=style==1?RunicFoldRenderer.Render(sample,percent):style==3?RunicStripRenderer.Render(sample,percent):new Bitmap(buttons.Width,buttons.Height);
+                    if(style is 0 or 2)buttons.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size));
+                    // The button interior must intercept clicks even with background opacity zero.
+                    if(bitmap.GetPixel((int)((bounds.X+4)*scale),(int)((bounds.Y+4)*scale)).A!=255)throw new Exception("Reset button click area is transparent.");
+                    if(percent==100 && action==2)bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"loot-reset-design-{style}.png"));
+                }
+                if(!buttons.HasNonActivatingStyles)throw new Exception("Reset controls lost non-activating styles.");
+            }
+        }
         lootTrackerDesign.SelectedIndex=1;lootTrackerBackgroundOpacity.Value=65;CurrentOptions().Save();
         if(Options.Read().LootTrackerBackgroundOpacityPercent!=65)throw new Exception("Loot backdrop opacity did not persist.");
         working=true;
