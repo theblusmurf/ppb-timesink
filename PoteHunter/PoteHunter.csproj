@@ -16,6 +16,7 @@
   <ItemGroup><EmbeddedResource Include="BuildSignatures-20260930.json" LogicalName="PoteHunter.BuildSignatures-20260930.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="DefaultSettings.json" LogicalName="PoteHunter.DefaultSettings.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="Repair*.png;ReviveButton.png" LogicalName="PoteHunter.%(Filename)%(Extension)" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="LootIcons/*.png" LogicalName="PoteHunter.LootIcons.%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup><None Include="maps\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <PropertyGroup Condition="'$(Portable)' == 'true'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

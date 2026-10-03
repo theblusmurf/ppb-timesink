@@ -1,5 +1,11 @@
 # Release notes
 
+## Release1.87
+
+- Apply the approved original inventory images for Silvin, Mithril, Iternium and Fehu to Runic Fold, and use the game's Diamond image for Gems. Keep Gold's coin icon and the two-row brass/ivory layout shown in the preview.
+- Bundle the five small transparent PNGs inside the executable, cache them for redraws and preserve their pixel-art appearance and proportions. No game image files or installation paths are needed at runtime. Remove the replaced Runic Fold vector artwork.
+- Retain adjustable background opacity, 50–200% size, saved position, live totals/rates and timers. Verify exact embedded assets, scaled/native rendering and background opacity with the existing offline/UI checks. Loot calculations, combat, recovery, routes and updater behavior are unchanged; no live game input or running-app replacement.
+
 ## Release1.86
 
 - Add a dark forest/iron background to Runic Fold and Runic Strip. Navigation > Background opacity % adjusts just the background from 0% (fully transparent) to 100% (solid) in 5% steps; start at 40%. Keep text, icons and brass trim bright instead of fading the whole overlay.

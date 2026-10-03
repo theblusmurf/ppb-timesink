@@ -108,60 +108,25 @@ internal static class RunicFoldRenderer
         Stroke(g,path,Brass,1.4f);
     }
 
-    static void Shape(Graphics g,PointF[] points,Color color)
-    {
-        using var path=new GraphicsPath();path.AddPolygon(points);using var brush=new SolidBrush(color);
-        g.FillPath(brush,path);Stroke(g,path,Color.FromArgb(190,Brass),.8f);
-    }
-
-    // Native vector art remains sharp across the user's 50–200% size range.
-    // Silvin deliberately has a plain grey bar, below Mithril and Iternium.
     static void Icon(Graphics g,string resource,RectangleF bounds)
     {
+        if(resource!="Gold")
+        {
+            GameLootIcons.Draw(g,resource,bounds);
+            return;
+        }
         var state=g.Save();g.TranslateTransform(bounds.X,bounds.Y);g.ScaleTransform(bounds.Width/58,bounds.Height/62);
         try
         {
-            if(resource=="Gold")
+            for(int i=0;i<3;i++)
             {
-                for(int i=0;i<3;i++)
-                {
-                    using var fill=new SolidBrush(Color.FromArgb(168+i*17,119+i*12,38));
-                    using var rim=new Pen(Brass,1.6f);using var dark=new Pen(Shadow,4);
-                    var rect=new RectangleF(3,31-i*10,36,18);g.FillEllipse(fill,rect);g.DrawEllipse(dark,rect);g.DrawEllipse(rim,rect);
-                }
-                using var coin=new GraphicsPath();coin.AddEllipse(26,28,26,27);using var gold=new SolidBrush(Color.FromArgb(218,167,66));
-                g.FillPath(gold,coin);Stroke(g,coin,Brass,1.3f);
-                using var mark=new GraphicsPath();mark.AddLines([new(39,33),new(39,49),new(35,44),new(43,38)]);Stroke(g,mark,Color.FromArgb(113,76,24),1.2f);
+                using var fill=new SolidBrush(Color.FromArgb(168+i*17,119+i*12,38));
+                using var rim=new Pen(Brass,1.6f);using var dark=new Pen(Shadow,4);
+                var rect=new RectangleF(3,31-i*10,36,18);g.FillEllipse(fill,rect);g.DrawEllipse(dark,rect);g.DrawEllipse(rim,rect);
             }
-            else if(resource is "Silvin" or "Iternium")
-            {
-                bool low=resource=="Silvin";
-                Shape(g,[new(7,40),new(33,7),new(51,15),new(26,49)],low?Color.FromArgb(145,148,148):Color.FromArgb(76,84,90));
-                Shape(g,[new(7,40),new(26,49),new(26,57),new(7,48)],low?Color.FromArgb(96,99,100):Color.FromArgb(44,50,56));
-                Shape(g,[new(26,49),new(51,15),new(51,24),new(26,57)],low?Color.FromArgb(116,119,121):Color.FromArgb(57,65,73));
-                using var engraving=new GraphicsPath();
-                if(low){engraving.AddLine(22,27,28,24);engraving.StartFigure();engraving.AddLine(34,19,38,21);}
-                else{engraving.AddLines([new(26,36),new(36,21),new(32,20),new(39,18)]);engraving.StartFigure();engraving.AddLine(27,30,36,29);}
-                Stroke(g,engraving,low?Color.FromArgb(178,180,179):Ivory,1.1f);
-            }
-            else if(resource=="Mithril")
-            {
-                Shape(g,[new(6,40),new(13,20),new(32,5),new(49,13),new(54,40),new(33,56),new(17,54)],Color.FromArgb(69,87,111));
-                Shape(g,[new(13,28),new(30,9),new(38,18),new(29,40),new(17,47)],Color.FromArgb(184,204,219));
-                Shape(g,[new(31,39),new(39,19),new(48,27),new(46,43),new(34,52)],Color.FromArgb(117,159,187));
-            }
-            else if(resource=="Fehu")
-            {
-                Shape(g,[new(10,8),new(46,8),new(44,53),new(8,53)],Color.FromArgb(201,171,119));
-                using var scroll=new GraphicsPath();scroll.AddLine(7,7,48,7);scroll.StartFigure();scroll.AddLine(6,54,46,54);Stroke(g,scroll,Brass,3);
-                using var rune=new GraphicsPath();rune.AddLine(25,17,25,45);rune.StartFigure();rune.AddLines([new(25,26),new(38,15)]);rune.StartFigure();rune.AddLine(25,34,38,23);Stroke(g,rune,Color.FromArgb(64,46,28),2);
-            }
-            else
-            {
-                Shape(g,[new(28,5),new(49,23),new(44,47),new(28,59),new(11,46),new(7,24)],Color.FromArgb(28,112,173));
-                Shape(g,[new(28,9),new(39,25),new(27,51),new(16,24)],Color.FromArgb(69,194,233));
-                using var facets=new GraphicsPath();facets.AddLines([new(9,24),new(39,25),new(47,23)]);facets.StartFigure();facets.AddLines([new(28,9),new(16,24),new(28,56),new(39,25),new(28,9)]);Stroke(g,facets,Color.FromArgb(171,228,247),1);
-            }
+            using var coin=new GraphicsPath();coin.AddEllipse(26,28,26,27);using var gold=new SolidBrush(Color.FromArgb(218,167,66));
+            g.FillPath(gold,coin);Stroke(g,coin,Brass,1.3f);
+            using var mark=new GraphicsPath();mark.AddLines([new(39,33),new(39,49),new(35,44),new(43,38)]);Stroke(g,mark,Color.FromArgb(113,76,24),1.2f);
         }
         finally {g.Restore(state);}
     }

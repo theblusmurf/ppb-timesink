@@ -4,6 +4,22 @@ public sealed partial class HunterForm
 {
     void CheckRunicFoldOverlay(LootTrackerSnapshot sample)
     {
+        // Verify the approved files survived embedding and single-file packaging.
+        var expectedIcons=new (string Name,int Width,int Height,string Hash)[]{
+            ("Silvin",23,18,"45c6a2e57111112c2a0f139fddd4438b0485eec7c04f0adc088e92b54d7322d5"),
+            ("Mithril",20,20,"ff51979ed5cd920bbf6b60568a924b6ebef754b364c54e6ace4d51673baa2a23"),
+            ("Iternium",21,18,"5e3daced862ca9f5611339eebb62daca60db5c6c2e3e8dcc83314379f322eaab"),
+            ("Fehu",25,25,"d3f7547701e06562f2774af3612bd0d7481fb81cf05c0ced55f5223dc8ba2e81"),
+            ("Diamond",19,17,"7cb40a9da6670a5ccd658fab7064c4b9b4319459e8b1f0eca99868e091fa1910")};
+        foreach(var icon in expectedIcons)
+        {
+            using var stream=typeof(GameLootIcons).Assembly.GetManifestResourceStream($"PoteHunter.LootIcons.{icon.Name}.png")
+                ?? throw new Exception($"Bundled loot image missing: {icon.Name}.");
+            string hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream)).ToLowerInvariant();
+            stream.Position=0;using var image=Image.FromStream(stream);
+            if(hash!=icon.Hash || image.Width!=icon.Width || image.Height!=icon.Height)
+                throw new Exception($"Bundled loot image differs from the approved asset: {icon.Name}.");
+        }
         // Upgrade an existing size/position, then ensure a later user choice wins.
         File.WriteAllText(Options.PathName,"{\"LootTrackerDesign\":3,\"LootTrackerDesignVersion\":1,\"LootTrackerScalePercent\":135,\"LootTrackerOverlayX\":37,\"LootTrackerOverlayY\":48}");
         var upgraded=Options.Read();
@@ -50,7 +66,7 @@ public sealed partial class HunterForm
             throw new Exception("Transparent design switching failed to refit or stole focus.");
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"runic-fold-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
         {
-            Passed=true,NativePresentations=native.LayeredPresentationCount,Renders=renders,
+            Passed=true,EmbeddedIcons=expectedIcons.Select(icon=>new{icon.Name,icon.Width,icon.Height,icon.Hash}),NativePresentations=native.LayeredPresentationCount,Renders=renders,
             Checks=new[]{"transparent pixels and partial-alpha frame/text","50/100/135/200 percent dimensions","full large counts and long sessions","empty snapshot","saved size and position migration","subsequent design preserved","native composition across opaque and transparent designs","foreground preserved","screen fit including style changes"}
         },new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
         lootTrackerDesign.SelectedIndex=1;lootTrackerScale.Value=100;
