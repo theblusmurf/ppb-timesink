@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.94
+
+- Fix Login setup freezing before the capture countdown. A live thread stack showed the UI blocked in Process.MainModule module enumeration while verifying Client.exe. Use Windows QueryFullProcessImageName with limited query access for executable identity; retain exact path/hash checks for the launcher and client.
+- Discover the selected process off the UI thread with a five-second timeout and dispose late results. Both launcher and login captures show the checking stage and recover their controls after failed discovery. The same direct path query protects login action rechecks from module-enumeration stalls.
+- Preserve launcher Play calibration, saved login steps, encrypted password, focus/window checks, recovery routes and all existing combat/loot settings. No game input or live profile changes were used during diagnosis.
+- Validate direct executable identity, responsive background discovery/timeout, and existing login/recovery checks. Full capture, live login and automatic recovery still require the user's local test after updating.
+
 ## Release1.93
 
 - Client crash recovery starts the configured game launcher instead of Client.exe. Setup now captures a separate paired launcher screen marker and Play/Start button. Recovery clicks Play once, waits up to 90 seconds for the verified Client.exe, then continues the saved password/login/character sequence and route return.

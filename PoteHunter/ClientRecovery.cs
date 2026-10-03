@@ -159,7 +159,7 @@ internal sealed class LoginSurface(Process process,GameWindow.Candidate identity
     internal async Task Act(LoginStep step,CancellationToken token)
     {
         if(launcher){profile.VerifyLauncher();if(step.Password)throw new InvalidOperationException("Passwords are only entered in the game client.");}else profile.VerifyFile();
-        if(!string.Equals(process.MainModule?.FileName,Executable,StringComparison.OrdinalIgnoreCase))
+        if(!string.Equals(ProcessImagePath.Read(process),Executable,StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Login process executable identity changed.");
         Check(token);NavigationOverlay.TryGetClientScreenBounds((nint)identity.Handle,out var bounds);
         var point=new Point(bounds.X+step.Point.X,bounds.Y+step.Point.Y);

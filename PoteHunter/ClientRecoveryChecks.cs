@@ -10,6 +10,15 @@ internal static class ClientRecoveryChecks
     internal static void Run()=>RunAsync().GetAwaiter().GetResult();
     static async Task RunAsync()
     {
+        using(var self=System.Diagnostics.Process.GetCurrentProcess())
+            Require(ProcessImagePath.Read(self).Equals(Environment.ProcessPath,StringComparison.OrdinalIgnoreCase),"direct executable path query differs from current process");
+        using(var self=await HunterForm.DiscoverSetupProcess(()=>System.Diagnostics.Process.GetCurrentProcess(),TimeSpan.FromSeconds(2)))
+            Require(self?.Id==Environment.ProcessId,"background setup discovery lost process identity");
+        bool discoveryTimeout=false;
+        // Bound the delayed worker too; it returns no native handle after timeout.
+        try{await HunterForm.DiscoverSetupProcess(()=>{Thread.Sleep(100);return null;},TimeSpan.FromMilliseconds(20));}
+        catch(InvalidOperationException){discoveryTimeout=true;}
+        Require(discoveryTimeout,"blocked setup discovery did not return through timeout");
         using var image=new Bitmap(640,480);
         using(var g=Graphics.FromImage(image)){g.Clear(Color.Black);g.FillRectangle(Brushes.White,15,15,15,10);g.FillRectangle(Brushes.White,110,100,15,10);}
         var marker=RepairPatch.Capture(image,new(10,10,40,24));var button=RepairPatch.Capture(image,new(100,90,40,24));

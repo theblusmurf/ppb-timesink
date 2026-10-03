@@ -117,7 +117,7 @@ public sealed partial class HunterForm
         if(clients.Length>1){foreach(var p in clients)p.Dispose();throw new InvalidOperationException("More than one client is running. Choose a single game client before login recovery.");}
         if(clients.Length==0)return null;
         var process=clients[0];
-        try{if(!string.Equals(process.MainModule?.FileName,profile.Executable,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A different client executable is running. Recovery will not launch a duplicate.");return process;}
+        try{if(!string.Equals(ProcessImagePath.Read(process),profile.Executable,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A different client executable is running. Recovery will not launch a duplicate.");return process;}
         catch{process.Dispose();throw;}
     }
     static Process? FindConfiguredLauncher(LauncherCalibration launcher)
@@ -126,7 +126,7 @@ public sealed partial class HunterForm
         if(found.Length>1){foreach(var item in found)item.Dispose();throw new InvalidOperationException("Multiple game launchers are running. Keep only one before recovery.");}
         if(found.Length==0)return null;
         var process=found[0];
-        try{if(!string.Equals(process.MainModule?.FileName,launcher.Executable,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A different launcher executable is running.");return process;}
+        try{if(!string.Equals(ProcessImagePath.Read(process),launcher.Executable,StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("A different launcher executable is running.");return process;}
         catch{process.Dispose();throw;}
     }
     static GameWindow.Candidate? LauncherWindow(Process process)
@@ -135,6 +135,17 @@ public sealed partial class HunterForm
         var windows=report.Candidates.Where(c=>c.ProcessId==process.Id && c.DirectProcessId==process.Id && c.Visible && c.Owner==0 && c.ClientWidth>=320 && c.ClientHeight>=200).ToArray();
         if(windows.Length>1)throw new InvalidOperationException("Multiple launcher windows are visible. Close extra launcher dialogs before recovery.");
         return windows.SingleOrDefault();
+    }
+    internal static async Task<Process?> DiscoverSetupProcess(Func<Process?> discover,TimeSpan timeout)
+    {
+        var pending=Task.Run(discover);
+        try{return await pending.WaitAsync(timeout);}
+        catch(TimeoutException)
+        {
+            // A delayed native read must not leak its returned Process or re-enter the UI.
+            _=pending.ContinueWith(done=>{if(done.Status==TaskStatus.RanToCompletion)done.Result?.Dispose();else _=done.Exception;},TaskScheduler.Default);
+            throw new InvalidOperationException("Process discovery timed out. Setup is responsive; check the selected executable and try again.");
+        }
     }
     async Task<Process> LaunchClientThroughLauncher(ClientRecoveryProfile profile,CancellationToken token)
     {
@@ -238,7 +249,8 @@ public sealed partial class HunterForm
             {
                 if(!File.Exists(launcherPath.Text) || Path.GetFileName(launcherPath.Text).Equals("client.exe",StringComparison.OrdinalIgnoreCase))throw new InvalidOperationException("Choose the game launcher, not Client.exe.");
                 var selected=new LauncherCalibration(launcherPath.Text,ClientRecoveryProfile.FileHash(launcherPath.Text),0,0,null!);
-                using var process=FindConfiguredLauncher(selected)??throw new InvalidOperationException("Open the game launcher manually and display Play/Start first.");
+                status.Text="Checking the selected launcher executable…";
+                using var process=await DiscoverSetupProcess(()=>FindConfiguredLauncher(selected),TimeSpan.FromSeconds(5))??throw new InvalidOperationException("Open the game launcher manually and display Play/Start first.");
                 for(int s=5;s>0;s--){status.Text=$"Switch to the launcher with the pointer away from Play · {s}s";await Task.Delay(1000);}
                 var identity=LauncherWindow(process)??throw new InvalidOperationException("Launcher window unavailable.");
                 if(!NavigationOverlay.TryGetClientScreenBounds((nint)identity.Handle,out var bounds))throw new InvalidOperationException("Launcher bounds unavailable.");
@@ -263,7 +275,8 @@ public sealed partial class HunterForm
             {
                 if(!File.Exists(executable.Text) || name.Text.Trim().Length==0)throw new InvalidOperationException("Choose client.exe and name this step.");
                 var profile=new ClientRecoveryProfile(1,false,executable.Text,ClientRecoveryProfile.FileHash(executable.Text),width,height,"",[]);
-                using var process=FindConfiguredClient(profile)??throw new InvalidOperationException("Open the configured client and manually display this screen first.");
+                status.Text="Checking the selected client executable…";
+                using var process=await DiscoverSetupProcess(()=>FindConfiguredClient(profile),TimeSpan.FromSeconds(5))??throw new InvalidOperationException("Open the configured client and manually display this screen first.");
                 for(int s=5;s>0;s--){status.Text=$"Switch to the game with an empty password field · {s}s";await Task.Delay(1000);}
                 var handle=GameWindow.Find(process,out var identity);
                 if(!NavigationOverlay.TryGetClientScreenBounds(handle,out var bounds))throw new InvalidOperationException("Game window unavailable.");
