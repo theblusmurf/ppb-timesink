@@ -26,6 +26,9 @@ public sealed partial class HunterForm
     };
     readonly NumericUpDown navigationViewRadius = new() { Minimum = 10, Maximum = 2000, Increment = 10, Value = 150, Width = 70 };
     readonly Button fitNavigationRadius = new() { Text = "Fit loaded", AutoSize = true };
+    readonly Button fitGameMap=new(){Name="fitGameMap",Text="Fit game map",AutoSize=true};
+    readonly Button followMapPlayer=new(){Name="followMapPlayer",Text="Follow player",AutoSize=true};
+    bool navigationMapOverview;int navigationMapOverviewZone;decimal navigationFollowRadius=150;
     readonly CheckBox useAlternativeHuntRoutes = new() { Text = "Use alternatives when the saved spot is occupied", AutoSize = true, Checked = true };
     readonly ComboBox savedNavigationSlot = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
     readonly Label savedNavigationRoutesStatus = new() { AutoSize = true, ForeColor = Color.Silver };
@@ -111,6 +114,8 @@ public sealed partial class HunterForm
         navControls.Controls.Add(navigationViewRadius);
         navControls.Controls.Add(new Label { Text = "m", AutoSize = true, Padding = new Padding(0, 5, 0, 0) });
         navControls.Controls.Add(fitNavigationRadius);
+        navControls.Controls.Add(fitGameMap);navControls.Controls.Add(followMapPlayer);
+        priorityHint.SetToolTip(fitGameMap,"Fit the local game's map with your saved routes. Map artwork assists recording; it is not verified passability or an automatic route. Home starts recording; End saves the travelled path.");
         navControls.Controls.Add(useAlternativeHuntRoutes);
         priorityHint.SetToolTip(useAlternativeHuntRoutes,"Check occupancy at startup, after revival, and during return. Record all three routes from the same revival point. Switch along saved paths; when every compatible spot is occupied, wait at the route start for 10 minutes and retry. Only loaded players can be detected.");
         navControls.Controls.Add(new Label { Text = "Save slot:", AutoSize = true, Padding = new Padding(8, 5, 0, 0) });
@@ -139,6 +144,8 @@ public sealed partial class HunterForm
         navigationOverlaySize.ValueChanged += (_, _) => OverlaySettingsChanged();
         navigationViewRadius.ValueChanged += (_, _) => OverlaySettingsChanged();
         fitNavigationRadius.Click += (_, _) => FitNavigationRadiusToLoaded();
+        fitGameMap.Click+=(_,_)=>FitLocalGameMap();
+        followMapPlayer.Click+=(_,_)=>{if(navigationMapOverview){navigationMapOverview=false;navigationViewRadius.Value=navigationFollowRadius;}navigationCanvas.Invalidate();navigationOverlay?.Invalidate();routeOverlay?.Invalidate();refreshOverview?.Invoke();};
         useAlternativeHuntRoutes.CheckedChanged += (_, _) => OverlaySettingsChanged();
         filter.TextChanged+=(_,_)=>{if(!busy && !working)SyncNavigationTargetSelection();};
         assignUnassignedNavigationRoutes.Click+=(_,_)=>
@@ -359,9 +366,24 @@ public sealed partial class HunterForm
     }
 
     double NavigationViewRadius() => (double)navigationViewRadius.Value;
+    Vec NavigationViewCenter()
+    {
+        if(navigationMapOverview && navigationMapOverviewZone==navigationZone && zoneMapBackground.TryGet(navigationZone,out _,out var b))return new((b.MinX+b.MaxX)/2,(b.MinY+b.MaxY)/2);
+        return navigationPosition;
+    }
+    void FitLocalGameMap()
+    {
+        if(!connected || !zoneMapBackground.TryGet(navigationZone,out _,out var b)){message="No verified local map for this zone/client. Recorded routes are still available.";return;}
+        if(!navigationMapOverview)navigationFollowRadius=navigationViewRadius.Value;
+        navigationMapOverview=true;navigationMapOverviewZone=navigationZone;
+        navigationViewRadius.Value=(decimal)Math.Clamp(Math.Ceiling(Math.Max(b.MaxX-b.MinX,b.MaxY-b.MinY)*.54),(double)navigationViewRadius.Minimum,(double)navigationViewRadius.Maximum);
+        navigationCanvas.Invalidate();navigationOverlay?.Invalidate();routeOverlay?.Invalidate();refreshOverview?.Invoke();
+        message="Game map fitted. Home records your travelled route; End saves it. Follow player restores the local view.";
+    }
 
     void FitNavigationRadiusToLoaded()
     {
+        navigationMapOverview=false;
         double furthest = 0;
         foreach (var entity in entities)
         {
@@ -490,18 +512,29 @@ public sealed partial class HunterForm
     }
 
     void DrawRouteOverlay(Graphics g,Size size)
-        =>DrawSavedRouteOverlay(g,size,navigation.SavedRoutesForZone(navigationZone).ToArray(),navigationPosition);
+    {
+        bool hasMap=zoneMapBackground.TryGet(navigationZone,out var image,out var b);
+        DrawSavedRouteOverlay(g,size,navigation.SavedRoutesForZone(navigationZone).ToArray(),navigationPosition,
+            hasMap?image:null,hasMap?new GameMapLayout.Extent(b.MinX,b.MinY,b.MaxX,b.MaxY):null,navigationMapOverview && navigationMapOverviewZone==navigationZone);
+    }
 
-    static void DrawSavedRouteOverlay(Graphics g,Size size,(int Slot,SavedNavigationRoute Route)[] routes,Vec position)
+    static void DrawSavedRouteOverlay(Graphics g,Size size,(int Slot,SavedNavigationRoute Route)[] routes,Vec position,Bitmap? mapImage=null,GameMapLayout.Extent? layout=null,bool fitMap=false)
     {
         g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(ImperialTheme.Window);
-        if(routes.Length==0){using var emptyFont=new Font("Segoe UI",9);g.DrawString("No routes for this target in this zone.\nHome: start · End: save at anchor",emptyFont,Brushes.Wheat,new PointF(12,15));return;}
-        var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).Append(position).Where(p=>p.Finite).ToArray();
+        if(routes.Length==0 && mapImage==null){using var emptyFont=new Font("Segoe UI",9);g.DrawString("No routes for this target in this zone.\nHome: start · End: save at anchor",emptyFont,Brushes.Wheat,new PointF(12,15));return;}
+        var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).Append(position).Where(p=>p.Finite).ToList();
+        if(layout is {} extent && (fitMap || routes.Length==0)){points.Add(new(extent.MinX,extent.MinY));points.Add(new(extent.MaxX,extent.MaxY));}
         double minX=points.Min(p=>p.X)-12,maxX=points.Max(p=>p.X)+12,minY=points.Min(p=>p.Y)-12,maxY=points.Max(p=>p.Y)+12;
         float scale=(float)Math.Min((size.Width-32)/Math.Max(1,maxX-minX),(size.Height-32)/Math.Max(1,maxY-minY));
         float left=(size.Width-(float)(maxX-minX)*scale)/2,top=(size.Height-(float)(maxY-minY)*scale)/2;
         PointF Project(Vec p)=>new(left+(float)(p.X-minX)*scale,top+(float)(maxY-p.Y)*scale);
+        if(mapImage!=null && layout is {} map)
+        {
+            var a=Project(new(map.MinX,map.MaxY));var b=Project(new(map.MaxX,map.MinY));
+            g.DrawImage(mapImage,RectangleF.FromLTRB(a.X,a.Y,b.X,b.Y));
+            using var shade=new SolidBrush(Color.FromArgb(60,ImperialTheme.Window));g.FillRectangle(shade,new Rectangle(Point.Empty,size));
+        }
         Color[] colors=[ImperialTheme.Gold,ImperialTheme.RouteBlue,ImperialTheme.RouteRose];
         using var labelFont=new Font("Segoe UI",8f,FontStyle.Bold);
         foreach(var (slot,route) in routes)
@@ -562,6 +595,21 @@ public sealed partial class HunterForm
         using var routePreview=new NavigationOverlay((graphics,size)=>DrawSavedRouteOverlay(graphics,size,routes,new(0,10)),"SAVED ROUTES · 10m start corridor","Primary: gold · Alt 1: blue · Alt 2: rose · You: white"){Size=new(450,450)};
         if(!routePreview.HasPassiveWindowStyles)throw new Exception("Route overlay can intercept input or activate the game.");
         using var routeBitmap=new Bitmap(450,450);routePreview.DrawToBitmap(routeBitmap,new Rectangle(0,0,450,450));routeBitmap.Save(Path.Combine(AppContext.BaseDirectory,"route-overlay-preview.png"));
+        using(var map=new Bitmap(512,512))
+        using(var mg=Graphics.FromImage(map))
+        using(var mapped=new Bitmap(450,450))
+        using(var rg=Graphics.FromImage(mapped))
+        {
+            mg.FillRectangle(Brushes.Red,0,0,256,256);mg.FillRectangle(Brushes.Green,256,0,256,256);
+            mg.FillRectangle(Brushes.Blue,0,256,256,256);mg.FillRectangle(Brushes.Gold,256,256,256,256);
+            var bounds=new GameMapLayout.Extent(315,315,3780,3780);
+            DrawSavedRouteOverlay(rg,new(450,450),[],bounds.Center,map,bounds,true);
+            if(mapped.GetPixel(60,60).R<=mapped.GetPixel(60,60).G || mapped.GetPixel(390,60).G<=mapped.GetPixel(390,60).R || mapped.GetPixel(60,390).B<=mapped.GetPixel(60,390).R)
+                throw new Exception("Map quadrant orientation lost in native route overlay");
+            if(mapped.GetPixel(225,225).R<200)throw new Exception("Player marker not projected at map centre");
+            mapped.Save(Path.Combine(AppContext.BaseDirectory,"game-map-overlay-check.png"));
+            if(fitGameMap.Name!="fitGameMap" || followMapPlayer.Name!="followMapPlayer")throw new Exception("Map view controls missing");
+        }
         lootTrackerDesign.SelectedIndex=1;
     }
 

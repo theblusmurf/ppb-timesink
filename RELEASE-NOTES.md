@@ -1020,3 +1020,11 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Locate a moved custom inventory only when saved title and hammer agree on a unique bounded translation. Keep repair confirmation recognition independent, log cancelled repair tests with the exact reason, and clarify recalibration requirements when layout/UI scale changes.
 - Offline recovery, recognition and native UI checks pass. Live recovery still requires verification after updating; stale repair artwork needs one new Custom repair setup. User profiles and running installation remain unchanged.
 
+
+## Release1.99
+
+- Navigation radar, Overview route panel and saved-route overlay now use the installed game's real map artwork behind recorded routes, anchors and player position.
+- Added Fit game map and Follow player display controls; Home/End recording and target-specific Primary/Alternative routes are retained.
+- Read-only local DDS decoding supports DXT1, DXT3, DXT5 and BGRA maps. All four quadrants are required. Unknown client builds/zones and malformed assets use the existing route view; explicit calibrated maps take precedence.
+- Client map projection was verified for the supported zones; eleven installed map sets passed independent decoding and native route-rendering checks. Game assets and runtime routes remain private and are not bundled or uploaded.
+- Map artwork assists recording, but is not a verified collision mesh. Automatic terrain shortcuts are not inferred from the picture. Existing recovery, route movement and obstacle handling are preserved; live travel remains unverified.

@@ -9,7 +9,8 @@ public sealed partial class HunterForm
         double span = Math.Max(10, NavigationViewRadius());
         float scale = Math.Min(canvasSize.Width, canvasSize.Height) / (float)(span * 2);
         float cx = canvasSize.Width / 2f, cy = canvasSize.Height / 2f;
-        PointF Project(Vec v) => new(cx + (float)((v.X - navigationPosition.X) * scale), cy - (float)((v.Y - navigationPosition.Y) * scale));
+        Vec center=NavigationViewCenter();
+        PointF Project(Vec v) => new(cx + (float)((v.X - center.X) * scale), cy - (float)((v.Y - center.Y) * scale));
         using var normal = new SolidBrush(Color.FromArgb(235, 244, 76, 54));
         using var unknown = new SolidBrush(Color.FromArgb(235, 255, 155, 45));
         using var engagedPen = new Pen(Color.FromArgb(235, 55, 220, 205), 1.5f);

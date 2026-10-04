@@ -12,6 +12,7 @@ static class SelfTests
             PotionChecks.Run();
             GroupHealerChecks.Run();
             ZoneMapBackground.SelfTest();
+            GameMapChecks.Run();
             SkillHealthRuleChecks.Run(); SkillTargeting.SelfTest();
             GameWindow.SelfTest();
             CompatibilityChecks.Run();

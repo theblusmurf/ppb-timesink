@@ -823,14 +823,16 @@ public sealed partial class HunterForm : Form
         g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         float span=(float)NavigationViewRadius(),scale=Math.Min(canvasSize.Width,canvasSize.Height)/(span*2);
         float cx=canvasSize.Width/2f, cy=canvasSize.Height/2f;
-        PointF Project(Vec v)=>new(cx+(float)(v.X-navigationPosition.X)*scale,cy-(float)(v.Y-navigationPosition.Y)*scale);
+        Vec viewCenter=NavigationViewCenter();
+        PointF Project(Vec v)=>new(cx+(float)(v.X-viewCenter.X)*scale,cy-(float)(v.Y-viewCenter.Y)*scale);
         if(zoneMapBackground.TryGet(navigationZone,out var mapImage,out var mapBounds))
         {
-            float left=cx+(float)(mapBounds.MinX-navigationPosition.X)*scale;
-            float right=cx+(float)(mapBounds.MaxX-navigationPosition.X)*scale;
-            float top=cy-(float)(mapBounds.MaxY-navigationPosition.Y)*scale;
-            float bottom=cy-(float)(mapBounds.MinY-navigationPosition.Y)*scale;
+            float left=cx+(float)(mapBounds.MinX-viewCenter.X)*scale;
+            float right=cx+(float)(mapBounds.MaxX-viewCenter.X)*scale;
+            float top=cy-(float)(mapBounds.MaxY-viewCenter.Y)*scale;
+            float bottom=cy-(float)(mapBounds.MinY-viewCenter.Y)*scale;
             g.DrawImage(mapImage,RectangleF.FromLTRB(left,top,right,bottom));
+            using var shade=new SolidBrush(Color.FromArgb(60,ImperialTheme.Window));g.FillRectangle(shade,new Rectangle(Point.Empty,canvasSize));
         }
         using var trailPen=new Pen(Color.SeaGreen,1.5f);using var routePen=new Pen(Color.DeepSkyBlue,2);using var obstaclePen=new Pen(Color.Orange,2);using var avoidPen=new Pen(Color.IndianRed,1.5f);
         var trail=navigation.Trail.Where(p=>(p-navigationPosition).Length<span*2).Select(Project).ToArray();if(trail.Length>1)g.DrawLines(trailPen,trail);

@@ -10,6 +10,7 @@ public sealed partial class HunterForm
         Vec forward=Movement.FromClientHeading(heading);
         float span=(float)NavigationViewRadius(),scale=Math.Min(canvasSize.Width,canvasSize.Height)/(span*2);
         float cx=canvasSize.Width/2f,cy=canvasSize.Height/2f;
+        Vec center=NavigationViewCenter();cx+=(float)(navigationPosition.X-center.X)*scale;cy-=(float)(navigationPosition.Y-center.Y)*scale;
         float radius=(float)Math.Min(span,25)*scale;
         const double attackConeHalfAngle=Math.PI/3;
         Vec left=Movement.Rotate(forward,attackConeHalfAngle),right=Movement.Rotate(forward,-attackConeHalfAngle);

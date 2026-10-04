@@ -1,0 +1,11 @@
+# Local game map layouts
+
+PlayPoteBot reads the four `TEXTURE/Interface/ZoneN/LargeMap01.dds` through `LargeMap04.dds` tiles from the installed game. It assembles the same 512-by-512 map used by the game, north up, and overlays recorded paths, anchors and player position. The map reader never changes game files. Game maps are not included in source or release packages.
+
+The current client's large-map renderer was inspected read only. Its per-zone affine projection (including crops, offsets and the conversion of world coordinates to map units) is used for zones 1, 2, 3, 4, 5, 8, 9, 10, 12, 16, 17 and 18. An exact verified executable hash gates these projections. A missing tile, unsupported DDS format, unknown zone or different client disables automatic artwork instead of guessing its alignment. Existing explicitly calibrated `maps/N.json` files take precedence. Restart the bot after replacing local map assets.
+
+In Routes/navigation, **Fit game map** shows the zone layout; **Follow player** restores the previous local zoom. **Fit loaded** returns to the nearby-entity view. These are display controls and send no movement input. The independent saved-route overlay and Overview route panel also show the map. With no recorded route, the map is shown in full so landmarks can assist recording. Use **Home** at the route start and **End** at the anchor to save the path you actually travelled. Primary and alternatives remain separate for each target selection.
+
+The map artwork is a route-recording aid, not a collision mesh. It does not establish walkable ground, bridges, wall openings or safe automatic shortcuts. The installed `.z3s` scene and octree assets were inventoried but their collision/terrain semantics were not validated. Existing recorded travel, recovery, occupancy fallback and learned-obstacle routing remain authoritative.
+
+Validation covers DXT1/3/5 and BGRA tiles, alpha, ordering, missing/corrupt assets, client/zone rejection, per-zone projection samples and native map/route rendering. Eleven installed map sets were independently decoded and compared against a separate decoder (at most one RGB level difference, exact alpha). No live game input or route travel was performed.
