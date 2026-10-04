@@ -53,6 +53,28 @@ internal static class DeathRecoveryChecks
         if(path.Next(new(8,0))!=new Vec(4,0) || path.Next(new(4,0))!=anchor || path.Next(new(.51,0))!=anchor || path.Next(new(.49,0))!=null)
             throw new Exception("Recovery resumed before reaching the final anchor.");
 
+        var merge=new RecoveryPath([new(.83,0),new(.83,2),new(.83,4)],new(.83,6));
+        if(merge.Next(new(0,0),(_,_)=>true)!=new Vec(.83,2))
+            throw new Exception("A short lateral route entry still forced a sideways turn.");
+        var blockedMerge=new RecoveryPath([new(.83,0),new(.83,2),new(.83,4)],new(.83,6));
+        if(blockedMerge.Next(new(0,0),(_,_)=>false)!=new Vec(.83,0))
+            throw new Exception("Lookahead bypassed a blocked segment.");
+        var corner=new RecoveryPath([new(0,0),new(0,2),new(2,2)],new(4,2));
+        if(corner.Next(new(.83,0),(_,_)=>true)!=new Vec(0,0))
+            throw new Exception("Route entry cut a sharp upcoming corner.");
+        var passed=new RecoveryPath([new(0,0),new(0,2),new(0,4)],new(0,6));
+        passed.Next(new(0,0));
+        if(passed.Next(new(.8,2.2),(_,_)=>true)!=new Vec(0,4) || passed.Index!=2 ||
+            passed.Next(new(0,0),(_,_)=>true)!=new Vec(0,4))
+            throw new Exception("A locally passed straight waypoint caused backtracking or regressed route progress.");
+        var final=new RecoveryPath([new(0,0)],new(0,2));
+        if(final.Next(new(0,1.2),(_,_)=>true)!=new Vec(0,2) || !final.Final ||
+            final.Next(new(0,1.49),(_,_)=>true)!=new Vec(0,2) || final.Next(new(0,1.51),(_,_)=>true)!=null)
+            throw new Exception("Lookahead loosened final anchor arrival.");
+        var remotePoint=new RecoveryPath([new(0,0),new(0,2)],new(0,4));
+        if(remotePoint.Next(new(5,0),(_,_)=>true)!=new Vec(0,0))
+            throw new Exception("Lookahead skipped a distant required connector.");
+
         var self=new Entity(100,1,"Farmer",new(80,0),10,Model:"PC_MAN.GCMDS");
         var other=new Entity(200,2,"Neighbor",anchor,10,Model:"PC_MAN.GCMDS");
         var npc=other with{Id=0x40000003,Model="NPC_guard.GCMDS"};

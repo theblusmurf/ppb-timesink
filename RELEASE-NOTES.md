@@ -1003,3 +1003,11 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Apply the approved Solar Forge layout with Crownfire charcoal/brass styling, 13-pixel corners and bottom Overview, Hunt, Routes, Recovery and Settings navigation. All existing detailed pages remain reachable.
 - Show the actual selected target’s saved routes in Overview, move hunt/recovery controls alongside the map, collapse skill and saved-route details, and include session loot/timer reset actions. No change to hunting, revival, repair, wallet or route execution rules.
 - Validate native pages, settings bindings, running-state locks, minimum-size layout, existing offline checks and installer preservation. No live game input during validation.
+
+
+# Release1.97 - Smoother saved-route entry
+
+- Merge onto a clear forward route segment instead of turning sideways to touch a nearby projected entry point. Use short, bounded waypoint lookahead on straight portions; keep progression local and monotonic.
+- Preserve sharp corners, blocked-segment checks, route compatibility and fallback order. Brake and settle on the final anchor with the existing precise-arrival controller before restoring saved facing.
+- Add offline regressions for lateral entry, passed points, sharp bends, obstacles, loop boundaries and exact final arrival. No live gameplay input or installed setting changes during validation.
+- Fantasy website-inspired interface is provided as a preview only; the approved Solar Forge interface remains installed.

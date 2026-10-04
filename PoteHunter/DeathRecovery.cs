@@ -65,12 +65,29 @@ internal sealed class RecoveryPath
         points=waypoints.Append(anchor).ToArray();
         if(points.Any(p=>!p.Finite))throw new RouteUnavailableException("Recovery route contains an invalid position.");
     }
-    public Vec? Next(Vec current)
+    // A clear, short lookahead avoids turning sideways just to touch the
+    // projected route entry. Sharp corners and the final anchor stay exact.
+    public bool Final=>index==points.Length-1;
+    bool Straight(int at)
+    {
+        if(at+2>=points.Length)return true;
+        Vec outgoing=points[at+1]-points[at],following=points[at+2]-points[at+1];
+        double lengths=outgoing.Length*following.Length;
+        if(lengths<=.0001)return true;
+        return (outgoing.X*following.X+outgoing.Y*following.Y)/lengths>=.94;
+    }
+    public Vec? Next(Vec current,Func<Vec,Vec,bool>? clear=null)
     {
         if(!current.Finite)throw new RouteUnavailableException("Character position is unavailable during recovery.");
         // Intermediate waypoints are sampled closely together. Never advance
         // merely because one frame of movement was sent to the client.
         while(index<points.Length && (points[index]-current).Length<=(index==points.Length-1?.5:.6))index++;
+        // Advance only locally, with an independently checked segment. Never
+        // search globally for a closer point on a loop or skip a sharp bend.
+        if(clear!=null)
+            while(index<points.Length-1 && (points[index]-current).Length<=1.25 &&
+                (points[index+1]-current).Length<=4 &&
+                (index==0 || Straight(index-1)) && Straight(index) && clear(current,points[index+1]))index++;
         return index<points.Length?points[index]:null;
     }
 }

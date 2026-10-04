@@ -2012,7 +2012,7 @@ public sealed partial class HunterForm : Form
                                 plan.Points.Select(p=>(p-anchor).Length+2).DefaultIfEmpty(0).Max()));
                             navigation.BeginGoal(fallbackCycle.Waiting?"retreat on saved route to revival point":"follow saved return route");
                         }
-                        Vec? goal=path.Next(current);
+                        Vec? goal=path.Next(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && navigation.CanAdvance(from,to,avoidZones));
                         if(goal==null)
                         {
                             drive.StopApproach();
@@ -2048,7 +2048,7 @@ public sealed partial class HunterForm : Form
                         // Approach keeps forward held through successive recorded
                         // waypoints. Resetting the local planner at every point
                         // used to release/repress movement and cause jerky turns.
-                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true);
+                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.Final?.5:0);
                         await Input.Delay(25,returnToken);
                     }
                 }
