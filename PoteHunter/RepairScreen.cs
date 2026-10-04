@@ -34,9 +34,10 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
 {
     readonly HashSet<RepairAction> attempted=new();
     RepairObservation? lastObserved;
+    Point? inventoryOffset;
     internal sealed record View(RepairObservation State,Point? Hammer,Point? Confirm,VisualControl? HammerVisual,VisualControl? ConfirmVisual,
-        RepairIconMatch? HammerMatch=null);
-    internal static View Recognize(Bitmap image,RepairProfile? profile,CancellationToken token,Func<RepairVisuals> automatic)
+        RepairIconMatch? HammerMatch=null,Point? InventoryOffset=null);
+    internal static View Recognize(Bitmap image,RepairProfile? profile,CancellationToken token,Func<RepairVisuals> automatic,Point? preferredOffset=null)
     {
         token.ThrowIfCancellationRequested();
         if(profile!=null)
@@ -44,13 +45,21 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
             profile.Validate(image.Size);
             // A validated user setup is authoritative. Do not delay its small
             // patch checks behind a scan of every pixel at every UI scale.
-            bool inventory=profile.Inventory.MatchesText(image)||profile.Inventory.MatchesControl(image);
-            var hammerMatch=inventory?profile.Hammer.InspectIcon(image):null;
+            Point offset=preferredOffset??Point.Empty;
+            var inventoryPatch=RepairInventoryLocation.Shift(profile.Inventory,offset);
+            var hammerPatch=RepairInventoryLocation.Shift(profile.Hammer,offset);
+            bool inventory=inventoryPatch.MatchesText(image)||inventoryPatch.MatchesControl(image);
+            var hammerMatch=inventory?hammerPatch.InspectIcon(image):null;
+            if(!inventory && RepairInventoryLocation.Find(image,profile,token) is {} relocated)
+            {
+                offset=relocated;hammerPatch=RepairInventoryLocation.Shift(profile.Hammer,offset);
+                inventory=true;hammerMatch=hammerPatch.InspectIcon(image);
+            }
             bool hammer=inventory && hammerMatch?.Matched==true;
             bool prompt=profile.Prompt.MatchesText(image),confirm=prompt && profile.Confirm.MatchesText(image);
             token.ThrowIfCancellationRequested();
-            return new(new(inventory,hammer,prompt,confirm),hammer?profile.Hammer.Center:null,
-                confirm?profile.Confirm.Center:null,null,null,hammerMatch);
+            return new(new(inventory,hammer,prompt,confirm),hammer?hammerPatch.Center:null,
+                confirm?profile.Confirm.Center:null,null,null,hammerMatch,inventory?offset:null);
         }
         var visual=automatic();token.ThrowIfCancellationRequested();
         return new(new(visual.Hammer!=null,visual.Hammer!=null,visual.Confirm!=null,visual.Confirm!=null),
@@ -60,7 +69,12 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
     {
         runToken.ThrowIfCancellationRequested();token.ThrowIfCancellationRequested();validate();
         using var image=RepairScreen.Capture(world);
-        var view=await Task.Run(()=>Recognize(image,profile,token,()=>RecoveryVision.Repair(image,token)),token);
+        var view=await Task.Run(()=>Recognize(image,profile,token,()=>RecoveryVision.Repair(image,token),inventoryOffset),token);
+        if(view.InventoryOffset is {} offset && inventoryOffset!=offset)
+        {
+            inventoryOffset=offset;
+            TraceLog.Record("repair inventory located",new{Offset=offset,PairedHammerRequired=true});
+        }
         runToken.ThrowIfCancellationRequested();validate();
         if(lastObserved!=view.State)
         {
@@ -101,7 +115,8 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
             var visual=confirm?view.ConfirmVisual:view.HammerVisual;
             marker=await Task.Run(()=>visual!=null ? RecoveryVision.RepairMarker(image,visual,confirm,token) :
                 profile!=null && (confirm?profile.Prompt.MatchesText(image):
-                    (profile.Inventory.MatchesText(image)||profile.Inventory.MatchesControl(image))&&!profile.Prompt.MatchesText(image)),token);
+                    (RepairInventoryLocation.Shift(profile.Inventory,view.InventoryOffset??Point.Empty).MatchesText(image)||
+                     RepairInventoryLocation.Shift(profile.Inventory,view.InventoryOffset??Point.Empty).MatchesControl(image))&&!profile.Prompt.MatchesText(image)),token);
         }
         validate();token.ThrowIfCancellationRequested();
         var cursor=Input.Cursor();

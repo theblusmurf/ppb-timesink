@@ -4,7 +4,7 @@
     <ApplicationIcon>ThemeAssets/playpotebot.ico</ApplicationIcon>
     <Product>PlayPoteBot</Product>
     <AssemblyTitle>PlayPoteBot</AssemblyTitle>
-    <Description>PlayPoteBot Crownfire game companion</Description>
+    <Description>PlayPoteBot Adventurer's Compass game companion</Description>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>

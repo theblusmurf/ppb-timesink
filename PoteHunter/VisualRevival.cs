@@ -57,7 +57,10 @@ internal static class VisualRevival
                 }
                 throw new InvalidOperationException("Revive was clicked once, but living HP was not confirmed. Recovery stopped.");
             }
-            if(dialogRecognized)throw new InvalidOperationException("Recognized Revive dialog disappeared before confirmation. Recovery stopped without further opening clicks.");
+            // Hover and a transient capture can change the button pixels. Once
+            // recognized, only re-observe until the existing deadline: never
+            // send another opening click or confirm using stale coordinates.
+            if(dialogRecognized){await surface.Delay(100,token);continue;}
             if(surface.Now>=nextOpen)
             {
                 if(openings==OpeningClicks)throw new InvalidOperationException("Revive button was not recognized after three opening clicks. Revive manually or check Custom revival setup.");

@@ -1011,3 +1011,12 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Preserve sharp corners, blocked-segment checks, route compatibility and fallback order. Brake and settle on the final anchor with the existing precise-arrival controller before restoring saved facing.
 - Add offline regressions for lateral entry, passed points, sharp bends, obstacles, loop boundaries and exact final arrival. No live gameplay input or installed setting changes during validation.
 - Fantasy website-inspired interface is provided as a preview only; the approved Solar Forge interface remains installed.
+
+## Release1.98
+
+- Apply the approved fantasy interface: storm-blue castle banner, antique gold frames, Adventurer's Compass branding, illustrated target tiles and bottom navigation. Keep bound controls, settings and gameplay guards.
+- Render original Silvin, Mithril, Iternium, Fehu and Diamond/Gems PNGs directly in Overview and the matching Compass Ledger overlay. Retain wallet-baseline gold calculations, reset actions and other saved overlay designs.
+- Recheck transient lost Revive recognition until the existing bounded deadline without further opening clicks or stale confirmations. Match unchanged foreground lettering through hover shading; preserve dead-HP, focus, identity, pointer, one-confirmation and living-HP checks.
+- Locate a moved custom inventory only when saved title and hammer agree on a unique bounded translation. Keep repair confirmation recognition independent, log cancelled repair tests with the exact reason, and clarify recalibration requirements when layout/UI scale changes.
+- Offline recovery, recognition and native UI checks pass. Live recovery still requires verification after updating; stale repair artwork needs one new Custom repair setup. User profiles and running installation remain unchanged.
+

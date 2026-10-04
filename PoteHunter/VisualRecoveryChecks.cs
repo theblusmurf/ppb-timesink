@@ -65,6 +65,16 @@ internal static class VisualRecoveryChecks
             var found=RecoveryVision.Revive(image,default);
             Require(Near(found?.Point,Offset(corner,45,12,scale)),"Centered/scaled Revive button was not recognized.");
             Require(RecoveryVision.ReviveStillPresent(image,found!,default),"Stable Revive button failed its final recheck.");
+            using(var hover=(Bitmap)image.Clone())
+            {
+                for(int y=found!.Button.Top;y<found.Button.Bottom;y++)for(int x=found.Button.Left;x<found.Button.Right;x++)
+                {
+                    var c=hover.GetPixel(x,y);
+                    if(Math.Min(c.R,Math.Min(c.G,c.B))<190)hover.SetPixel(x,y,Color.FromArgb(Math.Min(180,c.R+40),Math.Min(180,c.G+40),Math.Min(180,c.B+40)));
+                }
+                Require(RecoveryVision.ReviveStillPresent(hover,found,default) && RecoveryVision.Revive(hover,default)!=null,
+                    "Revive hover hid unchanged foreground text.");
+            }
             using(var g=Graphics.FromImage(image))g.FillRectangle(Brushes.Black,found!.Button);
             Require(!RecoveryVision.ReviveStillPresent(image,found!,default),"Disappeared Revive button still authorized a click.");
         }
@@ -91,6 +101,7 @@ internal static class VisualRecoveryChecks
         public int ButtonAfter=1;
         public bool ManualRevival,Stuck,UnknownAfterConfirm;
         public bool DialogDisappears;
+        public int MissedFramesAfterRefusal;
         public Func<Health>? Read;
         public Action? OnDelay;
         public Health Health()
@@ -101,6 +112,7 @@ internal static class VisualRecoveryChecks
         public Task<VisualControl?> Find(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();Finds++;
+            if(ConfirmCalls>0 && MissedFramesAfterRefusal-->0)return Task.FromResult<VisualControl?>(null);
             return Task.FromResult<VisualControl?>(Opens.Count>=ButtonAfter && !(DialogDisappears&&ConfirmCalls>0)?new(new(500,500),1,new(455,488,91,24),default):null);
         }
         public Task<bool> Open(CancellationToken token)
@@ -132,6 +144,10 @@ internal static class VisualRecoveryChecks
         var changedDialog=new Surface{ButtonAfter=0,RefusedConfirmations=2};await VisualRevival.Run(changedDialog,0,default);
         Require(changedDialog.Opens.Count==0&&changedDialog.ConfirmCalls==3&&changedDialog.ConfirmedAt.SequenceEqual(new[]{2200L}),
             "A changing dialog was not rechecked before the single confirmation click.");
+        var flicker=new Surface{ButtonAfter=0,RefusedConfirmations=1,MissedFramesAfterRefusal=3};
+        await VisualRevival.Run(flicker,0,default);
+        Require(flicker.Opens.Count==0 && flicker.Confirms==1 && flicker.ConfirmedAt.Single()==2400,
+            "Transient lost recognition aborted revival or repeated opening clicks.");
         var delayed=new Surface{Now=10000,ButtonAfter=3};await VisualRevival.Run(delayed,0,default);
         Require(delayed.Opens.SequenceEqual(new[]{10000L,11000L,12000L})&&delayed.Confirms==1,
             "An elapsed saved-route delay gained another death wait.");
@@ -162,6 +178,7 @@ internal static class VisualRecoveryChecks
             "Stale confirmation retries emitted input or exceeded the recovery deadline.");
         var disappeared=new Surface{ButtonAfter=0,RefusedConfirmations=1,DialogDisappears=true};await Fails(disappeared);
         Require(disappeared.Opens.Count==0&&disappeared.Confirms==0,"Lost dialog recognition restarted opening clicks.");
+        Require(disappeared.Now<=17000,"Lost recognition exceeded its bounded recheck deadline.");
         foreach(int stopAfter in new[]{1,2})
         {
             var recovered=new Surface{ButtonAfter=3};

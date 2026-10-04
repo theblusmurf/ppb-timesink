@@ -17,6 +17,9 @@ public sealed partial class HunterForm
         {
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "Overview");
             refreshOverview?.Invoke(); PerformLayout(); Application.DoEvents();
+            var oldSize=Size;Size=new Size(1280,1120);PerformLayout();Application.DoEvents();
+            using(var full=new Bitmap(Width,Height)){DrawToBitmap(full,new Rectangle(Point.Empty,Size));full.Save(Path.Combine(AppContext.BaseDirectory,"fantasy-overview.png"));}
+            Size=oldSize;PerformLayout();Application.DoEvents();
             T Find<T>(string name) where T : Control => Controls.Find(name, true).OfType<T>().Single();
             Find<Button>("overviewTargetMimic").PerformClick();
             if(filter.Text != "Mimic" || CurrentOptions().Target != "Mimic") throw new Exception("Overview target preset did not update the bound filter.");
@@ -45,7 +48,7 @@ public sealed partial class HunterForm
                 if(!Find<Label>("overviewResource"+name).Text.StartsWith(LootTrackerSnapshot.DisplayName(name)+"\n")) throw new Exception("Overview resource missing: "+name);
             if(Find<Label>("overviewResourceGold").Text!="Gold (net)\n—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
-            if(Text!="PlayPoteBot · Crownfire")throw new Exception("PlayPoteBot title branding was lost.");
+            if(Text!="PlayPoteBot · Adventurer’s Compass")throw new Exception("PlayPoteBot title branding was lost.");
             foreach(string name in new[]{"overviewGamekeeper","overviewRevive","overviewRepair"})
             {
                 var check=Find<CheckBox>(name);
@@ -116,11 +119,11 @@ public sealed partial class HunterForm
             => new() { Name = name, AutoSize = true, ForeColor = UiMuted, Margin = new Padding(0, 2, 0, 6) };
 
         var targets = CompactCard("HUNT PREFERENCES"); CompactAdd(right, targets);
-        var targetButtons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 43, WrapContents = false, Margin = Padding.Empty };
+        var targetButtons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 84, WrapContents = false, Margin = Padding.Empty };
         var targetPresets = new List<(string Name, Button Button)>();
         foreach(string family in new[] { "Mimic", "Pulkhan", "Tribal", "Tower" })
         {
-            var button = new Button { Name = "overviewTarget"+family, Text = family, Size = new Size(103, 36), Margin = new Padding(0, 0, 6, 6), AccessibleDescription = "Select the "+family+" target filter" };
+            var button = new Button { Name = "overviewTarget"+family, Text = family, Size = new Size(100, 76), Margin = new Padding(0, 0, 6, 6), AccessibleDescription = "Select the "+family+" target filter" };
             button.Click += (_, _) => { if(CanEdit(filter)) { filter.Text = family; QueueCompactSave(); } refreshOverview?.Invoke(); };
             targetPresets.Add((family, button)); targetButtons.Controls.Add(button);
         }
@@ -149,11 +152,9 @@ public sealed partial class HunterForm
         combat.Visible=false;
         CompactAdd(combat, Link("All hunt settings", () => OpenSetup()));
 
-        var introduction=new Label {Text="Hold your ground.\nCommand the hunt.",AutoSize=true,Font=new Font("Georgia",22f),ForeColor=UiText,Margin=new Padding(0,0,0,16)};
-        CompactAdd(left,introduction);
         var anchor = CompactCard("ANCHOR ROUTE"); CompactAdd(left, anchor);
         var anchorText = Detail("overviewAnchor"); CompactAdd(anchor, anchorText);
-        var routeMap=new Panel {Name="overviewRouteMap",Dock=DockStyle.Top,Height=170,Margin=new Padding(0,4,0,8),BackColor=UiWindow};
+        var routeMap=new Panel {Name="overviewRouteMap",Dock=DockStyle.Top,Height=300,Margin=new Padding(0,4,0,8),BackColor=UiWindow};
         routeMap.Paint+=(_,e)=>DrawRouteOverlay(e.Graphics,routeMap.ClientSize);
         CompactAdd(anchor,routeMap);
         CompactAdd(anchor,Toggle("overviewShowRoutes","Show route overlay",showRouteOverlay));
@@ -202,13 +203,21 @@ public sealed partial class HunterForm
         sessionHeader.Controls.Add(Link("Reset timer", ResetTrackedLootTimer));
         sessionHeader.Controls.Add(Link("Loot details", () => tabs.SelectedTab = lootPage));
         CompactAdd(session, sessionHeader);
-        var resources = new TableLayoutPanel { Dock = DockStyle.Top, Height = 55, ColumnCount = 6, RowCount = 1, Margin = Padding.Empty };
+        var resources = new TableLayoutPanel { Dock = DockStyle.Top, Height = 108, ColumnCount = 6, RowCount = 1, Margin = Padding.Empty };
         var resourceLabels = new Dictionary<string, Label>();
         foreach(string resource in new[] { "Gold", "Silvin", "Mithril", "Iternium", "Fehu", "Gems" })
         {
             resources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f/6));
-            var value = new Label { Name = "overviewResource"+resource, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Georgia", 11f), ForeColor = resource == "Gold" ? UiAccent : UiText, Margin = new Padding(6, 0, 6, 0) };
-            resources.Controls.Add(value); resourceLabels.Add(resource, value);
+            var tile=new Panel{Dock=DockStyle.Fill,Margin=new Padding(6,0,6,0),BackColor=UiRaised};
+            tile.Paint+=(_,e)=>
+            {
+                var icon=new RectangleF((tile.Width-48)/2f,7,48,42);
+                if(resource=="Gold")CrownfireControls.Glyph(e.Graphics,"Gold",icon,UiAccent);
+                else GameLootIcons.Draw(e.Graphics,resource,icon);
+                FantasyFrame.Draw(e.Graphics,tile.ClientRectangle);
+            };
+            var value = new Label { Name = "overviewResource"+resource, Dock = DockStyle.Bottom,Height=52, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Georgia", 11f), ForeColor = resource == "Gold" ? UiAccent : UiText, Margin = Padding.Empty };
+            tile.Controls.Add(value);resources.Controls.Add(tile); resourceLabels.Add(resource, value);
         }
         CompactAdd(session, resources);
         priorityHint.SetToolTip(session, "Gold is actual wallet change from the session baseline, including costs and other income. Other resources are detected-drop estimates. Rates use active farming time.");

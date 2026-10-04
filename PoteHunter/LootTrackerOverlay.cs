@@ -45,7 +45,7 @@ internal sealed partial class LootTrackerOverlay : Form
         bool changesTransparency=IsTransparentDesign!=(value is 1 or 3);
         design=value;
         screenScaleLimit=AreaScaleLimit(availableArea);
-        Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,422):new Size(390,362);
+        Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,422):new Size(310,550);
         BackColor=value==2?Color.FromArgb(221,204,164):ImperialTheme.Window;
         Opacity=IsTransparentDesign?1:.94;
         // SetLayeredWindowAttributes (Form.Opacity) and per-pixel composition

@@ -43,9 +43,9 @@ internal static class CrownfireControls
             bool target=button.Name.StartsWith("overviewTarget");
             if(icon.Length>0)
             {
-                var rect=target?new RectangleF((button.Width-26)/2f,8,26,26):new RectangleF(10,(button.Height-19)/2f,19,19);
-                Glyph(g,icon,rect,ink);
-                if(target)textBounds=new(4,37,button.Width-8,button.Height-39);
+                var rect=target?new RectangleF((button.Width-48)/2f,5,48,48):new RectangleF(10,(button.Height-19)/2f,19,19);
+                if(target)ImperialTheme.DrawTarget(g,icon,rect);else Glyph(g,icon,rect,ink);
+                if(target)textBounds=new(4,53,button.Width-8,button.Height-55);
                 else {textBounds.X+=26;textBounds.Width=Math.Max(1,textBounds.Width-26);}
             }
             var flags=TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix;
@@ -93,6 +93,7 @@ internal static class CrownfireControls
         using var brush=new SolidBrush(color);
         switch(name)
         {
+            case "Gold":g.DrawEllipse(pen,3,3,15,7);g.DrawArc(pen,3,5,15,8,0,180);g.DrawArc(pen,3,8,15,8,0,180);g.DrawEllipse(pen,13,12,8,10);break;
             case "Play":g.FillPolygon(brush,new PointF[]{new(6,3),new(21,12),new(6,21)});break;
             case "Stop":g.FillRectangle(brush,5,5,14,14);break;
             case "Overview":g.DrawLines(pen,new PointF[]{new(2,10),new(12,2),new(22,10)});g.DrawRectangle(pen,5,10,14,12);break;

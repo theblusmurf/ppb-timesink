@@ -48,12 +48,14 @@ internal static class RecoveryVision
     sealed class Template
     {
         public readonly Pixels Pixels;
+        public readonly RepairPatch? Glyphs;
         public readonly (int X,int Y,int Gray)[] Samples;
         public Template(string name,double scale)
         {
             using var original=Resource(name);
             using var resized=new Bitmap(original,new Size((int)Math.Round(original.Width*scale),(int)Math.Round(original.Height*scale)));
             Pixels=new(resized,default);
+            if(name=="ReviveButton")Glyphs=RepairPatch.Capture(resized,new Rectangle(Point.Empty,resized.Size));
             var samples=new List<(int X,int Y,int Gray)>();
             for(int y=1;y<Pixels.Height-1;y+=2)for(int x=1;x<Pixels.Width-1;x+=2)samples.Add((x,y,Pixels.At(x,y)));
             Samples=samples.OrderByDescending(p=>Math.Abs(p.Gray-Pixels.At(p.X-1,p.Y))+Math.Abs(p.Gray-Pixels.At(p.X,p.Y-1))).ToArray();
@@ -147,9 +149,9 @@ internal static class RecoveryVision
                 token.ThrowIfCancellationRequested();
                 for(int x=Math.Max(0,cx-(int)(55*scale));x<Math.Min(image.Width-width,cx+(int)(55*scale));x++)
                 {
-                    if(!Fits(frame,template,x,y))continue;
+                    if(!Fits(frame,template,x,y) && !ReviveGlyphs(image,frame,template,x,y))continue;
                     double score=template.Samples.Average(p=>Math.Abs(frame.At(x+p.X,y+p.Y)-p.Gray));
-                    if(score>=12)continue;
+                    if(score>=12 && !ReviveGlyphs(image,frame,template,x,y))continue;
                     var match=new VisualControl(new(x+width/2,y+height/2),scale,new(x,y,width,height),new(x,y,width,height));
                     if(found!=null && !SameLocation(found,match))return null;
                     if(score<best){found=match;best=score;}
@@ -160,5 +162,11 @@ internal static class RecoveryVision
         return null;
     }
     internal static bool ReviveStillPresent(Bitmap image,VisualControl match,CancellationToken token)
-        =>Fits(new Pixels(image,token),Get("ReviveButton",match.Scale),match.Button.X,match.Button.Y);
+    {
+        var pixels=new Pixels(image,token);var template=Get("ReviveButton",match.Scale);
+        return Fits(pixels,template,match.Button.X,match.Button.Y) ||
+            ReviveGlyphs(image,pixels,template,match.Button.X,match.Button.Y);
+    }
+    static bool ReviveGlyphs(Bitmap image,Pixels pixels,Template template,int x,int y)
+        =>template.Glyphs is {} glyphs && Fits(pixels,template,x,y,true) && (glyphs with{X=x,Y=y}).MatchesText(image);
 }

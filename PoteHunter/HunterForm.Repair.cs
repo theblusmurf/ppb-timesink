@@ -23,7 +23,7 @@ public sealed partial class HunterForm
             revivalDelaySeconds.Enabled=farmOnArrival.Enabled=visualRevival.Enabled=autoRevive.Checked;
             reviveKey.Enabled=autoRevive.Checked&&!visualRevival.Checked;
             repairStatus.Text=!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
-                :"Saved custom setup survives client updates with an unchanged layout. Test repair first; custom setup is optional.";
+                :"Saved setup must match the inventory layout and UI scale. If recognition fails, capture Inventory + Hammer and Question + Yes again. Test once before automatic recovery.";
         }
         autoRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};autoRevive.CheckedChanged+=(_,_)=>Refresh();
         visualRevival.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
@@ -49,7 +49,11 @@ public sealed partial class HunterForm
                 message="Repair UI sequence completed. Check equipment durability in the game.";
             }
         }
-        catch(OperationCanceledException){message="Repair setup/test stopped.";}
+        catch(OperationCanceledException ex)
+        {
+            message="Repair setup/test stopped: "+ex.Message;
+            TraceLog.Record("repair setup/test cancelled",new{Reason=ex.Message,Requested=token.IsCancellationRequested,repairInProgress});
+        }
         catch(Exception ex){message="Repair stopped: "+ex.Message;repairStatus.Text=message;TraceLog.Record("repair stopped",new{Error=ex.Message});}
         finally
         {

@@ -18,11 +18,11 @@ public sealed partial class HunterForm
 {
     const int UiCornerRadius = 13;
     // Imperial Command: PlayPOTE midnight surfaces and warm gold trim.
-    static readonly Color UiWindow = Color.FromArgb(14, 13, 14);
-    static readonly Color UiSidebar = Color.FromArgb(26, 23, 24);
-    static readonly Color UiSurface = Color.FromArgb(26, 23, 24);
-    static readonly Color UiRaised = Color.FromArgb(36, 30, 29);
-    static readonly Color UiBorder = Color.FromArgb(84, 58, 37);
+    static readonly Color UiWindow = ImperialTheme.Window;
+    static readonly Color UiSidebar = ImperialTheme.Surface;
+    static readonly Color UiSurface = ImperialTheme.Surface;
+    static readonly Color UiRaised = ImperialTheme.Raised;
+    static readonly Color UiBorder = ImperialTheme.Border;
     static readonly Color UiText = Color.FromArgb(243, 234, 219);
     static readonly Color UiMuted = Color.FromArgb(181, 166, 150);
     static readonly Color UiAccent = Color.FromArgb(231, 181, 91);
@@ -37,7 +37,7 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PlayPoteBot · Crownfire";
+        Text = "PlayPoteBot · Adventurer’s Compass";
         using(var stream=typeof(HunterForm).Assembly.GetManifestResourceStream("PoteHunter.PlayPoteBotIcon"))
             if(stream!=null)Icon=new Icon(stream);
         FormClosed+=(_,_)=>Icon?.Dispose();
@@ -45,7 +45,7 @@ public sealed partial class HunterForm
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
         MinimumSize = new Size(1120, 760);
-        Size = new Size(1280, 980);
+        Size = new Size(1280, 1120);
         BackColor = UiWindow;
         ForeColor = UiText;
         Padding = Padding.Empty;
@@ -105,7 +105,7 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Name = "ironboundMasthead", Text = "PlayPoteBot   /   CROWNFIRE", Dock = DockStyle.Fill,
+            Name = "ironboundMasthead", Text = "PlayPoteBot   /   ADVENTURER’S COMPASS", Dock = DockStyle.Fill,
             Padding = new Padding(40, 0, 0, 0),
             Font = new Font("Georgia",16f), ForeColor = UiAccent,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty

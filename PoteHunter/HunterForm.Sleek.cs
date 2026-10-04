@@ -26,9 +26,13 @@ public sealed partial class HunterForm
             using var border = new Pen(UiBorder,1.3f);
             e.Graphics.FillPath(fill, outline);
             e.Graphics.DrawPath(border, outline);
+            using var inner=new Pen(Color.FromArgb(65,UiAccent));
+            using var inset=RoundedPath(card.Width-7,card.Height-7,UiCornerRadius);
+            var state=e.Graphics.Save();e.Graphics.TranslateTransform(3,3);e.Graphics.DrawPath(inner,inset);e.Graphics.Restore(state);
             using var trim=new Pen(UiAccent,2);
             e.Graphics.DrawLine(trim,14,2,Math.Min(card.Width-14,66),2);
             DrawIronboundCorners(e.Graphics, card.ClientRectangle);
+            FantasyFrame.Draw(e.Graphics,card.ClientRectangle);
         };
         card.SizeChanged += (_, _) =>
         {

@@ -98,6 +98,38 @@ internal static class AutoRepairChecks
         profile.Validate(image.Size);
         Require(profile.Inventory.Matches(image),"A matching repair marker was rejected.");
         RepairVisuals NoAutomatic()=>throw new Exception("Custom repair setup ran the full-screen automatic scan.");
+        using(var panel=new Bitmap(960,700))
+        {
+            using(var g=Graphics.FromImage(panel))
+            {
+                g.Clear(Color.FromArgb(30,40,50));
+                using var font=new Font("Segoe UI",14);
+                g.DrawString("INVENTORY",font,Brushes.White,420,100);
+                g.FillRectangle(Brushes.Silver,580,300,20,22);g.FillRectangle(Brushes.Black,585,303,6,8);
+                g.DrawString("Repair equipment?",font,Brushes.White,80,550);
+                g.DrawString("Yes",font,Brushes.White,360,550);
+            }
+            var captured=new RepairProfile(1,"fixture",960,700,RepairPatch.Capture(panel,new(415,96,170,32)),
+                RepairPatch.Capture(panel,new(577,297,30,28)),RepairPatch.Capture(panel,new(75,545,240,32)),RepairPatch.Capture(panel,new(355,545,60,32)));
+            using var shifted=new Bitmap(960,700);
+            using(var g=Graphics.FromImage(shifted)){g.Clear(Color.FromArgb(30,40,50));g.DrawImageUnscaled(panel,-139,41);}
+            var relocated=LiveRepairSurface.Recognize(shifted,captured,default,NoAutomatic);
+            Require(relocated.State.Inventory && relocated.State.Hammer && relocated.InventoryOffset==new Point(-139,41) &&
+                relocated.Hammer==new Point(captured.Hammer.Center.X-139,captured.Hammer.Center.Y+41) && !relocated.State.Confirm,
+                "A jointly moved inventory title and hammer was not located, or moved Yes was authorized.");
+            using(var g=Graphics.FromImage(shifted))g.FillRectangle(Brushes.Black,RepairInventoryLocation.Shift(captured.Hammer,new(-139,41)).Bounds);
+            Require(!LiveRepairSurface.Recognize(shifted,captured,default,NoAutomatic).State.Inventory,
+                "Moved inventory text alone authorized a relocated repair control.");
+            using var duplicate=new Bitmap(960,700);
+            using(var g=Graphics.FromImage(duplicate)){g.Clear(Color.FromArgb(30,40,50));g.DrawImageUnscaled(panel,-150,0);g.DrawImageUnscaled(panel,100,130);}
+            // Draw just the first pair again: a full-frame copy would erase it.
+            using(var g=Graphics.FromImage(duplicate))
+            {
+                g.DrawImage(panel,RepairInventoryLocation.Shift(captured.Inventory,new(-150,0)).Bounds,captured.Inventory.Bounds,GraphicsUnit.Pixel);
+                g.DrawImage(panel,RepairInventoryLocation.Shift(captured.Hammer,new(-150,0)).Bounds,captured.Hammer.Bounds,GraphicsUnit.Pixel);
+            }
+            Require(RepairInventoryLocation.Find(duplicate,captured,default)==null,"Two relocated inventory pairs were not rejected.");
+        }
         var customView=LiveRepairSurface.Recognize(image,profile,default,NoAutomatic);
         Require(customView.State.Inventory && customView.State.Hammer && customView.State.Prompt && customView.State.Confirm &&
             customView.Hammer==profile.Hammer.Center && customView.Confirm==profile.Confirm.Center && customView.HammerVisual==null,
