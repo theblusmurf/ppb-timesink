@@ -18,11 +18,16 @@ internal sealed class Navigation3DView : Control
     uint[] meshLists=[];MapScene3D? scene;MapRoute3D[] routes=[];MapMarker3D[] markers=[];
     Bitmap? artwork;GameMapLayout.Extent? artworkBounds;
     bool sceneDirty=true,artworkDirty=true,routesDirty=true,fontDirty=true,pending=true,disposed;
-    bool showTerrain=true,showObjects=true,showRoutes=true,showAnchors=true,showMapArtwork=true,topView;
+    bool showTerrain=true,showObjects=true,showRoutes=true,showAnchors=true,showMapArtwork=true,topView,passiveProjection;
+    readonly bool passive;
+    double corridorRadius;double? farmingRadius;Vec? farmingAnchor;
+    MapPolyline3D[] annotations=[];MapArea3D[] areas=[];MapCone3D? cone;
     int mapOpacity=70,selectedSlot;double yaw=.5,pitch=.78,distance=1400,span=1200;
     Vector3 center=new(1800,0,-1800);Point dragStart;MouseButtons dragButton;
     string status="3D map ready";long lastFrame=-100;string renderer="";
     internal bool Failed {get;private set;}
+    internal bool AutomaticFrames=>frameTimer.Enabled;
+    internal (Vector3 Center,double Distance,double Span) CameraState=>(center,distance,span);
     internal string Status=>status;
     internal event Action<string>? StatusChanged;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -42,10 +47,11 @@ internal sealed class Navigation3DView : Control
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal bool TopView{get=>topView;set{if(topView!=value){topView=value;RequestRender();}}}
 
-    internal Navigation3DView()
+    internal Navigation3DView(bool passive=false)
     {
+        this.passive=passive;
         SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.Opaque|ControlStyles.Selectable,true);
-        SetStyle(ControlStyles.OptimizedDoubleBuffer,false);TabStop=true;BackColor=Color.FromArgb(9,20,30);
+        SetStyle(ControlStyles.OptimizedDoubleBuffer,false);SetStyle(ControlStyles.Selectable,!passive);TabStop=!passive;BackColor=Color.FromArgb(9,20,30);
         AccessibleName="3D navigation map";AccessibleDescription="Read-only map. Drag to orbit, right-drag to pan, mouse wheel to zoom. Top view faces north.";
         frameTimer.Tick+=(_,_)=>{if(!Visible||disposed||!pending||Failed){frameTimer.Stop();return;}Invalidate();};
     }
@@ -72,6 +78,41 @@ internal sealed class Navigation3DView : Control
         routes=value.ToArray();routesDirty=true;RequestRender();
     }
     internal void SetMarkers(MapMarker3D[] value){markers=(value??[]).ToArray();RequestRender();}
+    internal void SetAnnotations(MapPolyline3D[] lines,MapArea3D[] rings,MapCone3D? direction)
+    {
+        annotations=(lines??[]).ToArray();areas=(rings??[]).ToArray();cone=direction;RequestRender();
+    }
+    internal void SetRouteRadii(double corridor,double? farming,Vec? anchor)
+    {
+        double radius=double.IsFinite(corridor)?Math.Clamp(corridor,0,2000):0;
+        double? area=farming is >0 and <=2000?farming:null;
+        Vec? home=anchor is Vec p&&p.Finite?p:null;
+        if(corridorRadius==radius&&farmingRadius==area&&farmingAnchor==home)return;
+        corridorRadius=radius;farmingRadius=area;farmingAnchor=home;routesDirty=true;RequestRender();
+    }
+    internal void SetPassiveRadarCamera(Vec point,double height,double radius)
+    {
+        if(!point.Finite||!double.IsFinite(height)||!double.IsFinite(radius))return;
+        passiveProjection=true;yaw=0;pitch=1.10;center=Reflect(new((float)point.X,(float)height,(float)point.Y));
+        span=Math.Clamp(radius,10,2000)*2;
+        double aspect=ClientSize.Height>0?(double)ClientSize.Width/ClientSize.Height:1;
+        distance=Math.Clamp(span*.5*1.12/.41421356237/Math.Min(1,Math.Max(.2,aspect)),3,50000);RequestRender();
+    }
+    internal void FitPassiveRoutes(Vec? player)
+    {
+        passiveProjection=true;yaw=0;pitch=1.10;
+        var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).ToList();
+        if(player is Vec p&&p.Finite)points.Add(p);
+        var positions=points.Where(p=>p.Finite).Select(p=>(p,h:MapSceneGeometry.Height(scene,p))).Where(p=>p.h.HasValue)
+            .Select(p=>Reflect(new((float)p.p.X,(float)p.h!.Value,(float)p.p.Y))).ToArray();
+        if(positions.Length==0){FitMap();return;}
+        var min=positions.Aggregate(Vector3.Min);var max=positions.Aggregate(Vector3.Max);
+        center=(min+max)/2;double margin=Math.Max(12,corridorRadius+2);
+        double width=max.X-min.X+margin*2,depth=max.Z-min.Z+margin*2,height=max.Y-min.Y;
+        double aspect=ClientSize.Height>0?(double)ClientSize.Width/ClientSize.Height:1;
+        double halfSpan=Math.Max(width/Math.Max(.2,aspect),topView?depth:depth*Math.Sin(pitch)+height*Math.Cos(pitch))*.5;
+        span=Math.Max(width,Math.Max(depth,height));distance=Math.Clamp(halfSpan*1.06/.41421356237,3,50000);RequestRender();
+    }
     internal void CenterOn(Vec point,double height)
     {
         if(!point.Finite||!double.IsFinite(height))return;
@@ -113,7 +154,7 @@ internal sealed class Navigation3DView : Control
     void RequestRender()
     {
         if(disposed)return;pending=true;
-        if(IsHandleCreated&&Visible&&!Failed){Invalidate();if(!frameTimer.Enabled)frameTimer.Start();}
+        if(!passive&&IsHandleCreated&&Visible&&!Failed){Invalidate();if(!frameTimer.Enabled)frameTimer.Start();}
     }
     protected override void OnHandleCreated(EventArgs e)
     {
@@ -142,7 +183,7 @@ internal sealed class Navigation3DView : Control
     void Fail(string reason)
     {
         Failed=true;pending=false;frameTimer.Stop();ReleaseContext();
-        status="3D unavailable · "+reason+". The 2D map remains available.";StatusChanged?.Invoke(status);Invalidate();
+        status="3D unavailable · "+reason+". The 2D map remains available.";StatusChanged?.Invoke(status);if(!passive)Invalidate();
     }
     protected override void OnHandleDestroyed(EventArgs e){frameTimer.Stop();ReleaseContext();base.OnHandleDestroyed(e);}
     protected override void OnVisibleChanged(EventArgs e){base.OnVisibleChanged(e);if(Visible)RequestRender();else frameTimer.Stop();}
@@ -153,7 +194,7 @@ internal sealed class Navigation3DView : Control
     {
         if(Failed||context==IntPtr.Zero)
         {e.Graphics.Clear(BackColor);TextRenderer.DrawText(e.Graphics,status,Font,ClientRectangle,Color.FromArgb(184,190,192),TextFormatFlags.HorizontalCenter|TextFormatFlags.VerticalCenter|TextFormatFlags.WordBreak);return;}
-        if(frameClock.ElapsedMilliseconds-lastFrame<34){pending=true;frameTimer.Start();return;}
+        if(!passive&&frameClock.ElapsedMilliseconds-lastFrame<34){pending=true;frameTimer.Start();return;}
         try{Render(true);pending=false;frameTimer.Stop();lastFrame=frameClock.ElapsedMilliseconds;}
         catch(Exception error) when(error is InvalidOperationException or ExternalException or OutOfMemoryException){Fail(error.Message);}
     }
@@ -185,7 +226,7 @@ internal sealed class Navigation3DView : Control
             if(sceneDirty)BuildScene();if(artworkDirty)BuildArtwork();if(routesDirty)BuildRoutes();if(fontDirty)BuildFont();
             int w=Math.Max(1,ClientSize.Width),h=Math.Max(1,ClientSize.Height);GL.glViewport(0,0,w,h);GL.glClear(GL.COLOR_BUFFER_BIT|GL.DEPTH_BUFFER_BIT);
             GL.glMatrixMode(GL.PROJECTION);GL.glLoadIdentity();double near=Math.Max(.05,distance/10000),far=distance+span*5+10000;
-            if(topView){double sy=distance*.41421356237;GL.glOrtho(-sy*w/h,sy*w/h,-sy,sy,near,far);}
+            if(topView||passiveProjection){double sy=distance*.41421356237;GL.glOrtho(-sy*w/h,sy*w/h,-sy,sy,near,far);}
             else{double sy=near*Math.Tan(Math.PI/8);GL.glFrustum(-sy*w/h,sy*w/h,-sy,sy,near,far);}
             Camera(out var eye,out var right,out var up);var forward=Vector3.Normalize(center-eye);
             GL.glMatrixMode(GL.MODELVIEW);GL.glLoadMatrixd([right.X,up.X,-forward.X,0,right.Y,up.Y,-forward.Y,0,right.Z,up.Z,-forward.Z,0,-Vector3.Dot(right,eye),-Vector3.Dot(up,eye),Vector3.Dot(forward,eye),1]);
@@ -198,8 +239,9 @@ internal sealed class Navigation3DView : Control
                 GL.glDisable(GL.POLYGON_OFFSET_FILL);GL.glDepthMask(true);GL.glDisable(GL.BLEND);GL.glDisable(GL.TEXTURE_2D);GL.glEnable(GL.LIGHTING);
             }
             if(showObjects&&objectList!=0)GL.glCallList(objectList);
-            GL.glDisable(GL.LIGHTING);GL.glDisable(GL.TEXTURE_2D);if(showRoutes&&routeList!=0)GL.glCallList(routeList);
-            if(showAnchors)DrawAnchors();DrawMarkers();GL.glFlush();
+            GL.glDisable(GL.LIGHTING);GL.glDisable(GL.TEXTURE_2D);
+            if(showRoutes&&routeList!=0){if(passive)GL.glDisable(GL.DEPTH_TEST);GL.glCallList(routeList);if(passive)GL.glEnable(GL.DEPTH_TEST);}
+            if(showAnchors)DrawAnchors();DrawAnnotations();DrawMarkers();GL.glFlush();
             if(swap&&!Native.SwapBuffers(dc))throw new InvalidOperationException("3D frame could not be displayed");
         }
         finally{Native.wglMakeCurrent(IntPtr.Zero,IntPtr.Zero);}
@@ -329,10 +371,37 @@ internal sealed class Navigation3DView : Control
         DeleteList(ref routeList);routesDirty=false;routeList=NewList();GL.glNewList(routeList,GL.COMPILE);
         foreach(var item in routes)
         {
-            var c=SlotColor(item.Slot);GL.glColor4ub(c.R,c.G,c.B,255);GL.glLineWidth(item.Slot==selectedSlot?3:2);
+            var c=SlotColor(item.Slot);if(corridorRadius>0&&RecoveryTravel.Recorded(item.Route))DrawCorridor(item.Route.Points,c);
+            GL.glColor4ub(c.R,c.G,c.B,255);GL.glLineWidth(item.Slot==selectedSlot?3:2);
             foreach(var part in DrapeRoute(scene,item.Route.Points)){GL.glBegin(GL.LINE_STRIP);foreach(var point in part)GL.glVertex3d(point.X,point.Y+.8,-point.Z);GL.glEnd();}
         }
         GL.glLineWidth(1);GL.glEndList();
+    }
+    void DrawCorridor(Vec[] points,Color color)
+    {
+        GL.glEnable(GL.BLEND);GL.glBlendFunc(GL.SRC_ALPHA,GL.ONE_MINUS_SRC_ALPHA);GL.glDepthMask(false);
+        GL.glColor4ub(color.R,color.G,color.B,45);
+        foreach(var part in DrapeRoute(scene,points))
+        {
+            (Vector3 Left,Vector3 Right)? previous=null;
+            for(int i=0;i<part.Length;i++)
+            {
+                var before=part[Math.Max(0,i-1)];var after=part[Math.Min(part.Length-1,i+1)];
+                var direction=new Vec(after.X-before.X,after.Z-before.Z);
+                if(direction.Length<=1e-6){previous=null;continue;}
+                var side=new Vec(-direction.Y,direction.X)*(corridorRadius/direction.Length);
+                var point=new Vec(part[i].X,part[i].Z);var left=point+side;var right=point-side;
+                double? lh=MapSceneGeometry.Height(scene,left),rh=MapSceneGeometry.Height(scene,right);
+                if(lh==null||rh==null){previous=null;continue;}
+                var section=(Left:new Vector3((float)left.X,(float)lh.Value+.6f,(float)left.Y),Right:new Vector3((float)right.X,(float)rh.Value+.6f,(float)right.Y));
+                if(previous is {} last)
+                {
+                    GL.glBegin(GL.TRIANGLES);foreach(var v in new[]{last.Left,last.Right,section.Left,last.Right,section.Right,section.Left})GL.glVertex3d(v.X,v.Y,-v.Z);GL.glEnd();
+                }
+                previous=section;
+            }
+        }
+        GL.glDepthMask(true);GL.glDisable(GL.BLEND);
     }
     internal static Vector3[][] DrapeRoute(MapScene3D? data,Vec[] points)
     {
@@ -363,13 +432,47 @@ internal sealed class Navigation3DView : Control
             DrawMarker(SlotName(item.Slot),p,h.Value,SlotColor(item.Slot),item.Route.Heading,item.Slot==selectedSlot);
         }
     }
-    void DrawMarkers(){foreach(var marker in markers)if(marker.Position.Finite&&double.IsFinite(marker.Height))DrawMarker(marker.Name,marker.Position,marker.Height,marker.Color,marker.Heading,true);}
-    void DrawMarker(string name,Vec point,double height,Color color,double heading,bool prominent)
+    void DrawAnnotations()
     {
+        foreach(var line in annotations.Take(8))DrawPolyline(line.Points.Take(4096).ToArray(),line.Color,line.Width);
+        foreach(var area in areas.Take(32))DrawArea(area);
+        if(showAnchors&&farmingRadius is double radius&&farmingAnchor is Vec anchor)DrawArea(new(anchor,radius,Color.FromArgb(127,199,174),$"Anchor area · {radius:0.#}m"));
+        if(cone is {} c&&c.Position.Finite&&double.IsFinite(c.Heading)&&double.IsFinite(c.Range)&&c.Range>0)
+        {
+            var facing=Movement.FromClientHeading(c.Heading);double heading=Math.Atan2(facing.Y,facing.X),half=Math.Clamp(c.HalfAngleDegrees,1,89)*Math.PI/180,range=Math.Clamp(c.Range,.1,2000);
+            var vertices=new List<Vec>{c.Position};for(int i=0;i<=24;i++){double angle=heading-half+half*2*i/24;vertices.Add(c.Position+new Vec(Math.Cos(angle),Math.Sin(angle))*range);}vertices.Add(c.Position);
+            DrawPolyline(vertices.ToArray(),c.Color,2);
+        }
+    }
+    void DrawArea(MapArea3D area)
+    {
+        if(!area.Center.Finite||!double.IsFinite(area.Radius)||area.Radius<=0||area.Radius>2000)return;
+        var points=new Vec[65];for(int i=0;i<points.Length;i++){double a=i*Math.PI/32;points[i]=area.Center+new Vec(Math.Cos(a),Math.Sin(a))*area.Radius;}
+        DrawPolyline(points,area.Color,1.5f);
+        if(area.Name.Length>0&&MapSceneGeometry.Height(scene,area.Center) is double h)DrawLabel(area.Name,area.Center,h,area.Color);
+    }
+    void DrawPolyline(Vec[] points,Color color,float width)
+    {
+        if(points.Length<2)return;
+        GL.glColor4ub(color.R,color.G,color.B,color.A);GL.glLineWidth(float.IsFinite(width)?Math.Clamp(width,1,5):1);
+        GL.glDisable(GL.DEPTH_TEST);GL.glEnable(GL.BLEND);GL.glBlendFunc(GL.SRC_ALPHA,GL.ONE_MINUS_SRC_ALPHA);
+        foreach(var part in DrapeRoute(scene,points)){GL.glBegin(GL.LINE_STRIP);foreach(var p in part)GL.glVertex3d(p.X,p.Y+1.2,-p.Z);GL.glEnd();}
+        GL.glDisable(GL.BLEND);GL.glEnable(GL.DEPTH_TEST);GL.glLineWidth(1);
+    }
+    void DrawMarkers(){foreach(var marker in markers)if(marker.Position.Finite&&double.IsFinite(marker.Height))DrawMarker(marker.ShowLabel?marker.Name:"",marker.Position,marker.Height,marker.Color,marker.Heading,true,marker.Engaged);}
+    void DrawMarker(string name,Vec point,double height,Color color,double heading,bool prominent,bool engaged=false)
+    {
+        if(passive)GL.glDisable(GL.DEPTH_TEST);
         double radius=Math.Clamp(distance*.003,1,10)*(prominent?1.2:1);GL.glColor4ub(color.R,color.G,color.B,255);GL.glLineWidth(prominent?3:2);
         GL.glBegin(GL.LINE_LOOP);for(int i=0;i<24;i++){double a=i*Math.PI/12;GL.glVertex3d(point.X+Math.Cos(a)*radius,height+1,-point.Y-Math.Sin(a)*radius);}GL.glEnd();
+        if(engaged){GL.glColor4ub(127,199,174,255);GL.glBegin(GL.LINE_LOOP);for(int i=0;i<24;i++){double a=i*Math.PI/12;GL.glVertex3d(point.X+Math.Cos(a)*radius*1.5,height+1,-point.Y-Math.Sin(a)*radius*1.5);}GL.glEnd();GL.glColor4ub(color.R,color.G,color.B,255);}
         if(double.IsFinite(heading)){var d=Movement.FromClientHeading(heading);GL.glBegin(GL.LINES);GL.glVertex3d(point.X,height+1,-point.Y);GL.glVertex3d(point.X+d.X*radius*2.8,height+1,-point.Y-d.Y*radius*2.8);GL.glEnd();}
-        if(fontLists!=0){GL.glDisable(GL.DEPTH_TEST);GL.glRasterPos3d(point.X+radius,height+radius+2,-point.Y);GL.glListBase(fontLists-32);var ascii=Encoding.ASCII.GetBytes(new string(name.Take(36).Select(c=>c is >= ' ' and <= '~'?c:'?').ToArray()));GL.glCallLists(ascii.Length,GL.UNSIGNED_BYTE,ascii);GL.glEnable(GL.DEPTH_TEST);}GL.glLineWidth(1);
+        DrawLabel(name,point,height+radius+1,color,radius);if(passive)GL.glEnable(GL.DEPTH_TEST);GL.glLineWidth(1);
+    }
+    void DrawLabel(string name,Vec point,double height,Color color,double offset=0)
+    {
+        if(fontLists==0||name.Length==0)return;GL.glColor4ub(color.R,color.G,color.B,255);GL.glDisable(GL.DEPTH_TEST);GL.glRasterPos3d(point.X+offset,height+1,-point.Y);
+        GL.glListBase(fontLists-32);var ascii=Encoding.ASCII.GetBytes(new string(name.Take(36).Select(c=>c is >= ' ' and <= '~'?c:'?').ToArray()));GL.glCallLists(ascii.Length,GL.UNSIGNED_BYTE,ascii);GL.glEnable(GL.DEPTH_TEST);
     }
     void BuildFont()
     {
@@ -395,17 +498,17 @@ internal sealed class Navigation3DView : Control
         if(dc!=IntPtr.Zero){Native.ReleaseDC(Handle,dc);dc=IntPtr.Zero;}
         sceneDirty=artworkDirty=routesDirty=fontDirty=true;
     }
-    protected override void OnMouseDown(MouseEventArgs e){base.OnMouseDown(e);if(e.Button is MouseButtons.Left or MouseButtons.Right){Focus();Capture=true;dragButton=e.Button;dragStart=e.Location;}}
+    protected override void OnMouseDown(MouseEventArgs e){if(passive)return;base.OnMouseDown(e);if(e.Button is MouseButtons.Left or MouseButtons.Right){Focus();Capture=true;dragButton=e.Button;dragStart=e.Location;}}
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        base.OnMouseMove(e);if(dragButton==MouseButtons.None)return;int dx=e.X-dragStart.X,dy=e.Y-dragStart.Y;dragStart=e.Location;
+        if(passive)return;base.OnMouseMove(e);if(dragButton==MouseButtons.None)return;int dx=e.X-dragStart.X,dy=e.Y-dragStart.Y;dragStart=e.Location;
         if(dragButton==MouseButtons.Left&&!topView){yaw+=dx*.008;pitch=Math.Clamp(pitch+dy*.006,.16,1.48);}
         else{Camera(out _,out var right,out var up);right.Y=up.Y=0;if(right.LengthSquared()>0)right=Vector3.Normalize(right);if(up.LengthSquared()>0)up=Vector3.Normalize(up);float s=(float)(distance*.828427/Math.Max(1,ClientSize.Height));center+=(-dx*right+dy*up)*s;}
         RequestRender();
     }
-    protected override void OnMouseUp(MouseEventArgs e){base.OnMouseUp(e);dragButton=MouseButtons.None;Capture=false;}
-    protected override void OnMouseCaptureChanged(EventArgs e){base.OnMouseCaptureChanged(e);if(!Capture)dragButton=MouseButtons.None;}
-    protected override void OnMouseWheel(MouseEventArgs e){base.OnMouseWheel(e);distance=Math.Clamp(distance*Math.Pow(.84,e.Delta/120.0),3,50000);RequestRender();}
+    protected override void OnMouseUp(MouseEventArgs e){if(passive)return;base.OnMouseUp(e);dragButton=MouseButtons.None;Capture=false;}
+    protected override void OnMouseCaptureChanged(EventArgs e){if(passive)return;base.OnMouseCaptureChanged(e);if(!Capture)dragButton=MouseButtons.None;}
+    protected override void OnMouseWheel(MouseEventArgs e){if(passive)return;base.OnMouseWheel(e);distance=Math.Clamp(distance*Math.Pow(.84,e.Delta/120.0),3,50000);RequestRender();}
     protected override void Dispose(bool disposing){if(disposing&&!disposed){disposed=true;frameTimer.Stop();frameTimer.Dispose();ReleaseContext();artwork?.Dispose();artwork=null;}base.Dispose(disposing);}
 
     [StructLayout(LayoutKind.Sequential)]struct PixelFormat

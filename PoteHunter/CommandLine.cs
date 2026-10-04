@@ -31,6 +31,18 @@ static class CommandLine
         if(args.Contains("--test-internal-target-candidates"))return InternalTargetSelectionProbe.RunCandidateTest();
         if(args.Contains("--check-patch-compatibility"))return CompatibilityChecks.CheckPatchedFile(PoteMemoryProbe.Program.ClientPath);
         if(args.Contains("--ranged-ui-check"))return HunterForm.CheckRangedPullUi();
+        if(args.Contains("--map-overlay-native-check"))
+        {
+            if(args.Length!=2)return 2;
+            try{ApplicationConfiguration.Initialize();var result=NavigationOverlay3DRendererChecks.RunNative(args[1]);File.WriteAllText(Path.Combine(args[1],"native-overlay-result.txt"),result);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"map-overlay-native-error.txt"),ex.ToString());return 1;}
+        }
+        if(args.Contains("--map-overlay-native-local-check"))
+        {
+            if(args.Length!=3)return 2;
+            try{ApplicationConfiguration.Initialize();NavigationOverlay3DRendererChecks.RunLocal(args[1],args[2]);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"map-overlay-native-local-error.txt"),ex.ToString());return 1;}
+        }
         if(args.Contains("--map-native-check"))
         {
             if(args.Length!=2)return 2;

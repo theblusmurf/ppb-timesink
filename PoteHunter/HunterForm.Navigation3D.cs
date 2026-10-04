@@ -42,6 +42,7 @@ public sealed partial class HunterForm
             navigation3DAnchors.Checked=o.Navigation3DAnchors;navigationMapOpacity.Value=o.Navigation3DMapOpacity;
         }
         catch(Exception ex) when(ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException){ }
+        InitializeOverlay3D();
         layout.SuspendLayout();layout.Controls.Clear();layout.RowCount=2;layout.ColumnCount=2;layout.RowStyles.Clear();layout.ColumnStyles.Clear();
         layout.ColumnStyles.Add(new(SizeType.Percent,100));layout.ColumnStyles.Add(new(SizeType.Absolute,284));
         layout.RowStyles.Add(new(SizeType.Percent,100));layout.RowStyles.Add(new(SizeType.Absolute,54));
@@ -68,8 +69,8 @@ public sealed partial class HunterForm
         savedNavigationSlot.Width=235;navigationRecordingStatus.MaximumSize=new(235,0);savedNavigationRoutesStatus.MaximumSize=new(235,0);
         Section("navigationSavedRoutes","Saved routes",true,navigation3DTarget,savedNavigationSlot,startNavigationRecording,saveNavigationRoute,navigationRecordingStatus,useAlternativeHuntRoutes,savedNavigationRoutesStatus);
         Section("navigationRouteManagement","Route management",false,saveNavigationSpot,assignUnassignedNavigationRoutes,clearSavedNavigationRoute,clearAllSavedNavigationRoutes);
-        Section("navigationOverlayOptions","Overlay options",false,showNavigationOverlay,showNavigationRoutes,showRouteOverlay,showTreasureChestMarkers,
-            new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="2D view radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);
+        Section("navigationOverlayOptions","Overlay options",false,showNavigationOverlay,radar3D,showNavigationRoutes,showRouteOverlay,routes3D,overlay3DTopView,showTreasureChestMarkers,overlay3DStatus,
+            new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="Radar radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);
         Section("navigationLootPresentation","Loot overlay",false,showLootTrackerOverlay,lootTrackerDesign,lootTrackerScaleLabel,lootTrackerScale,lootTrackerBackgroundLabel,lootTrackerBackgroundOpacity,resetLootTracker,resetLootTimer);
         Section("navigationRoutingOptions","Routing options",false,automaticRouting,guideTreasureChests,clearNavigation);
         side.Controls.Add(navigation3DHint);layout.Controls.Add(side,1,0);
@@ -131,7 +132,7 @@ public sealed partial class HunterForm
         if(!navigation3DInitialized)return o;
         o.Navigation3D=navigation3DPreferred;o.Navigation3DMap=navigation3DMap.Checked;o.Navigation3DTerrain=navigation3DTerrain.Checked;
         o.Navigation3DObjects=navigation3DObjects.Checked;o.Navigation3DRoutes=navigation3DRoutes.Checked;
-        o.Navigation3DAnchors=navigation3DAnchors.Checked;o.Navigation3DMapOpacity=navigationMapOpacity.Value;return o;
+        o.Navigation3DAnchors=navigation3DAnchors.Checked;o.Navigation3DMapOpacity=navigationMapOpacity.Value;return WithOverlay3DSettings(o);
     }
     void Navigation3DPresentationChanged()
     {

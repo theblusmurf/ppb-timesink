@@ -24,6 +24,7 @@
   <ItemGroup><EmbeddedResource Include="ThemeAssets/*.png" LogicalName="PoteHunter.ThemeAssets.%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="LootIcons/*.png" LogicalName="PoteHunter.LootIcons.%(Filename)%(Extension)" /></ItemGroup>
   <ItemGroup><None Include="maps\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Include="../NAVIGATION-3D.md" Link="NAVIGATION-3D.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <PropertyGroup Condition="'$(Portable)' == 'true'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

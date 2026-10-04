@@ -429,12 +429,14 @@ public sealed partial class HunterForm
             if (width < 100 || height < 100) HideNavigationOverlay();
             else
             {
-                navigationOverlay ??= new NavigationOverlay(DrawNavigation);
+                navigationOverlay ??= new NavigationOverlay(DrawRadarOverlay);
                 navigationOverlay.Bounds = new Rectangle(
                     clientBounds.Right - NavigationOverlayMargin - width,
                     clientBounds.Top + NavigationOverlayMargin,
                     width,
                     height);
+                RefreshOverlay3DFrames(navigationOverlay.ClientSize,routeOverlay?.ClientSize ?? Size.Empty);
+                navigationOverlay.SetTitle("PlayPoteBot RADAR · "+Overlay3DMode(radar3D.Checked,navigationOverlay3D));
                 if (!navigationOverlay.Visible) navigationOverlay.Show();
                 navigationOverlay.Invalidate();
             }
@@ -452,6 +454,8 @@ public sealed partial class HunterForm
                 routeOverlay??=new NavigationOverlay(DrawRouteOverlay,RouteOverlayTitle(),"Primary: gold  ·  Alt 1: blue  ·  Alt 2: rose  ·  You: white");
                 routeOverlay.SetTitle(RouteOverlayTitle());
                 routeOverlay.Bounds=new(clientBounds.Right-NavigationOverlayMargin-width,clientBounds.Bottom-NavigationOverlayMargin-height,width,height);
+                RefreshOverlay3DFrames(navigationOverlay?.ClientSize ?? Size.Empty,routeOverlay.ClientSize);
+                routeOverlay.SetTitle("SAVED ROUTES · "+Overlay3DMode(routes3D.Checked,routeOverlay3D)+$" · {CurrentRouteCorridorRadius():0.#}m corridor");
                 if(!routeOverlay.Visible)routeOverlay.Show();
                 routeOverlay.Invalidate();
             }
@@ -526,6 +530,7 @@ public sealed partial class HunterForm
 
     void DrawRouteOverlay(Graphics g,Size size)
     {
+        if(TryDrawOverlay3D(g,size,routes3D.Checked,routeOverlay3D))return;
         bool hasMap=zoneMapBackground.TryGet(navigationZone,out var image,out var b);
         DrawSavedRouteOverlay(g,size,navigation.SavedRoutesForZone(navigationZone).ToArray(),navigationPosition,
             hasMap?image:null,hasMap?new GameMapLayout.Extent(b.MinX,b.MinY,b.MaxX,b.MaxY):null,navigationMapOverview && navigationMapOverviewZone==navigationZone,
@@ -680,6 +685,7 @@ public sealed partial class HunterForm
 
     void DisposeNavigationOverlay()
     {
+        DisposeOverlay3D();
         navigationOverlay?.Dispose();navigationOverlay=null;
         routeOverlay?.Dispose();routeOverlay=null;
         lootTrackerOverlay?.Dispose();lootTrackerOverlay=null;

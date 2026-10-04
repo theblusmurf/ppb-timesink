@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.104
+
+- Add recovered 3D terrain, available buildings and original game-map artwork to both the in-game radar and saved-route overlay. Each has a saved independent 3D switch, with a shared north-up tilted/top camera choice. Display controls remain in Routes → Navigation → Overlay options; map layer visibility and artwork opacity apply to all 3D views.
+- Keep the radar centered on the character at the chosen map-unit radius. Retain copied player heading and direction cone, red/orange living target markers, teal engagement rings, gold live and amber remembered chests, travel trail, current path and blocked/avoid annotations. The route overlay fits current-zone paths and the player, including colored anchors/facing, the configured start corridor and an anchor-area ring that does not change its zoom.
+- Load the current game zone independently of the main Navigation page and map selector. Reject stale zone loads and dynamic markers, bound retained map geometry, and render into cached bitmaps from hidden native windows. The actual overlays retain their click-through, no-activation and focus/visibility rules. Unavailable map data or hardware rendering falls back to the existing 2D presentation.
+- Bound passive readback resolution and refresh cadence; release frames, textures and native contexts on zone reset/close. Include the navigation guide in portable and installed packages. No game models, artwork, local routes, profiles, telemetry or diagnostic screenshots are bundled or published.
+- Validate saved display options during hunting, current-zone independence, stale/disconnected readings, original 2D fallback, hidden native GPU radar/route rendering, radius annotations, layer opacity, resource cleanup and focus preservation. Existing combat, loot, revival, repair and route-following decisions are unchanged. Live GPU responsiveness and terrain/bridge visibility require verification after updating.
+
 ## Release1.103
 
 - Add the approved native 3D Navigation view with recovered terrain, available buildings and static objects read from the verified local game installation. Drape the original game map over the terrain with a saved 0–100% opacity control; keep neutral terrain outside verified map artwork bounds.

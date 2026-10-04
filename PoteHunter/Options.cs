@@ -70,6 +70,9 @@ public sealed class Options
     // nearby targets, chests, and the character while a route is running.
     public bool ShowNavigationRoutes { get; set; } = true;
     public bool ShowRouteOverlay { get; set; }
+    public bool Radar3D { get; set; } = true;
+    public bool RouteOverlay3D { get; set; } = true;
+    public bool Overlay3DTopView { get; set; }
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
     public bool Navigation3D { get; set; } = true;

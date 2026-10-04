@@ -1,6 +1,14 @@
 # Native 3D navigation
 
-Open **Routes → Navigation**. The native view reads recovered terrain and available static objects from the verified local game installation. It requires no browser, WebView or separate rendering download. Choose **2D** to return to the original map view. The passive radar and route overlays retain their existing 2D presentation.
+Open **Routes → Navigation**. The native view reads recovered terrain and available static objects from the verified local game installation. It requires no browser, WebView or separate rendering download. Choose **2D** to return to the original main map view.
+
+## In-game overlays
+
+Expand **Overlay options**. Enable **Show radar overlay** or **Show route overlay**, then select **3D radar** / **3D route overlay** independently. Both default to 3D; clearing either switch restores its original 2D presentation. **Overlays: north-up top view** changes the fixed tilted camera to an overhead view. Map layers and opacity above apply to the 3D overlays. These presentation choices can be changed and saved while hunting.
+
+The radar follows the character using **Radar radius (map units)**. Red/orange markers represent known/unknown-HP living monsters; teal rings identify engaged targets. Gold marks live chests and amber marks remembered chests. Player heading, direction cone, traveled trail, current path and recorded blocked/avoid areas remain visual annotations. Dynamic markers require fresh connected readings. The route overlay fits the selected target's current-zone saved paths and player, retaining route colors, anchor facing, start corridor and farming area. Increasing the farming-area radius annotates the view without enlarging its zoom.
+
+Overlays always use the current game zone, even when the main window is on another page, displaying 2D or browsing another zone. They remain passive and click-through; use controls in the application to change their view. Hidden renderer windows supply cached frames without taking focus. GPU readback is bounded to 900 pixels per axis, normally at most five radar frames and 2.5 route frames per second. Unsupported/missing terrain or hardware graphics fall back to 2D, with a status in Overlay options. Terrain remains a visual aid rather than confirmed collision or walkability.
 
 ## Viewing
 

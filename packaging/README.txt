@@ -8,7 +8,12 @@ Hover HP/MP for details. Route and loot options remain independently adjustable.
 Choose a map, drag to orbit, right-drag to pan, and scroll to zoom. Map layers
 controls the original artwork, its transparency, terrain, objects, routes and anchors.
 Top view is north-up. Fit routes and View anchor use the selected target's routes.
-Unsupported client/data or hardware falls back to 2D; the in-game overlays stay 2D.
+Unsupported client/data or hardware falls back to 2D.
+Overlay options adds independent 3D radar and 3D route overlay switches, plus
+a fixed north-up tilted/top camera. Radar radius controls player-centered zoom;
+the route overlay fits paths and displays corridor/anchor areas. Both remain
+click-through and always use the current game zone. Map layers/opacity apply
+to the 3D overlays too. Display controls do not change movement or recovery.
 No game models or artwork are included. Terrain is for viewing and does not alter
 movement, collision or recovery. See NAVIGATION-3D.md for supported maps and limits.
 
