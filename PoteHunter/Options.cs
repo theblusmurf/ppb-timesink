@@ -70,6 +70,16 @@ public sealed class Options
     // nearby targets, chests, and the character while a route is running.
     public bool ShowNavigationRoutes { get; set; } = true;
     public bool ShowRouteOverlay { get; set; }
+    public bool ShowSentinelRadar { get; set; } = true;
+    public bool SentinelSoundEnabled { get; set; } = true;
+    int sentinelRange=25;
+    public int SentinelRange { get=>sentinelRange; set=>sentinelRange=Math.Clamp(value,1,100); }
+    int sentinelVolumePercent=45;
+    public int SentinelVolumePercent { get=>sentinelVolumePercent; set=>sentinelVolumePercent=Math.Clamp(value,0,100); }
+    // A separate flag permits valid negative coordinates on monitors left of the primary.
+    public bool SentinelRadarPositionSaved { get; set; }
+    public int SentinelRadarX { get; set; }
+    public int SentinelRadarY { get; set; }
     public bool Radar3D { get; set; } = true;
     public bool RouteOverlay3D { get; set; } = true;
     public bool Overlay3DTopView { get; set; }

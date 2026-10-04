@@ -1,8 +1,37 @@
 # Player recognition
 
 Player status is observational. It does not target players, start combat, change
-movement, send chat, or establish who caused damage. Alert sound/layout concepts
-are separate previews and have not been selected or enabled in this update.
+movement, send chat, or establish who caused damage.
+
+## Sentinel Radar
+
+In **Routes → Navigation → Sentinel Radar**, turn the overlay or paired sonar
+sound on/off, adjust **Enemy alert range** from **1 to 100 map units** in one-unit
+steps, and set sound volume from 0–100%. The initial range is 25 and volume 45%.
+These choices can change during hunting and are saved independently of combat
+settings. The slider changes both the circular radar and arrival sound range.
+
+The compact north-up radar shows nearby players and the nearest recognized enemy's
+name, faction, distance and map bearing. Drag its header to reposition it; the
+body passes clicks through to the game. **Reset radar position** restores its
+initial placement. It scales to fit the game window and retains negative monitor
+coordinates. The existing terrain radar and route overlays remain separate.
+
+One paired sonar clip announces a new opposing-faction enemy entering the chosen
+range in a verified PvP zone. Current players establish a silent baseline when
+connecting, enabling the radar, changing its range/zone/character, or returning
+after a prolonged reading gap. Repeated observations do not repeat the sound;
+leaving beyond the selected range plus three units, or disappearing, for two
+seconds rearms that identity. Simultaneous arrivals share one clip; sounds are
+spaced at least three seconds apart. Muted or background arrivals are consumed,
+not replayed on unmute or focus return.
+
+Audio pauses for unknown/dead local HP, stale/disconnected readings, background
+game windows, disabled radar/sound, or zero volume. Unknown/non-PvP zones and
+validated party members never trigger enemy audio. Other-player HP may be unknown;
+confirmed-dead bodies are excluded. Model-based faction and the zone-policy
+limitations below still apply. Real client playback/placement should be checked
+after upgrading; offline verification does not establish live attackability.
 
 ## Faction families
 

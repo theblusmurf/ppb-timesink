@@ -31,6 +31,7 @@ static class SelfTests
             Avoidance.SelfTest();
             CombatCourtesy.SelfTest();
             PlayerRecognitionChecks.Run();
+            SentinelAlertChecks.Run();
             PlayerGreeting.SelfTest();
             Encounter.SelfTest();
             CombatPressure.SelfTest();

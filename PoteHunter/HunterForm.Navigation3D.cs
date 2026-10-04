@@ -43,6 +43,7 @@ public sealed partial class HunterForm
         }
         catch(Exception ex) when(ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException){ }
         InitializeOverlay3D();
+        InitializeSentinelRadar();
         layout.SuspendLayout();layout.Controls.Clear();layout.RowCount=2;layout.ColumnCount=2;layout.RowStyles.Clear();layout.ColumnStyles.Clear();
         layout.ColumnStyles.Add(new(SizeType.Percent,100));layout.ColumnStyles.Add(new(SizeType.Absolute,284));
         layout.RowStyles.Add(new(SizeType.Percent,100));layout.RowStyles.Add(new(SizeType.Absolute,54));
@@ -73,6 +74,10 @@ public sealed partial class HunterForm
         Section("navigationOverlayOptions","Overlay options",false,showNavigationOverlay,radar3D,showNavigationRoutes,showRouteOverlay,routes3D,overlay3DTopView,showTreasureChestMarkers,overlay3DStatus,
             new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="Radar radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);
         Section("navigationLootPresentation","Loot overlay",false,showLootTrackerOverlay,lootTrackerDesign,lootTrackerScaleLabel,lootTrackerScale,lootTrackerBackgroundLabel,lootTrackerBackgroundOpacity,resetLootTracker,resetLootTimer);
+        Section("navigationSentinelRadar","Sentinel Radar",false,showSentinelRadar,sentinelSoundEnabled,
+            sentinelRangeLabel,sentinelRange,
+            new Label{AutoSize=true,MaximumSize=new(240,0),Text="Paired sonar · new enemy entries\nOpposing factions in confirmed PvP zones"},
+            new Label{AutoSize=true,Text="Sound volume (%)"},sentinelVolume,resetSentinelPosition);
         Section("navigationRoutingOptions","Routing options",false,automaticRouting,guideTreasureChests,clearNavigation);
         side.Controls.Add(navigation3DHint);layout.Controls.Add(side,1,0);
         layout.Controls.Add(navigation3DStatus,0,1);layout.SetColumnSpan(navigation3DStatus,2);

@@ -263,6 +263,7 @@ public sealed partial class HunterForm
     Options WithOverlaySettings(Options options)
     {
         WithNavigation3DSettings(options);
+        WithSentinelSettings(options);
         options.ShowNavigationOverlay = showNavigationOverlay.Checked;
         options.ShowNavigationRoutes = showNavigationRoutes.Checked;
         options.ShowRouteOverlay = showRouteOverlay.Checked;
@@ -408,6 +409,7 @@ public sealed partial class HunterForm
             HideNavigationOverlay();
             HideRouteOverlay();
             HideLootTrackerOverlay();
+            UpdateSentinelRadar(null,false);
             return;
         }
 
@@ -417,6 +419,7 @@ public sealed partial class HunterForm
             HideNavigationOverlay();
             HideRouteOverlay();
             HideLootTrackerOverlay();
+            UpdateSentinelRadar(null,false);
             return;
         }
 
@@ -489,6 +492,7 @@ public sealed partial class HunterForm
             lootTrackerOverlay.RefreshSnapshot();
         }
         else HideLootTrackerOverlay();
+        UpdateSentinelRadar(clientBounds,foreground==world.Window);
     }
 
     bool GameProcessAlive()
@@ -686,6 +690,7 @@ public sealed partial class HunterForm
     void DisposeNavigationOverlay()
     {
         DisposeOverlay3D();
+        DisposeSentinelRadar();
         navigationOverlay?.Dispose();navigationOverlay=null;
         routeOverlay?.Dispose();routeOverlay=null;
         lootTrackerOverlay?.Dispose();lootTrackerOverlay=null;

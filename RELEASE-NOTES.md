@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.106
+
+- Implement the selected Sentinel Radar: compact navy/brass, north-up circular player radar with nearest opposing enemy name, faction, distance, bearing and count. Drag its passive header to reposition it; its body passes clicks through. Preserve the existing terrain radar and routes.
+- Add a saved Enemy alert range slider from 1–100 map units in one-unit increments (default 25). Apply the same radius to the radar and arrival sounds. Navigation has independent overlay/sound toggles, volume (default 45%), and position reset; presentation settings can change during hunting without saving unrelated combat edits.
+- Play a nonblocking paired sonar for new enemy entries only in confirmed PvP zones. Use silent startup/range/identity/zone baselines, full player identities, duplicate-UID rejection, range plus three-unit exit hysteresis, two-second exit grace, coalesced arrivals and a three-second sound gap. Muted/background arrivals are never replayed later. Unknown/dead local HP, stale/disconnected readings and lost game focus pause sound.
+- Freeze local and other-player health with the accepted faction poll. Keep unknown faction/non-PvP/party statuses distinct; confirmed-dead bodies are omitted. Existing model-based faction and limited verified zone rules apply; enemy status does not establish actual attackability.
+- Validate radius boundaries, slider persistence during hunting, audio lifecycle through an injected backend, generated PCM, stale/death/focus gates, immutable snapshots, multi-monitor positioning and native passive window rendering offline. No gameplay input, installed-app replacement or actual audio playback is used in validation; live behavior remains to be checked after updating.
+
 ## Release1.105
 
 - Recognize exact Human/Kartefant and Akkan/Merkhadian player body families, compare them with the actual connected character, and label opposing factions as Enemy only in confirmed PvP zones. Zone 8 Caernarvon is PvP; Zone 12 Almighty Land uses the previously user-confirmed opposing-faction non-PvP rule. Other zone IDs remain unverified, including map-geometry aliases. No complete current server rule catalog or safe-area boundaries have been verified.

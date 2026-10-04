@@ -5,6 +5,7 @@ public sealed partial class HunterForm
     Entity? recognitionSelf;
     int recognitionZone;
     long recognitionSeen;
+    Health recognitionHealth;
     ObservedPlayer[] recognizedPlayers=[];
     readonly Label navigationPlayerRecognitionLabel=new(){Name="navigationPlayerRecognitionLabel",AutoSize=true,
         MaximumSize=new(240,0),ForeColor=ImperialTheme.Muted,Text="Players · faction + zone",Margin=new(8,5,8,12)};
@@ -21,18 +22,20 @@ public sealed partial class HunterForm
         // Freeze identities, faction and roster from the same accepted poll.
         // The asynchronous hunt loop may replace entities between UI ticks.
         recognitionSelf=self;recognitionZone=navigationZone;
+        recognitionHealth=latestHealth.GetValueOrDefault(self.Id);
         recognizedPlayers=entities.Where(e=>CombatCourtesy.IsOtherPlayer(e,self.Id)&&e.Position.Finite&&
                 !latestHealth.GetValueOrDefault(e.Id).Dead)
             .OrderBy(e=>(e.Position-self.Position).Length).Take(128).Select(e=>new ObservedPlayer(e,
                 PlayerRecognition.Classify(e,self,navigationZone,currentParty.Available&&
-                    currentParty.Members.Any(m=>m.Id==e.Id&&m.Name.Equals(e.Name,StringComparison.OrdinalIgnoreCase))))).ToArray();
+                    currentParty.Members.Any(m=>m.Id==e.Id&&m.Name.Equals(e.Name,StringComparison.OrdinalIgnoreCase))),
+                latestHealth.GetValueOrDefault(e.Id))).ToArray();
         recognitionSeen=Environment.TickCount64;
     }
-    void ClearPlayerRecognition(){recognitionSelf=null;recognitionZone=-1;recognitionSeen=0;recognizedPlayers=[];}
+    void ClearPlayerRecognition(){recognitionSelf=null;recognitionZone=-1;recognitionSeen=0;recognitionHealth=default;recognizedPlayers=[];}
     bool PlayerRecognitionFresh=>connected&&recognitionSelf!=null&&recognitionSelf.Id==guardSelfId&&
         recognitionZone==navigationZone&&Environment.TickCount64-recognitionSeen is >=0 and <3000;
 
-    readonly record struct ObservedPlayer(Entity Entity,PlayerRecognitionResult Recognition);
+    readonly record struct ObservedPlayer(Entity Entity,PlayerRecognitionResult Recognition,Health Health);
     ObservedPlayer[] RecognizedPlayers()
     {
         if(!PlayerRecognitionFresh)return [];
@@ -47,7 +50,7 @@ public sealed partial class HunterForm
             OwnFaction=PlayerRecognitionFresh?PlayerRecognition.FactionLabel(PlayerRecognition.Faction(recognitionSelf!.Model)):"Unknown faction",
             FactionBasis="Exact player model family; no verified server faction or attackability flag",
             EnemyCountWithin25=players.Count(p=>p.Recognition.Enemy&&(p.Entity.Position-navigationPosition).Length<=25),
-            Attackability="Not determined",AlertSound="Design selection pending" };
+            Attackability="Not determined",Sentinel=SentinelRadarState() };
     }
     object[] RecognizedPlayerState()=>RecognizedPlayers().Select(p=>(object)new {p.Entity.Id,p.Entity.Generation,p.Entity.Name,p.Entity.Model,p.Entity.Position,
         Faction=p.Recognition.OtherFaction.ToString(),FactionLabel=PlayerRecognition.FactionLabel(p.Recognition.OtherFaction),
