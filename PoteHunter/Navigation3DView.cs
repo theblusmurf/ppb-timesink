@@ -459,12 +459,13 @@ internal sealed class Navigation3DView : Control
         foreach(var part in DrapeRoute(scene,points)){GL.glBegin(GL.LINE_STRIP);foreach(var p in part)GL.glVertex3d(p.X,p.Y+1.2,-p.Z);GL.glEnd();}
         GL.glDisable(GL.BLEND);GL.glEnable(GL.DEPTH_TEST);GL.glLineWidth(1);
     }
-    void DrawMarkers(){foreach(var marker in markers)if(marker.Position.Finite&&double.IsFinite(marker.Height))DrawMarker(marker.ShowLabel?marker.Name:"",marker.Position,marker.Height,marker.Color,marker.Heading,true,marker.Engaged);}
-    void DrawMarker(string name,Vec point,double height,Color color,double heading,bool prominent,bool engaged=false)
+    void DrawMarkers(){foreach(var marker in markers)if(marker.Position.Finite&&double.IsFinite(marker.Height))DrawMarker(marker.ShowLabel?marker.Name:"",marker.Position,marker.Height,marker.Color,marker.Heading,true,marker.Engaged,marker.Player);}
+    void DrawMarker(string name,Vec point,double height,Color color,double heading,bool prominent,bool engaged=false,bool player=false)
     {
         if(passive)GL.glDisable(GL.DEPTH_TEST);
         double radius=Math.Clamp(distance*.003,1,10)*(prominent?1.2:1);GL.glColor4ub(color.R,color.G,color.B,255);GL.glLineWidth(prominent?3:2);
-        GL.glBegin(GL.LINE_LOOP);for(int i=0;i<24;i++){double a=i*Math.PI/12;GL.glVertex3d(point.X+Math.Cos(a)*radius,height+1,-point.Y-Math.Sin(a)*radius);}GL.glEnd();
+        int corners=player?4:24;
+        GL.glBegin(GL.LINE_LOOP);for(int i=0;i<corners;i++){double a=i*Math.PI*2/corners;GL.glVertex3d(point.X+Math.Cos(a)*radius,height+1,-point.Y-Math.Sin(a)*radius);}GL.glEnd();
         if(engaged){GL.glColor4ub(127,199,174,255);GL.glBegin(GL.LINE_LOOP);for(int i=0;i<24;i++){double a=i*Math.PI/12;GL.glVertex3d(point.X+Math.Cos(a)*radius*1.5,height+1,-point.Y-Math.Sin(a)*radius*1.5);}GL.glEnd();GL.glColor4ub(color.R,color.G,color.B,255);}
         if(double.IsFinite(heading)){var d=Movement.FromClientHeading(heading);GL.glBegin(GL.LINES);GL.glVertex3d(point.X,height+1,-point.Y);GL.glVertex3d(point.X+d.X*radius*2.8,height+1,-point.Y-d.Y*radius*2.8);GL.glEnd();}
         DrawLabel(name,point,height+radius+1,color,radius);if(passive)GL.glEnable(GL.DEPTH_TEST);GL.glLineWidth(1);

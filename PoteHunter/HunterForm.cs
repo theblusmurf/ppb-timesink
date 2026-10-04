@@ -488,6 +488,7 @@ public sealed partial class HunterForm : Form
     async Task Connect()
     {
         if (busy || working) return;
+        ClearPlayerRecognition();
         nextCharacterReconnect=Environment.TickCount64+5000;
         busy = true; connected = false; movement = null; connect.Enabled = false; message = "Reading active creaturesâ€¦";
         player.Text="";
@@ -546,6 +547,7 @@ public sealed partial class HunterForm : Form
     void UpdateDetectedCharacter(Entity self)
     {
         bool changed=detectedCharacter!=null && !LocalCharacter.Same(detectedCharacter,self);
+        if(changed)ClearPlayerRecognition();
         bool revivedBody=changed && deathRecovery.Pending && RecoveryRouting.SameCharacter(detectedCharacter!,self);
         if(changed && !revivedBody)
         {
@@ -560,7 +562,7 @@ public sealed partial class HunterForm : Form
     {
         status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError) + (HuntingSessionLog.Current?.LastError is string logError ? " · Session log: "+logError : "");
         lootTracker.ObserveActivity(working && connected && activeGuardOptions!=null);
-        if(!connected){HuntingSessionLog.Current?.ObservationGap("Client disconnected");lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
+        if(!connected){ClearPlayerRecognition();HuntingSessionLog.Current?.ObservationGap("Client disconnected");lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
         if(busy)return;
         try
         {
@@ -571,7 +573,7 @@ public sealed partial class HunterForm : Form
             try { entities=world.Poll();self=world.LocalPlayer();recoveryReadFailureAt=0; }
             catch(InvalidOperationException) when(working && deathRecovery.Pending && !deathReturnInProgress && cancel?.IsCancellationRequested==false)
             {
-                Input.Release();
+                ClearPlayerRecognition();Input.Release();
                 long now=Environment.TickCount64;
                 if(recoveryReadFailureAt==0)recoveryReadFailureAt=now;
                 if(now-recoveryReadFailureAt>15000)throw;
@@ -588,14 +590,15 @@ public sealed partial class HunterForm : Form
             ObserveLoggedHealth(self,health.GetValueOrDefault(self.Id),navigationZone);
             chestCatalog.Observe(navigationZone,entities.Where(entity=>Targeting.IsChest(entity) && !health.GetValueOrDefault(entity.Id).Dead));
             lootTracker.ObserveZone(navigationZone);
-            if(beforeZone!=navigationZone) {navigation.Clear();if(working)Stop("Map zone changed; stopped.");return;}
+            if(beforeZone!=navigationZone) {ClearPlayerRecognition();navigation.Clear();if(working)Stop("Map zone changed; stopped.");return;}
             navigation.Observe(world.NavigationContext(self),pos,self.Height);
             if(working && runZone.HasValue && navigationZone!=runZone) Stop("Map zone changed; stopped.");
-            navigationLabel.Text=$"Zone {navigationZone} · {navigation.Status}\nGreen: observed movement · Orange: temporary blocked · {(showNavigationRoutes.Checked ? "Blue: route" : "Routes hidden")} · Gold: treasure boxes (live) · Amber: remembered";
+            navigationLabel.Text=$"Zone {navigationZone} · {ZonePlayerStatus()} · {navigation.Status}\nPlayer diamonds: pink enemy / blue same faction / teal party / gold non-PvP opponent / gray unknown · {(showNavigationRoutes.Checked ? "Routes shown" : "Routes hidden")} · Gold boxes: treasure";
             RefreshNavigationRecordingControls();
             navigationCanvas.Invalidate();
             guardSelfId=self.Id;
             UpdateParty(self);
+            UpdatePlayerRecognition(self);
             avoidZones=Avoidance.BuildZones(avoidRules,entities,self.Id);
             int level = world.PlayerLevel();
             if(working)ObserveDeath(health.GetValueOrDefault(self.Id));
@@ -675,7 +678,7 @@ public sealed partial class HunterForm : Form
                 }), LockedTarget = lockedTarget == null ? null : new { lockedTarget.Name, lockedTarget.DisplayName, lockedTarget.Id, lockedTarget.Generation, lockedTarget.PriorityLootObject }, Status = message, GroundLoot = groundLoot.OrderBy(i => (i.Position-pos).Length).Take(20), PriorityObjects = entities.Where(e => e.PriorityLootObject).OrderBy(e => (e.Position-pos).Length).Select(e => new { e.DisplayName, e.Name, e.Id, e.Model, e.Position, HP = health.GetValueOrDefault(e.Id), Allowed = Targeting.Eligible(e, health.GetValueOrDefault(e.Id), Threat.Unknown, filter.Text, allowedColors) && TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos)==null, Distance = (e.Position-pos).Length }), Monsters = entities.Where(e => e.Monster).OrderBy(e => (e.Position - pos).Length).Select(e => new { e.Name, e.Id, e.Position, HP = health.GetValueOrDefault(e.Id), Difficulty = world.Difficulty(e, level).ToString(), Distance = (e.Position - pos).Length }) });
             }
         }
-        catch (Exception ex) { connected = false; player.Text=""; nextCharacterReconnect=Environment.TickCount64+3000; if(!TryQueueClientRecovery())Stop(ex.Message); WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message }); }
+        catch (Exception ex) { ClearPlayerRecognition();connected = false; player.Text=""; nextCharacterReconnect=Environment.TickCount64+3000; if(!TryQueueClientRecovery())Stop(ex.Message); WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message }); }
     }
     void RecordObservations(Entity self, int level, Dictionary<uint, Health> health)
     {
@@ -709,7 +712,7 @@ public sealed partial class HunterForm : Form
             FaultReason=faultDeathWatch.Reason},
         Recovery=new {Enabled=true,Phase=retreatRecovery?.Phase.ToString() ?? "Inactive",retreatRecovery?.HealthTarget,ClearanceBeyondRule=RetreatPlanner.Clearance,
             world.RestSupported,RestPosture=world.RestSupported?world.RestState().Posture.ToString():"Unavailable"},
-        OtherPlayers=entities.Where(e=>CombatCourtesy.IsOtherPlayer(e,guardSelfId)).Select(e=>new {e.Id,e.Name,e.Model,e.Position}).ToArray() };
+        PlayerRecognition=PlayerRecognitionState(),OtherPlayers=RecognizedPlayerState() };
     void UpdateParty(Entity self)
     {
         currentParty=world.Party();
@@ -872,6 +875,7 @@ public sealed partial class HunterForm : Form
 
         DrawDirectionCone(g,canvasSize);
         DrawRadarMonsters(g,canvasSize);
+        DrawRadarPlayers(g,canvasSize);
         if(!showTreasureChestMarkers.Checked)
         {
             var selfMarker=Project(navigationPosition);g.FillEllipse(Brushes.White,selfMarker.X-4,selfMarker.Y-4,8,8);

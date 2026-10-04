@@ -56,7 +56,7 @@ public sealed partial class HunterForm
         navigation3DPreferred=true;navigation3DFallback=true;UpdateNavigation3DVisibility();
         if(!navigationCanvas.Visible||navigation3DView.Visible)throw new InvalidOperationException("Unavailable 3D did not fall back to 2D.");
         if(!navigation3DView.Failed&&!navigationMapChoice.Enabled)throw new InvalidOperationException("A missing scene prevents selecting another supported map.");
-        CheckNavigationRouteHotkeys();CheckOverlay3DUi();
+        CheckNavigationRouteHotkeys();CheckOverlay3DUi();CheckPlayerRecognitionUi();
         var before=JsonSerializer.Deserialize<Options>(originalJson)!;
         navigation3DUpdating=true;navigation3DPreferred=before.Navigation3D;navigation3DMap.Checked=before.Navigation3DMap;
         navigation3DTerrain.Checked=before.Navigation3DTerrain;navigation3DObjects.Checked=before.Navigation3DObjects;

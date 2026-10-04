@@ -10,7 +10,7 @@ internal sealed record MapObjectPlacement(int Mesh,Matrix4x4 Transform);
 internal sealed record MapScene3D(int Zone,string Source,MapTerrainPatch[] Terrain,
     MapObjectMesh[] Meshes,MapObjectPlacement[] Objects,string Status);
 internal sealed record MapRoute3D(int Slot,SavedNavigationRoute Route);
-internal sealed record MapMarker3D(string Name,Vec Position,double Height,Color Color,double Heading=0,bool Engaged=false,bool ShowLabel=true);
+internal sealed record MapMarker3D(string Name,Vec Position,double Height,Color Color,double Heading=0,bool Engaged=false,bool ShowLabel=true,bool Player=false);
 
 internal static class MapSceneGeometry
 {

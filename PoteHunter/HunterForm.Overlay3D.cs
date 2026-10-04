@@ -147,6 +147,7 @@ public sealed partial class HunterForm
                 .Take(128).Select(c=>(c,h:MapSceneGeometry.Height(overlay3DScene,c.Position))).Where(p=>p.h.HasValue)
                 .Select(p=>new MapMarker3D(p.c.Label+" seen",p.c.Position,p.h!.Value,Color.FromArgb(215,165,32),double.NaN)));
         }
+        markers.AddRange(Player3DMarkers(span));
         return markers.ToArray();
     }
     void SetRadar3DAnnotations(NavigationOverlay3DRenderer radar)

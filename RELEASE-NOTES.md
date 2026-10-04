@@ -1,5 +1,12 @@
 # Release notes
 
+## Release1.105
+
+- Recognize exact Human/Kartefant and Akkan/Merkhadian player body families, compare them with the actual connected character, and label opposing factions as Enemy only in confirmed PvP zones. Zone 8 Caernarvon is PvP; Zone 12 Almighty Land uses the previously user-confirmed opposing-faction non-PvP rule. Other zone IDs remain unverified, including map-geometry aliases. No complete current server rule catalog or safe-area boundaries have been verified.
+- Show distinct player diamonds and readable status in the 2D radar, 3D radar and main Navigation map, with a visible faction/zone legend. Retain same-faction, validated party, non-PvP opponent and unknown statuses. Same faction does not promise friendliness during guild wars; Enemy describes opposing faction on a PvP map, not confirmed attackability or an attacker identity.
+- Copy player identities, body models and party classification from one accepted poll. Clear or hide recognition after stale readings, character/zone changes, death-time read gaps and disconnection; exclude confirmed-dead bodies, self and NPC guards. Extend private live status with faction, relation, rule provenance and enemy count within 25 units.
+- Validate faction inversion, exact-model limits, party identity, unknown zones/aliases, marker range, immutable snapshots and visible 2D/3D status through offline policy/UI checks. Existing combat targeting, movement, courtesy, routes, revival, repair and settings are unchanged. Sound and notification layout remain design previews pending selection; live model/rule confirmation remains to be checked after upgrading.
+
 ## Release1.104
 
 - Add recovered 3D terrain, available buildings and original game-map artwork to both the in-game radar and saved-route overlay. Each has a saved independent 3D switch, with a shared north-up tilted/top camera choice. Display controls remain in Routes → Navigation → Overlay options; map layer visibility and artwork opacity apply to all 3D views.

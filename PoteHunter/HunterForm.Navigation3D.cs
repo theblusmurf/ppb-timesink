@@ -58,6 +58,7 @@ public sealed partial class HunterForm
         navigationCanvas.Dock=DockStyle.Fill;viewHost.Controls.Add(navigationCanvas);viewHost.Controls.Add(navigation3DView);
         mapCard.Controls.Add(toolbar,0,0);mapCard.Controls.Add(viewHost,0,1);layout.Controls.Add(mapCard,0,0);
         var side=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,BackColor=ImperialTheme.Window,Margin=Padding.Empty,Name="navigationLayerSidebar"};
+        side.Controls.Add(navigationPlayerRecognitionLabel);
         CollapsibleSection Section(string name,string title,bool expanded,params Control[] controls)
         {
             var section=new CollapsibleSection(name,title,"compass",expanded){Width=264,Summary=title=="Map layers"?"Artwork, terrain and route visibility":""};
@@ -189,13 +190,14 @@ public sealed partial class HunterForm
     void RefreshNavigation3DState()
     {
         if(!navigation3DInitialized||IsDisposed||!navigationPage.Visible)return;
+        UpdatePlayerRecognitionLabel();
         _ = EnsureNavigation3DLoaded();RefreshNavigation3DRoutes();
         if(Navigation3DHasPlayer)
         {
             var markers=new List<MapMarker3D>{new("You",navigationPosition,navigation3DPlayerHeight,Color.White,navigation3DPlayerHeading)};
             markers.AddRange(entities.Where(e=>e.Position.Finite&&double.IsFinite(e.Height)&&e.Id!=guardSelfId&&!latestHealth.GetValueOrDefault(e.Id).Dead&&(e.Monster||showTreasureChestMarkers.Checked&&Targeting.IsChest(e)))
                 .OrderBy(e=>(e.Position-navigationPosition).Length).Take(128).Select(e=>new MapMarker3D(e.Name,e.Position,e.Height,Targeting.IsChest(e)?ImperialTheme.Gold:Color.FromArgb(222,131,115))));
-            navigation3DView.SetMarkers(markers.ToArray());
+            navigation3DView.SetMarkers(markers.Concat(Player3DMarkers()).ToArray());
         }
         else navigation3DView.SetMarkers([]);
         UpdateNavigation3DVisibility();

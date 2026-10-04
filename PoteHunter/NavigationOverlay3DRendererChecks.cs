@@ -36,12 +36,14 @@ internal static class NavigationOverlay3DRendererChecks
         Directory.CreateDirectory(outputDirectory);IntPtr foreground=NavigationOverlay.ForegroundWindow;
         using var renderer=new NavigationOverlay3DRenderer();renderer.SetScene(Navigation3DRenderChecks.SyntheticScene(false),null,null);
         renderer.SetRoutes([new(0,new SavedNavigationRoute(3,new(3,3),0,[new(3,3),new(12,12)],DateTime.UnixEpoch))]);
-        renderer.SetMarkers([new("Player",new(8,8),5,Color.White,0),new("Engaged",new(10,10),5,Color.Orange,double.NaN,true)]);
+        renderer.SetMarkers([new("Player",new(8,8),5,Color.White,0),new("Engaged",new(10,10),5,Color.Orange,double.NaN,true),
+            new("Enemy: Demo",new(5,11),5,Color.FromArgb(255,94,124),double.NaN,Player:true)]);
         renderer.SetAnnotations([new("Trail",[new(2,2),new(4,4),new(8,8)],Color.SteelBlue,2)],
             [new(new(5,5),2,Color.Teal,"Avoid")],new(new(8,8),0,5,45,Color.Teal));
         renderer.SetRadarCamera(new(8,8),5,10);var radar=renderer.Capture(new(480,320));
         if(renderer.Failed)return "SKIP: "+renderer.Status;
         Require(radar!=null&&HasGeometry(radar),"Hidden radar renderer must produce tilted 3D terrain and copied annotations");
+        Require(radar!=null&&HasPlayerDiamond(radar),"The native radar omitted the pink enemy-player diamond and label.");
         radar!.Save(Path.Combine(outputDirectory,"native-overlay-radar-tilted.png"));
         using var comparison=new Bitmap(radar);renderer.TopView=true;var top=renderer.Capture(new(480,320));
         Require(top!=null&&Different(comparison,top),"Top view must change camera while retaining the hidden native context");
@@ -54,7 +56,7 @@ internal static class NavigationOverlay3DRendererChecks
         Require(renderer.CameraState==fittedCamera,"Farming radius must annotate the fitted route without changing camera bounds or zoom");
         Require(!renderer.WindowsVisible&&!renderer.AutomaticFrames&&foreground==NavigationOverlay.ForegroundWindow,"Hidden overlay rendering must preserve foreground window and stay timer-free");
         renderer.Clear();Require(renderer.Frame==null&&renderer.Capture(new(640,400))==null,"Zone clear must remove stale readback before any new scene");
-        File.WriteAllText(Path.Combine(outputDirectory,"native-overlay-checks.json"),JsonSerializer.Serialize(new{Passed=true,Hidden=true,TimerFree=true,ForegroundPreserved=true},new JsonSerializerOptions{WriteIndented=true}));
+        File.WriteAllText(Path.Combine(outputDirectory,"native-overlay-checks.json"),JsonSerializer.Serialize(new{Passed=true,Hidden=true,TimerFree=true,ForegroundPreserved=true,PlayerDiamondVisible=true},new JsonSerializerOptions{WriteIndented=true}));
         return "PASS: passive hidden radar/route readback, tilted/top cameras, engagement/cone/trail/radius annotations, bounded resize, foreground and stale-frame guards";
     }
     internal static string RunLocal(string clientDirectory,string outputDirectory)
@@ -87,6 +89,13 @@ internal static class NavigationOverlay3DRendererChecks
     }
     static bool HasGeometry(Bitmap image)
     {int count=0;int background=image.GetPixel(0,0).ToArgb();for(int y=0;y<image.Height;y+=4)for(int x=0;x<image.Width;x+=4)if(image.GetPixel(x,y).ToArgb()!=background&&++count>30)return true;return false;}
+    static bool HasPlayerDiamond(Bitmap image)
+    {
+        int count=0;
+        for(int y=0;y<image.Height;y++)for(int x=0;x<image.Width;x++)
+        {var p=image.GetPixel(x,y);if(p.R>220&&p.G is >70 and <120&&p.B is >100 and <150&&++count>=5)return true;}
+        return false;
+    }
     static bool Different(Bitmap a,Bitmap b)
     {if(a.Size!=b.Size)return true;for(int y=0;y<a.Height;y+=4)for(int x=0;x<a.Width;x+=4)if(a.GetPixel(x,y).ToArgb()!=b.GetPixel(x,y).ToArgb())return true;return false;}
     static void Require(bool value,string message){if(!value)throw new InvalidOperationException(message);}

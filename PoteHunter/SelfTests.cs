@@ -30,6 +30,7 @@ static class SelfTests
             DataRecorder.SelfTest();
             Avoidance.SelfTest();
             CombatCourtesy.SelfTest();
+            PlayerRecognitionChecks.Run();
             PlayerGreeting.SelfTest();
             Encounter.SelfTest();
             CombatPressure.SelfTest();

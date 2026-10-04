@@ -436,7 +436,7 @@ public sealed partial class HunterForm
                     width,
                     height);
                 RefreshOverlay3DFrames(navigationOverlay.ClientSize,routeOverlay?.ClientSize ?? Size.Empty);
-                navigationOverlay.SetTitle("PlayPoteBot RADAR · "+Overlay3DMode(radar3D.Checked,navigationOverlay3D));
+                navigationOverlay.SetTitle("RADAR · "+Overlay3DMode(radar3D.Checked,navigationOverlay3D)+" · "+ZonePlayerStatus());
                 if (!navigationOverlay.Visible) navigationOverlay.Show();
                 navigationOverlay.Invalidate();
             }
