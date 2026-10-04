@@ -14,6 +14,8 @@ static class SelfTests
             GroupHealerChecks.Run();
             ZoneMapBackground.SelfTest();
             GameMapChecks.Run();
+            MapSceneReaderChecks.Run();
+            MapObjectReaderChecks.Run();
             SkillHealthRuleChecks.Run(); SkillTargeting.SelfTest();
             GameWindow.SelfTest();
             CompatibilityChecks.Run();
@@ -336,6 +338,9 @@ static class SelfTests
             if (RecoveryItems.Parse("Food", "Restores 400 health points.") != (400, 0) || RecoveryItems.Parse("Food", "Restores 300 health and 100 mana points.") != (300, 100) || RecoveryItems.Parse("Food", "Restores 500 mana points.") != (0, 500) || RecoveryItems.Parse("Sword", "Restores 400 health points.") != (0, 0) || RecoveryItems.Parse("Food", "A tasty meal.") != (0, 0)) throw new Exception("Recovery description parsing must preserve effect type and avoid unrelated items");
             bool blockedUnknown = false; try { BuildProfile.Resolve(new string('0', 64)); } catch (InvalidOperationException) { blockedUnknown = true; }
             if (!blockedUnknown || BuildProfile.Resolve(BuildProfile.September10Update.Sha256).ImageSize != 0x14c4f000) throw new Exception("Build profile validation");
+            // Creating a WinForms control installs its synchronization context;
+            // run these CPU-only viewport checks after the asynchronous suite.
+            Navigation3DRenderChecks.Run();
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test.txt"), "PASS: anti-kill-stealing damaged/nearby-player/own-fight handling; name avoidance and point/segment geometry; protection settings persistence; movement/heading math and faster steering convergence; held-input and release lifecycle; monster classification and HP death; exact priority box/barrel/Treasure Box detection, selection, filter override, radius and HP exclusions, mandatory pickup; persistent object recording, throttling, log rotation and damaged-catalog preservation; difficulty boundaries; hotbar cooldown/rotation; recovery descriptions and healing thresholds; unknown-build rejection."); return 0;
         }
         catch (Exception ex) { File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test.txt"), "FAIL: " + ex.Message); return 1; }

@@ -72,6 +72,14 @@ public sealed class Options
     public bool ShowRouteOverlay { get; set; }
     public int NavigationOverlaySize { get; set; } = 450;
     public int NavigationViewRadius { get; set; } = 150;
+    public bool Navigation3D { get; set; } = true;
+    public bool Navigation3DMap { get; set; } = true;
+    public bool Navigation3DTerrain { get; set; } = true;
+    public bool Navigation3DObjects { get; set; } = true;
+    public bool Navigation3DRoutes { get; set; } = true;
+    public bool Navigation3DAnchors { get; set; } = true;
+    int navigation3DMapOpacity=80;
+    public int Navigation3DMapOpacity { get=>navigation3DMapOpacity; set=>navigation3DMapOpacity=Math.Clamp(value,0,100); }
     public bool ShowLootTrackerOverlay { get; set; } = true;
     public int LootTrackerDesign { get; set; } = 1;
     public int LootTrackerDesignVersion { get; set; }

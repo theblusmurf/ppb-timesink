@@ -332,6 +332,7 @@ public sealed partial class HunterForm : Form
         navigationCanvas.BackColor=Color.FromArgb(18,24,32); navigationCanvas.Paint+=PaintNavigation;
         navLayout.Controls.Add(navControls,0,0); navLayout.Controls.Add(navigationCanvas,0,1); navLayout.Controls.Add(navigationLabel,0,2);
         navigationPage.Controls.Add(navLayout);tabs.TabPages.Add(navigationPage);
+        InitializeNavigation3DPage(navLayout,navControls);
         list.ShowItemToolTips=true;
         hotbarList.SelectedIndexChanged += (_,_) => { if (hotbarList.SelectedItems.Count>0) { selectedHotbarKey=hotbarList.SelectedItems[0].Text; UpdateItemDescriptions(); } };
         lootList.SelectedIndexChanged += (_,_) => { if (lootList.SelectedItems.Count>0) { selectedGroundKey=lootList.SelectedItems[0].Tag as string; UpdateItemDescriptions(); } };
@@ -387,6 +388,7 @@ public sealed partial class HunterForm : Form
         };
         timer.Tick += async (_, _) => {
             Tick();
+            RefreshNavigation3DState();
             UpdateNavigationOverlay();
             if(pendingClientResume!=null && !busy && !working && !clientRecoveryRunning) await RecoverClientIfPending();
             if(!clientRecoveryRunning && pendingClientResume==null && !connected && !busy && !working && Environment.TickCount64>=nextCharacterReconnect)
@@ -582,6 +584,7 @@ public sealed partial class HunterForm : Form
             var health = world.HealthSnapshot();
             latestHealth = health;
             navigationZone=world.ActiveZone(); navigationPosition=pos;
+            navigation3DPlayerHeight=self.Height;navigation3DPlayerHeading=self.Heading;navigation3DPlayerSeen=Environment.TickCount64;
             ObserveLoggedHealth(self,health.GetValueOrDefault(self.Id),navigationZone);
             chestCatalog.Observe(navigationZone,entities.Where(entity=>Targeting.IsChest(entity) && !health.GetValueOrDefault(entity.Id).Dead));
             lootTracker.ObserveZone(navigationZone);

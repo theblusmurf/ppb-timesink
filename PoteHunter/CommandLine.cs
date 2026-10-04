@@ -31,6 +31,30 @@ static class CommandLine
         if(args.Contains("--test-internal-target-candidates"))return InternalTargetSelectionProbe.RunCandidateTest();
         if(args.Contains("--check-patch-compatibility"))return CompatibilityChecks.CheckPatchedFile(PoteMemoryProbe.Program.ClientPath);
         if(args.Contains("--ranged-ui-check"))return HunterForm.CheckRangedPullUi();
+        if(args.Contains("--map-native-check"))
+        {
+            if(args.Length!=2)return 2;
+            try{ApplicationConfiguration.Initialize();var result=Navigation3DRenderChecks.RunNative(args[1]);File.WriteAllText(Path.Combine(args[1],"native-result.txt"),result);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"map-native-error.txt"),ex.ToString());return 1;}
+        }
+        if(args.Contains("--map-native-local-check"))
+        {
+            if(args.Length!=3)return 2;
+            try{ApplicationConfiguration.Initialize();Navigation3DRenderChecks.RunLocal(args[1],args[2]);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"map-native-local-error.txt"),ex.ToString());return 1;}
+        }
+        if(args.Contains("--map-scene-local-check"))
+        {
+            if(args.Length!=3)return 2;
+            try{MapSceneReaderChecks.RunLocal(args[1],args[2]);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"map-scene-local-error.txt"),ex.ToString());return 1;}
+        }
+        if(args.Contains("--map-object-local-check"))
+        {
+            if(args.Length!=3)return 2;
+            try{MapObjectReaderChecks.RunLocal(args[1],args[2]);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"map-object-local-error.txt"),ex.ToString());return 1;}
+        }
         if (args.Contains("--input-compat-test"))
         {
             if (args.Length != 3 || !args.Contains("--native-read-compat") || !args.Contains("--native-input-compat")) return 2;

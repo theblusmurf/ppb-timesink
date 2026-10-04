@@ -262,6 +262,7 @@ public sealed partial class HunterForm
     /// <summary>Applies the overlay controls to a newly assembled options object.</summary>
     Options WithOverlaySettings(Options options)
     {
+        WithNavigation3DSettings(options);
         options.ShowNavigationOverlay = showNavigationOverlay.Checked;
         options.ShowNavigationRoutes = showNavigationRoutes.Checked;
         options.ShowRouteOverlay = showRouteOverlay.Checked;

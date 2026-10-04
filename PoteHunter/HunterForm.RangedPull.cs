@@ -125,6 +125,7 @@ public sealed partial class HunterForm
                 form.autoRepair.Checked=false;
                 form.Size=form.MinimumSize;form.PerformLayout();Application.DoEvents();
                 form.CheckFieldConsoleUi(tabs);
+                form.CheckNavigation3DUi(tabs);
                 using(var setupMinimum=new Bitmap(form.Width,form.Height))
                 {
                     form.DrawToBitmap(setupMinimum,new Rectangle(Point.Empty,form.Size));

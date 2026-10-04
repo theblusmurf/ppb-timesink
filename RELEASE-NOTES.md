@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.103
+
+- Add the approved native 3D Navigation view with recovered terrain, available buildings and static objects read from the verified local game installation. Drape the original game map over the terrain with a saved 0–100% opacity control; keep neutral terrain outside verified map artwork bounds.
+- View the current map or a supported map, orbit, pan, zoom, switch to a north-up top view, fit the map or selected target's saved routes, and center on its anchor or a fresh connected player reading. Retain Primary and Alternative route colors, anchor facing and live target/chest markers. Missing terrain splits route visuals instead of inventing heights.
+- Group existing route recording, management, overlay and loot controls into expandable sections. Persist terrain, object, artwork, route and anchor visibility independently. The original 2D view and passive in-game overlays remain available, with automatic 2D fallback for an unsupported client, missing map data or unavailable hardware renderer.
+- Load maps in the background with cancellation, stale-zone rejection and a bounded two-map cache. Use built-in Windows OpenGL without an added browser/runtime download. Game models, artwork, routes, profiles and runtime evidence are not bundled or published.
+- Validate scene codecs, file/count/index/path bounds, corrupt-data rejection, exact terrain/object comparisons against independently decoded private exports, map orientation and clipping, layer settings, native readback where supported, original route guards and UI accessibility. Terrain is a visual aid: bridge height, collision and walkability remain unverified and do not change movement, combat, revival or repair logic. Verify live rendering and responsiveness on the user's GPU after updating.
+
 ## Release1.102
 
 - Apply the approved navy-and-brass Wayfinder interface and logo pair 1: matching application emblem and Windows desktop icon, bottom navigation, route map and six expandable command sections. Closed sections retain live summaries; Collapse all and keyboard/accessibility actions change presentation only. Detailed Setup, Support and other settings remain available.

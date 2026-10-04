@@ -1,8 +1,16 @@
-PPB - Crownfire
+PlayPoteBot - Wayfinder
 
-Forest-and-brass theme with top navigation, side-by-side Setup cards, and
-HP/MP status bars. Navigation now has its own top-level button. Monitor and
-Advanced use page selectors beside the page heading. Hover HP/MP for details.
+Navy-and-brass theme, bottom navigation, expandable command sections and
+HP/MP status bars. Routes opens Navigation with native 3D and the original 2D view.
+Hover HP/MP for details. Route and loot options remain independently adjustable.
+
+3D maps read verified terrain and available objects from your installed game.
+Choose a map, drag to orbit, right-drag to pan, and scroll to zoom. Map layers
+controls the original artwork, its transparency, terrain, objects, routes and anchors.
+Top view is north-up. Fit routes and View anchor use the selected target's routes.
+Unsupported client/data or hardware falls back to 2D; the in-game overlays stay 2D.
+No game models or artwork are included. Terrain is for viewing and does not alter
+movement, collision or recovery. See NAVIGATION-3D.md for supported maps and limits.
 
 PPB keeps the existing PoteHunter.exe and package names for upgrade compatibility.
 Extract the entire folder and run PoteHunter.exe or Start-Fixed-Detection.cmd.

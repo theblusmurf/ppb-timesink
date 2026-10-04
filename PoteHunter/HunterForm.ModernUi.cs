@@ -198,7 +198,7 @@ public sealed partial class HunterForm
             ["Ground loot"] = "Nearby drops detected from the game client.",
             ["Hotbar"] = "Detected abilities, cooldowns and assigned roles.",
             ["Protection"] = "Keep-away rules and player courtesy settings.",
-            ["Navigation"] = "Observed movement space and obstacle routing.",
+            ["Navigation"] = "3D terrain, game maps and saved route controls.",
             ["Group"] = "Party roster and follow status. Choose the tank in Setup.",
             ["Ranged packs"] = "Tag several monsters, gather them, then clear."
         };
