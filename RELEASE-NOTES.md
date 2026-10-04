@@ -1034,3 +1034,11 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Increase body-turn acceleration by one third and steering speed limits by 20% when stationary and about 29% while walking. Keep the fine-angle taper, calibrated mouse sensitivity and existing movement/arrival limits.
 - Reserve unreported heading changes against the remaining turn angle, including partial feedback, so faster steering can stay responsive without stacking corrections past the goal. Retry lost commands only after 220 ms without a newer command or heading progress; the existing no-response stop remains active.
 - Add offline walking/stationary, delayed/partial-feedback, direction, convergence, no-overshoot and faster 90-degree turn checks. Build and offline checks pass; live turning still requires verification after upgrading.
+
+## Release1.101 — Hunting and loot session logs
+
+- Start a private local CSV history automatically when PlayPoteBot opens. Assign each hunt its own ID and record start/stop, selected targets, character/zone, duration and readable-HP-confirmed deaths/revivals, including connected manual revival while hunting is stopped.
+- Include cumulative loot-session totals for Silvin, Mithril, Iternium, Fehu, gold and gems, earnings rates, verified wallet current/baseline/net, separate ground-gold estimates, timer durations and source kills/drops. Record before/after loot and timer resets; preserve loot identity on timer reset and rotate it on loot reset.
+- Record revival attempts, repair stages and anchor return without treating sent input as successful revival. Death cause remains Unknown because no verified killer field is available; existing recovery behavior is unchanged for player/mob deaths.
+- Add Settings > Index > Open session logs. Keep logs out of Git/release packages, preserve them through installer upgrades/uninstall and report file errors without interrupting hunting.
+- Validate deduplication, health/identity gaps, CSV escaping, session/reset lifecycle, wallet accuracy, recovery-stage filtering and file-error recovery offline. No live gameplay or installed-app replacement during development; live session verification remains needed after upgrading.

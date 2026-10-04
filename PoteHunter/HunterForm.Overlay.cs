@@ -183,6 +183,7 @@ public sealed partial class HunterForm
     void ResetTrackedLoot()
     {
         bool saved=SaveLootLog("Reset loot");lootTracker.Reset();
+        HuntingSessionLog.Current?.RecordLoot(lootTracker.Snapshot(),"Loot reset");
         if(saved)message="Loot totals reset.";
         UpdateNavigationOverlay();
     }
@@ -190,6 +191,7 @@ public sealed partial class HunterForm
     void ResetTrackedLootTimer()
     {
         bool saved=SaveLootLog("Reset timer");lootTracker.ResetTimer();
+        HuntingSessionLog.Current?.RecordLoot(lootTracker.Snapshot(),"Timer reset");
         if(saved)message="Loot earning timer reset.";
         UpdateNavigationOverlay();
     }

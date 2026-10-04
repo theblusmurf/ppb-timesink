@@ -16,6 +16,7 @@ self-test.txt
 launcher-error.txt
 startup-trace.txt
 data/
+hunting-logs/
 
 # Offline validation and UI preview output
 *-checks.json

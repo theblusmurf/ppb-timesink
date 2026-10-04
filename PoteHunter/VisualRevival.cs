@@ -96,7 +96,9 @@ internal sealed class LiveRevivalSurface(World world,Entity original,int process
         try{self=world.LocalPlayer();}catch(InvalidOperationException){return default;}
         if(world.Pid!=processId || world.ActiveZone()!=zone || !RecoveryRouting.SameCharacter(original,self))
             throw new OperationCanceledException("Revival stopped: character, process, or map changed.");
-        return world.TargetHealth(self.Id);
+        var hp=world.TargetHealth(self.Id);
+        HuntingSessionLog.Current?.Observe(world.Pid,self,zone,hp);
+        return hp;
     }
     bool Dead(){var hp=Health();return hp.Known && hp.Dead;}
     public async Task<VisualControl?> Find(CancellationToken token)

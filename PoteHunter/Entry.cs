@@ -35,6 +35,8 @@ static class Entry
         using var mutex = instance;
         if (!created) return gateCheck ? 24 : 0;
         if (gateCheck) return 0; // No GUI, client access or input in packaging checks.
+        using var huntingLog=new HuntingSessionLog(HunterForm.HuntingLogRoot);
+        HuntingSessionLog.Current=huntingLog;
         Startup("Initializing Windows Forms");
         ApplicationConfiguration.Initialize();
         Startup("Constructing hunter window");

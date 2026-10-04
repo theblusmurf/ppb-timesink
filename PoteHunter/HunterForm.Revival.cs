@@ -58,7 +58,8 @@ public sealed partial class HunterForm
                 token.ThrowIfCancellationRequested();var current=world.LocalPlayer();
                 if(world.Pid!=processId || world.ActiveZone()!=zone || !RecoveryRouting.SameCharacter(original,current))
                     throw new OperationCanceledException("Character, process, or map changed during revival setup.");
-                RequireRevivalSetupState(world.TargetHealth(current.Id));
+                var hp=world.TargetHealth(current.Id);ObserveLoggedHealth(current,hp,zone);
+                RequireRevivalSetupState(hp);
             }
             ValidateDead();
             if(configure)await ConfigureRevivalAsync(ValidateDead,token);
@@ -68,6 +69,7 @@ public sealed partial class HunterForm
                 await RepairCountdown("Revival test: switch to the game and move off the button",token);ValidateDead();
                 await VisualRevival.Run(new LiveRevivalSurface(world,original,processId,zone,text=>message=text),deadAt,token);
                 message=revivalStatus.Text="Revival test completed: living HP confirmed. Hunting remains stopped.";
+                TraceLog.Record("revival test completed",new {LivingHPConfirmed=true});
             }
         }
         catch(OperationCanceledException ex)

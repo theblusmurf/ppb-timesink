@@ -8,6 +8,7 @@ static class SelfTests
     {
         try
         {
+            HuntingSessionLogChecks.Run();
             ClientRecoveryChecks.Run();
             PotionChecks.Run();
             GroupHealerChecks.Run();

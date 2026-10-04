@@ -1,0 +1,15 @@
+# Hunting and loot session history
+
+Normal PlayPoteBot startup creates a local `hunting-logs/<date-time>-<application-id>/events.csv`. Settings > Index > **Open session logs** opens the folder. CSV files open in Excel. Each application run has a separate file and each actual hunt has a separate HuntId. Diagnostic/offline checks do not create normal application logs.
+
+The history records application and hunt start/end, selected targets/mode, local and UTC timestamps, connected character/zone, health, durations, and death/revival counts. A transition from readable living HP to zero confirms death; positive HP after known dead HP confirms revival. Sent opening or confirmation clicks are recovery attempts, not revival evidence. Manual revival while connected and hunting stopped is observed too. If the app starts with an already-dead character, that is a baseline rather than a newly observed death.
+
+Recovery rows record revival attempts, inventory opening, repair recognition/click stages, sequence completion and anchor-return events. Repair sequence completion confirms the procedure, not verified durability. Death cause remains **Unknown**: the client reader has no verified killer/attacker field. PlayPoteBot uses the same existing HP-based revival/optional repair/route-return procedure for player-caused and mob-caused deaths. Healer mode retains its existing stop-on-death behavior; session logging does not enable automatic recovery in additional modes.
+
+Every row includes the latest loot session snapshot, when available: Silvin, Mithril, Iternium, Fehu, gold, gems, hourly rates, wallet current/baseline/net, a separate detected-ground-gold estimate, timer durations and aggregate source kills/drops. These are cumulative tracker-session totals, not extra credits for each logged row. **Do not sum cumulative rows.** Details on loot-snapshot rows include per-source summaries. Gold is the actual verified wallet difference from its session baseline and includes spending such as repair; unknown gold stays blank. Metals/gems remain detected-drop totals, not verified wallet inventory earnings.
+
+Death, loot reset and timer reset save loot snapshots. Reset loot records the old totals and rotates LootSessionId after clearing totals/rebasing the wallet. Reset timer records before/after snapshots, retains LootSessionId and totals, and restarts the earnings-rate window. The existing loot CSV exports remain available.
+
+Unknown health never confirms death or revival. A disconnect, process/character change or map change establishes a fresh health baseline, preventing an unobserved transition from being invented. An abrupt program exit may leave a log without an Application ended row. File-writing failures appear in the status line/live status and do not stop hunting. Installer upgrades and uninstall preserve local hunting logs. Logs, game data, routes and calibration profiles stay out of source control and release packages.
+
+Offline checks validate lifecycle, health transitions, reset IDs, wallet values, CSV quoting, recovery filtering and nonfatal IO. Live gameplay verification is still needed after upgrading.

@@ -551,9 +551,9 @@ public sealed partial class HunterForm : Form
     }
     void Tick()
     {
-        status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError);
+        status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError) + (HuntingSessionLog.Current?.LastError is string logError ? " · Session log: "+logError : "");
         lootTracker.ObserveActivity(working && connected && activeGuardOptions!=null);
-        if(!connected){lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
+        if(!connected){HuntingSessionLog.Current?.ObservationGap("Client disconnected");lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
         if(busy)return;
         try
         {
@@ -577,6 +577,7 @@ public sealed partial class HunterForm : Form
             var health = world.HealthSnapshot();
             latestHealth = health;
             navigationZone=world.ActiveZone(); navigationPosition=pos;
+            ObserveLoggedHealth(self,health.GetValueOrDefault(self.Id),navigationZone);
             chestCatalog.Observe(navigationZone,entities.Where(entity=>Targeting.IsChest(entity) && !health.GetValueOrDefault(entity.Id).Dead));
             lootTracker.ObserveZone(navigationZone);
             if(beforeZone!=navigationZone) {navigation.Clear();if(working)Stop("Map zone changed; stopped.");return;}
@@ -763,6 +764,7 @@ public sealed partial class HunterForm : Form
         state["MemoryBackend"]=PoteMemoryProbe.WindowsClientRead.Backend;
         state["InputBackend"]=WindowsClientInput.Backend;
         state["InputCompatibilityEnabled"]=WindowsClientInput.Enabled;
+        state["SessionLog"]=JsonSerializer.SerializeToNode(new {Path=HuntingSessionLog.Current?.FilePath,Error=HuntingSessionLog.Current?.LastError});
         state["Hotkeys"]=JsonSerializer.SerializeToNode(new { Ready=hotkeys, Failure=hotkeyFailure, Registrations=hotkeyRegistrations });
         state["Status"]=DisplayMessage;
         state["TargetSearch"]=working ? JsonSerializer.SerializeToNode(targetSearch) : null;
@@ -784,6 +786,7 @@ public sealed partial class HunterForm : Form
         catch(IOException) { }
         catch(UnauthorizedAccessException) { }
         lootTracker.ObserveActivity(false);
+        FinishLoggedHunt(reason);
         startVersion++;
         faultDeathWatch.Reset();
         rangedPull.Reset(); rangedTagging = false;
@@ -792,7 +795,9 @@ public sealed partial class HunterForm : Form
     }
     bool SaveLootLog(string reason)
     {
-        bool saved = lootTrackerLog.TrySave(lootTracker.Snapshot(), reason);
+        var snapshot=lootTracker.Snapshot();
+        HuntingSessionLog.Current?.RecordLoot(snapshot,reason);
+        bool saved = lootTrackerLog.TrySave(snapshot, reason);
         if (!saved) message = $"Loot event could not be saved ({reason}).";
         return saved;
     }
@@ -805,6 +810,7 @@ public sealed partial class HunterForm : Form
 
     void ObserveDeath(Health health)
     {
+        ObserveLoggedPlayerHealth(health);
         if(deathRecovery.Observe(health,Environment.TickCount64))
         {
             SaveLootLog("Death");
@@ -1583,6 +1589,7 @@ public sealed partial class HunterForm : Form
             }
             nextSupportPreflight=0;nextHealAt=0;manaRecovery.Reset();
             runCharacter=world.LocalPlayer();runZone=world.ActiveZone();activeGuardOptions=o;activeHuntAnchor=runCharacter.Position;activeHealTarget=null;lastHealingSkill=null;
+            BeginLoggedHunt(o);
             RefreshGuardScene();
             currentHotbar=CheckedHotbar();runHotbarPage=currentHotbar.PageBase;
             Input.Preflight=SupportPreflight;StartNearbyPickup(o);
@@ -1650,7 +1657,7 @@ public sealed partial class HunterForm : Form
         }
         catch(OperationCanceledException){TraceLog.Record("healer stopped",new {Reason="Stop/focus/cancellation"});Stop("Healer stopped. Press F8 to start again.");}
         catch(Exception ex){TraceLog.Record("healer failed",new {Error=ex.Message});Stop(ex.Message);}
-        finally{deathRecovery.Reset();healerFollowing=false;healerCasting=false;healerRecipientKey=null;movement?.StopApproach();if(movement!=null)movement.CanAdvance=previousAdvance;Input.PickupHoldProvider=null;nearbyPickupCount=0;working=false;settings.Enabled=true;protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true;connect.Enabled=true;start.Enabled=true;Input.Release();Input.Preflight=null;activeHealTarget=null;lastHealingSkill=null;runCharacter=null;activeHuntAnchor=null;activeGuardOptions=null;runHotbarPage=null;runZone=null;cancel?.Dispose();cancel=null;}
+        finally{FinishLoggedHunt(message);deathRecovery.Reset();healerFollowing=false;healerCasting=false;healerRecipientKey=null;movement?.StopApproach();if(movement!=null)movement.CanAdvance=previousAdvance;Input.PickupHoldProvider=null;nearbyPickupCount=0;working=false;settings.Enabled=true;protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true;connect.Enabled=true;start.Enabled=true;Input.Release();Input.Preflight=null;activeHealTarget=null;lastHealingSkill=null;runCharacter=null;activeHuntAnchor=null;activeGuardOptions=null;runHotbarPage=null;runZone=null;cancel?.Dispose();cancel=null;}
     }
     async Task Hunt()
     {
@@ -1770,6 +1777,7 @@ public sealed partial class HunterForm : Form
             var startingBar = world.Hotbar(); runHotbarPage = startingBar.PageBase;
             string configuredKeys=o.SkillKeys; o.SkillKeys=AttackKeys(o.AutoDetectSkills ? SkillRotation.DetectKeys(startingBar) : SkillRotation.AvailableKeys(configuredKeys,startingBar),startingBar,o.MaintainAreaBuffs);
             if(o.SkillKeys!=configuredKeys)TraceLog.Record("unavailable attack slots skipped",new {Configured=configuredKeys,Using=o.SkillKeys,BasicAttackOnly=o.SkillKeys.Length==0});
+            BeginLoggedHunt(o);
              TraceLog.Record("hunt started", new { Anchor = activationLocation, ActivationLocation = activationLocation, o.HuntRadius,o.LeaveAreaWhenEmpty,o.Player, o.Target, o.SkillKeys, o.LootHoldMs, PriorityLootObjects = true, o.AntiKillSteal, o.OtherPlayerRadius, o.AvoidNames });
             var skillDue = o.SkillKeys.ToDictionary(c => c, _ => 0L);
             int skillCursor = 0; bool gamekeeperExcursion=false;
@@ -2093,7 +2101,7 @@ public sealed partial class HunterForm : Form
                     bool revived=hp.Known && !hp.Dead;
                     bool ReadRevivalHealth()
                     {
-                        try {self=world.LocalPlayer();hp=world.TargetHealth(self.Id);return hp.Known;}
+                        try {self=world.LocalPlayer();hp=world.TargetHealth(self.Id);ObserveLoggedHealth(self,hp,world.ActiveZone());return hp.Known;}
                         catch(InvalidOperationException) {hp=default;return false;}
                     }
                     if(o.VisualRevivalDetection && !revived)
@@ -3214,7 +3222,7 @@ public sealed partial class HunterForm : Form
             if(pendingClientResume==null && !TryQueueClientRecovery())Stop(reason);
         }
         catch (Exception ex) { TraceLog.Record("hunt failed", new { Error = ex.Message }); if(!TryQueueClientRecovery())Stop(ex.Message); }
-        finally { navigation.EndRecording();faultDeathWatch.Reset();deathRecoveryActive=false;deathRecovery.Reset();deathReturnInProgress=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;navigationInputOwned=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
+        finally { FinishLoggedHunt(message);navigation.EndRecording();faultDeathWatch.Reset();deathRecoveryActive=false;deathRecovery.Reset();deathReturnInProgress=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;navigationInputOwned=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
     }
 
     async Task RecoverUnresponsiveTurn(Movement drive,Entity target,Vec anchor,Options options,double boundary,int attempt,
