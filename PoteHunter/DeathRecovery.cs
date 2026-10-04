@@ -44,9 +44,14 @@ internal static class RecoveryRouting
     public static bool SameCharacter(Entity before,Entity after)=>
         before.Id==after.Id && before.Name==after.Name && before.Model==after.Model;
 
-    public static bool Compatible(SavedNavigationRoute route,int zone,string character,double huntHeight)=>
+    // Height describes the saved farming endpoint, not the elevation of every
+    // recorded path segment. Travel can cross hills before reaching that floor.
+    public static bool CompatibleIdentity(SavedNavigationRoute route,int zone,string character)=>
         route.Zone==zone && route.Anchor.Finite && double.IsFinite(route.Heading) &&
-        (string.IsNullOrWhiteSpace(route.Character) || route.Character.Equals(character,StringComparison.OrdinalIgnoreCase)) &&
+        (string.IsNullOrWhiteSpace(route.Character) || route.Character.Equals(character,StringComparison.OrdinalIgnoreCase));
+
+    public static bool Compatible(SavedNavigationRoute route,int zone,string character,double huntHeight)=>
+        CompatibleIdentity(route,zone,character) && double.IsFinite(route.Height) && double.IsFinite(huntHeight) &&
         (route.Height<=0 || huntHeight<=0 || Math.Abs(route.Height-huntHeight)<2);
 
     public static bool Occupied(Vec anchor,double height,double radius,IEnumerable<Entity> entities,uint selfId)=>

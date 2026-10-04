@@ -29,8 +29,11 @@ internal static class SentinelRadarRenderer
             DrawHeader(graphics);
             DrawRadar(graphics,snapshot);
             DrawDetails(graphics,snapshot);
-            string footer=snapshot.Fresh&&!snapshot.KnownAlive?$"{snapshot.Radius:0.#}-unit north-up · living HP unconfirmed · audio paused":
-                $"{snapshot.Radius:0.#}-unit north-up radar · faction inferred · attackability unknown";
+            bool missingNames=snapshot.Enemies.Any(p=>string.IsNullOrWhiteSpace(p.Name));
+            string footer=snapshot.Fresh&&!snapshot.KnownAlive?
+                (missingNames?"Names unavailable: IDs shown · HP unconfirmed · audio paused":$"{snapshot.Radius:0.#}-unit north-up · HP unconfirmed · audio paused"):
+                missingNames?"Names unavailable: IDs shown · × counts players · attackability unknown":
+                    $"{snapshot.Radius:0.#}-unit north-up · × overlapping players · attackability unknown";
             Text(graphics,footer,7.3f,
                 ImperialTheme.Muted,new(14,230,438,16));
         }
@@ -74,17 +77,39 @@ internal static class SentinelRadarRenderer
         {
             using var path=new GraphicsPath();path.AddEllipse(center.X-radius-6,center.Y-radius-6,(radius+6)*2,(radius+6)*2);
             graphics.SetClip(path,CombineMode.Intersect);
-            // Draw enemy diamonds last, so an overlap cannot hide them under neutral markers.
-            foreach(var player in snapshot.Players.OrderBy(p=>p.Relation==PlayerRelation.Enemy?1:0))
+            foreach(var player in snapshot.Players.Where(p=>p.Relation!=PlayerRelation.Enemy))
             {
                 var point=SentinelRadarPresentation.RadarPoint(player.Position-snapshot.SelfPosition,center,radius,snapshot.Radius);
-                DrawMarker(graphics,point,player.Relation,player.Relation==PlayerRelation.Enemy?5.5f:4f);
+                DrawMarker(graphics,point,player.Relation,4f);
             }
             using var self=new SolidBrush(ImperialTheme.Text);
-            using var border=new Pen(ImperialTheme.Window,2);
-            graphics.FillEllipse(self,center.X-4,center.Y-4,8,8);graphics.DrawEllipse(border,center.X-5,center.Y-5,10,10);
+            using var border=new Pen(ImperialTheme.Text,1.5f);
+            graphics.FillEllipse(self,center.X-2,center.Y-2,4,4);graphics.DrawEllipse(border,center.X-6,center.Y-6,12,12);
+            // Exact enemy points follow the self marker: even a close or
+            // coincident enemy must remain visible at a 100-unit watch radius.
+            foreach(var player in snapshot.Enemies)
+            {
+                var point=SentinelRadarPresentation.RadarPoint(player.Position-snapshot.SelfPosition,center,radius,snapshot.Radius);
+                DrawMarker(graphics,point,PlayerRelation.Enemy,4f);
+            }
         }
         finally {graphics.Restore(clip);}
+        foreach(var badge in EnemyBadges(graphics,snapshot,center,radius))
+        {
+            using var leader=new Pen(Color.FromArgb(190,SentinelRadarPresentation.Enemy),1);
+            foreach(var member in badge.Cluster.Members)
+            {
+                PointF end=new(Math.Clamp(member.Point.X,badge.Bounds.Left,badge.Bounds.Right),
+                    Math.Clamp(member.Point.Y,badge.Bounds.Top,badge.Bounds.Bottom));
+                graphics.DrawLine(leader,member.Point,end);
+            }
+            using var badgeFill=new SolidBrush(ImperialTheme.Window);
+            using var outline=new Pen(SentinelRadarPresentation.Enemy,1);
+            graphics.FillRectangle(badgeFill,badge.Bounds);graphics.DrawRectangle(outline,
+                badge.Bounds.X,badge.Bounds.Y,badge.Bounds.Width,badge.Bounds.Height);
+            Text(graphics,badge.Caption,7.5f,SentinelRadarPresentation.Enemy,
+                new(badge.Bounds.X+3,badge.Bounds.Y+1,badge.Bounds.Width-4,badge.Bounds.Height-1),FontStyle.Bold);
+        }
     }
 
     static void DrawDetails(Graphics graphics,SentinelRadarSnapshot snapshot)
@@ -101,15 +126,21 @@ internal static class SentinelRadarRenderer
         }
         else if(snapshot.NearestEnemy is SentinelPlayerMarker enemy)
         {
-            string name=string.IsNullOrWhiteSpace(enemy.Name)?$"Player {enemy.Id:X8}":enemy.Name;
-            Text(graphics,name,16,ImperialTheme.Text,new(213,84,230,29),FontStyle.Regular,"Georgia");
-            Text(graphics,PlayerRecognition.FactionLabel(enemy.Faction),8.5f,ImperialTheme.Muted,new(214,114,231,19));
-            Vec delta=enemy.Position-snapshot.SelfPosition;double distance=delta.Length;
-            Text(graphics,$"{distance:0.0}",25,ImperialTheme.Gold,new(212,134,130,42),FontStyle.Regular,"Georgia");
-            string bearing=SentinelRadarPresentation.Bearing(delta);
-            Text(graphics,bearing,16,SentinelRadarPresentation.Enemy,new(354,144,93,30),FontStyle.Bold);
-            Text(graphics,"map units",7.5f,ImperialTheme.Muted,new(214,175,125,17));
-            Text(graphics,$"{snapshot.EnemyCount} enem{(snapshot.EnemyCount==1?"y":"ies")} within {snapshot.Radius:0.#}",7.5f,ImperialTheme.Muted,new(214,194,231,17));
+            Text(graphics,$"{snapshot.EnemyCount} enem{(snapshot.EnemyCount==1?"y":"ies")} · {snapshot.Radius:0.#}u",12,
+                ImperialTheme.Text,new(213,80,168,26),FontStyle.Regular,"Georgia");
+            if(snapshot.EnemyCount>5)Text(graphics,$"+{snapshot.EnemyCount-5} more",7.5f,ImperialTheme.Muted,new(377,85,69,18));
+            string faction=enemy.Faction switch{PlayerFaction.Kartefant=>"Human",PlayerFaction.Merkhadian=>"Akkan",_=>"Unknown faction"};
+            Text(graphics,$"Nearest #{enemy.DisplayNumber} · {faction} · inferred",8,ImperialTheme.Gold,new(214,105,232,19));
+            int row=0;
+            foreach(var player in snapshot.Enemies.Take(5))
+            {
+                float y=126+row++*18;
+                Text(graphics,$"#{player.DisplayNumber}",7.5f,SentinelRadarPresentation.Enemy,new(214,y,31,18),FontStyle.Bold);
+                Text(graphics,PlayerRecognition.DisplayName(player.Id,player.Name),8,ImperialTheme.Text,new(247,y,112,18));
+                Vec delta=player.Position-snapshot.SelfPosition;
+                string bearing=delta.Length<.05?"HERE":SentinelRadarPresentation.Bearing(delta);
+                Text(graphics,$"{delta.Length:0.0}u {bearing}",8,ImperialTheme.Gold,new(362,y,85,18));
+            }
         }
         else
         {
@@ -120,10 +151,71 @@ internal static class SentinelRadarRenderer
             Text(graphics,$"{snapshot.Players.Count} nearby player{(snapshot.Players.Count==1?"":"s")}",8.5f,ImperialTheme.Gold,new(214,158,231,22));
         }
         // Status is deliberately never called Friendly: same-race Guild Wars are possible.
-        Legend(graphics,new(18,221),PlayerRelation.Enemy,"Enemy");
-        Legend(graphics,new(99,221),PlayerRelation.Party,"Party");
-        Legend(graphics,new(168,221),PlayerRelation.SameFaction,"Same faction");
-        Legend(graphics,new(299,221),PlayerRelation.Unknown,"Unknown");
+        Legend(graphics,new(12,222),snapshot.ZoneRule==ZoneCombatRule.Safe?PlayerRelation.OpposingSafe:PlayerRelation.Enemy,
+            snapshot.ZoneRule==ZoneCombatRule.Safe?"Opposing":"Enemy");
+        Legend(graphics,new(99,222),PlayerRelation.Party,"Party");
+        Legend(graphics,new(168,222),PlayerRelation.SameFaction,"Same faction");
+        Legend(graphics,new(299,222),PlayerRelation.Unknown,"Unknown");
+    }
+
+    internal readonly record struct EnemyProjection(SentinelPlayerMarker Player,PointF Point);
+    internal sealed record EnemyCluster(IReadOnlyList<EnemyProjection> Members,PointF Anchor);
+    internal readonly record struct EnemyBadge(EnemyCluster Cluster,RectangleF Bounds,string Caption);
+
+    internal static IReadOnlyList<EnemyCluster> EnemyClusters(SentinelRadarSnapshot snapshot,PointF center,float radius)
+    {
+        var projected=snapshot.Enemies.Select(p=>new EnemyProjection(p,
+            SentinelRadarPresentation.RadarPoint(p.Position-snapshot.SelfPosition,center,radius,snapshot.Radius))).ToArray();
+        int[] parent=Enumerable.Range(0,projected.Length).ToArray();
+        int Root(int index){while(parent[index]!=index){parent[index]=parent[parent[index]];index=parent[index];}return index;}
+        for(int a=0;a<projected.Length;a++)for(int b=a+1;b<projected.Length;b++)
+        {
+            float dx=projected[a].Point.X-projected[b].Point.X,dy=projected[a].Point.Y-projected[b].Point.Y;
+            if(dx*dx+dy*dy<=121)parent[Root(b)]=Root(a);
+        }
+        return Array.AsReadOnly(Enumerable.Range(0,projected.Length).GroupBy(Root)
+            .Select(group=>
+            {
+                var members=group.Select(index=>projected[index]).OrderBy(p=>p.Player.DisplayNumber).ToArray();
+                // Anchor at a real member's position, never relocate an enemy to
+                // make a label fit. Leaders identify the complete overlap group.
+                var anchor=members.OrderBy(p=>(p.Player.Position-snapshot.SelfPosition).Length).First().Point;
+                return new EnemyCluster(Array.AsReadOnly(members),anchor);
+            })
+            .OrderBy(group=>group.Members.Min(p=>(p.Player.Position-snapshot.SelfPosition).Length)).ToArray());
+    }
+
+    internal static IReadOnlyList<EnemyBadge> EnemyBadges(Graphics graphics,SentinelRadarSnapshot snapshot,PointF center,float radius)
+    {
+        var area=new RectangleF(12,48,190,164);
+        var occupied=snapshot.Players.Select(p=>SentinelRadarPresentation.RadarPoint(p.Position-snapshot.SelfPosition,center,radius,snapshot.Radius))
+            .Select(p=>new RectangleF(p.X-6,p.Y-6,12,12)).ToList();
+        occupied.Add(new(center.X-8,center.Y-8,16,16));
+        var result=new List<EnemyBadge>();
+        using var font=new Font("Segoe UI",7.5f,FontStyle.Bold);
+        foreach(var cluster in EnemyClusters(snapshot,center,radius))
+        {
+            string numbers=string.Join(",",cluster.Members.Take(3).Select(p=>p.Player.DisplayNumber));
+            string caption=cluster.Members.Count==1?$"#{numbers}":
+                $"×{cluster.Members.Count} #{numbers}{(cluster.Members.Count>3?$"+{cluster.Members.Count-3}":"")}";
+            float width=Math.Clamp(graphics.MeasureString(caption,font).Width+7,22,area.Width),height=18;
+            var point=cluster.Anchor;
+            var candidates=new List<PointF>{new(point.X+9,point.Y-23),new(point.X-width-9,point.Y-23),
+                new(point.X+9,point.Y+8),new(point.X-width-9,point.Y+8),new(point.X-width/2,point.Y-29),new(point.X-width/2,point.Y+13)};
+            // Dense groups may need a longer leader; staying in this pane keeps
+            // badges clear of the roster, compass title, legend and footer.
+            for(float y=area.Top;y<=area.Bottom-height;y+=20)
+                foreach(float x in new[]{area.Left,area.Right-width,area.Left+(area.Width-width)/2})candidates.Add(new(x,y));
+            foreach(var candidate in candidates)
+            {
+                var bounds=new RectangleF(Math.Clamp(candidate.X,area.Left,area.Right-width),
+                    Math.Clamp(candidate.Y,area.Top,area.Bottom-height),width,height);
+                var padded=RectangleF.Inflate(bounds,2,2);
+                if(occupied.Any(previous=>previous.IntersectsWith(padded)))continue;
+                result.Add(new(cluster,bounds,caption));occupied.Add(padded);break;
+            }
+        }
+        return result.AsReadOnly();
     }
 
     static void Legend(Graphics graphics,PointF point,PlayerRelation relation,string label)

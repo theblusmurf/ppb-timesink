@@ -1,5 +1,14 @@
 # Release notes
 
+## Release1.107
+
+- Fix Start/F8 rejecting valid saved paths because the player's route-entry height differed from the end anchor's height. Validate the selected target's recorded path, character, zone and configured entry corridor; retain the endpoint floor check when already near the anchor. Check alternative routes' actual shared XY origin rather than comparing their unrelated end-anchor heights. Existing route files contain XY waypoints and end-anchor height only, so path elevations remain unknown.
+- Skip redundant end-anchor height validation before starting accepted route travel. Confirm the actual arrival height against the destination before completing return and facing. Show a corridor/character/map/floor explanation when assigned routes cannot be joined, and include start position, height and path distance in private diagnostics. Preserve recorded points, final anchor/facing, occupancy fallback and movement guards.
+- Identify Sentinel enemies with stable session numbers, numbered radar markers and a nearby list of up to five individual enemies with distance and bearing. Preserve each enemy's number as distance order and watch range change; reset labels for another character, connection or zone.
+- Show overlap counts and numbered cluster badges with leader lines to actual observed positions. Draw enemies above the self marker so nearby or coincident opponents remain visible. Clustering changes drawing only and never merges player identities.
+- Use verified names when available and explicit player UID labels when the client name field is empty. Preserve raw names and name availability in private telemetry; no alternate real-name reader has been verified. Reject ambiguous duplicate UIDs consistently across player recognition, radar and alerts.
+- Validate identity replacement, brief reading gaps, memory bounds, range changes, stale/disconnected state, five-player lists, coincident markers and native passive-window rendering offline. Actual game input and the running installed application are not changed during validation.
+
 ## Release1.106
 
 - Implement the selected Sentinel Radar: compact navy/brass, north-up circular player radar with nearest opposing enemy name, faction, distance, bearing and count. Drag its passive header to reposition it; its body passes clicks through. Preserve the existing terrain radar and routes.

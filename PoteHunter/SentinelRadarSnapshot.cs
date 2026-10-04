@@ -4,12 +4,13 @@ namespace PoteHunter;
 
 /// <summary>A copied observational view. This never authorizes player attacks.</summary>
 internal readonly record struct SentinelPlayerMarker(uint Id,uint Generation,string Name,Vec Position,
-    PlayerFaction Faction,PlayerRelation Relation,bool KnownAlive,bool ConfirmedDead=false);
+    PlayerFaction Faction,PlayerRelation Relation,bool KnownAlive,bool ConfirmedDead=false,int DisplayNumber=0);
 
 internal sealed class SentinelRadarSnapshot
 {
     internal const double Range=25;
     readonly ReadOnlyCollection<SentinelPlayerMarker> players;
+    readonly ReadOnlyCollection<SentinelPlayerMarker> enemies;
     internal bool Fresh {get;}
     internal bool KnownAlive {get;}
     internal Vec SelfPosition {get;}
@@ -17,6 +18,7 @@ internal sealed class SentinelRadarSnapshot
     internal ZoneCombatRule ZoneRule {get;}
     internal double Radius {get;}
     internal IReadOnlyList<SentinelPlayerMarker> Players=>players;
+    internal IReadOnlyList<SentinelPlayerMarker> Enemies=>enemies;
     internal SentinelPlayerMarker? NearestEnemy {get;}
     internal int EnemyCount {get;}
 
@@ -32,10 +34,27 @@ internal sealed class SentinelRadarSnapshot
                 (p.Position-selfPosition).Length<=Radius)
             .Select(p=>ZoneRule!=ZoneCombatRule.PvP&&p.Relation==PlayerRelation.Enemy?
                 p with{Relation=ZoneRule==ZoneCombatRule.Safe?PlayerRelation.OpposingSafe:PlayerRelation.Unknown}:p)
-            .OrderBy(p=>(p.Position-selfPosition).Length).Take(128).ToArray():[];
+            .OrderBy(p=>(p.Position-selfPosition).Length).ThenBy(p=>p.Id).ThenBy(p=>p.Generation).Take(128).ToArray():[];
+        var enemyBodies=copied.Where(p=>p.Relation==PlayerRelation.Enemy).OrderBy(p=>p.Id).ThenBy(p=>p.Generation).ToArray();
+        // Root supplies numbers stable across polls. Deterministic UID ordering
+        // is only the fallback; crossing players must not swap labels by distance.
+        var used=new HashSet<int>(enemyBodies.Where(p=>p.DisplayNumber>0)
+            .GroupBy(p=>p.DisplayNumber).Where(group=>group.Count()==1).Select(group=>group.Key));
+        var numbers=new Dictionary<(uint,uint),int>();int next=1;
+        foreach(var player in enemyBodies)
+        {
+            int number=player.DisplayNumber;
+            if(number<=0||enemyBodies.Count(p=>p.DisplayNumber==number)>1)
+            {
+                while(used.Contains(next))next++;
+                number=next++;used.Add(number);
+            }
+            numbers[(player.Id,player.Generation)]=number;
+        }
+        copied=copied.Select(p=>p.Relation==PlayerRelation.Enemy?p with{DisplayNumber=numbers[(p.Id,p.Generation)]}:p).ToArray();
         players=Array.AsReadOnly(copied);
-        var enemies=copied.Where(p=>p.Relation==PlayerRelation.Enemy).ToArray();
-        EnemyCount=enemies.Length;NearestEnemy=enemies.Length==0?null:enemies[0];
+        var ranked=copied.Where(p=>p.Relation==PlayerRelation.Enemy).ToArray();enemies=Array.AsReadOnly(ranked);
+        EnemyCount=ranked.Length;NearestEnemy=ranked.Length==0?null:ranked[0];
     }
 
     internal static SentinelRadarSnapshot Unavailable(string zoneLabel,ZoneCombatRule zoneRule,double range=Range)

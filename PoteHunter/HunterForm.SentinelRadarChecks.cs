@@ -47,12 +47,23 @@ public sealed partial class HunterForm
             UpdatePlayerRecognition(self);UpdateSentinelRadar(null,false);
             Require(sentinelSnapshot.Fresh&&sentinelSnapshot.KnownAlive&&sentinelSnapshot.EnemyCount==1&&sentinelFrame.Baseline,
                 "Fresh live PvP observations lost their initial silent baseline.");
+            int stableNumber=sentinelSnapshot.NearestEnemy!.Value.DisplayNumber;
+            Require(stableNumber>0,"Accepted player did not acquire an identity label.");
             sentinelRange.Value=4;UpdateSentinelRadar(null,false);
             Require(sentinelSnapshot.EnemyCount==0&&sentinelSnapshot.Radius==4&&!sentinelFrame.PlaySound,
                 "Slider radius failed to change the radar and arrival detection together.");
             sentinelRange.Value=25;UpdateSentinelRadar(null,false);
             Require(sentinelSnapshot.EnemyCount==1&&sentinelFrame.Arrivals.Count==0&&!sentinelFrame.PlaySound,
                 "Increasing range replayed current players as arrivals.");
+            Require(sentinelSnapshot.NearestEnemy!.Value.DisplayNumber==stableNumber,"Changing display range renumbered an enemy.");
+            entities=[self,other with{Name=""}];UpdatePlayerRecognition(self);UpdateSentinelRadar(null,false);
+            using(var state=JsonDocument.Parse(JsonSerializer.Serialize(SentinelRadarState())))
+                Require(state.RootElement.GetProperty("NearestEnemy").GetString()=="Player 00000002"&&
+                    !state.RootElement.GetProperty("Enemies")[0].GetProperty("NameAvailable").GetBoolean(),"Blank-name telemetry lost its explicit UID fallback.");
+            entities=[self,other,other with{Generation=1}];UpdatePlayerRecognition(self);UpdateSentinelRadar(null,false);
+            Require(RecognizedPlayers().Length==0&&sentinelSnapshot.EnemyCount==0&&sentinelFrame.CurrentEnemies.Count==0,
+                "Ambiguous duplicate UID observations disagreed across recognition, radar and sound.");
+            entities=[self,other];UpdatePlayerRecognition(self);UpdateSentinelRadar(null,false);
             latestHealth=new(){{self.Id,new(0,100)},{other.Id,new(0,100)}};entities=[];
             UpdateSentinelRadar(null,false);
             Require(sentinelSnapshot.KnownAlive&&sentinelSnapshot.EnemyCount==1,
@@ -74,7 +85,7 @@ public sealed partial class HunterForm
         {
             connected=false;working=false;filter.Text=oldTarget;recognitionSelf=oldSelf;recognitionHealth=oldHealth;
             recognizedPlayers=oldPlayers;latestHealth=oldLatest;entities=oldEntities;currentParty=oldParty;
-            sentinelContext=oldContext;sentinelPolicy.Reset();navigationZone=oldZone;recognitionZone=oldRecognitionZone;
+            sentinelContext=oldContext;sentinelPolicy.Reset();sentinelNumbers.Reset();navigationZone=oldZone;recognitionZone=oldRecognitionZone;
             guardSelfId=oldId;recognitionSeen=oldSeen;sentinelInitialized=false;
             showSentinelRadar.Checked=saved.ShowSentinelRadar;sentinelSoundEnabled.Checked=saved.SentinelSoundEnabled;
             sentinelVolume.Value=saved.SentinelVolumePercent;sentinelPositionSaved=saved.SentinelRadarPositionSaved;

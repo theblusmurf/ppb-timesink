@@ -4,6 +4,18 @@ Open **Routes → Navigation**. The native view reads recovered terrain and avai
 
 ## In-game overlays
 
+Start/F8 follows the selected target's compatible recorded path to its saved end
+anchor when the character starts within the configured route corridor. Select the
+desired Primary or Alternative slot first. Character and map must match; starts
+already near an anchor retain its floor check. The saved height describes the end
+anchor, so starting on a lower or higher part of a path does not compare that part
+with the destination height. Existing routes store XY waypoints only, with no
+per-waypoint elevation or independently verified bridge/floor data.
+
+Fallback routes must share a nearby recorded start in the same map for the same
+character. Different end-anchor heights alone do not invalidate that shared start.
+The original end-anchor position and facing remain the travel destination.
+
 Expand **Overlay options**. Enable **Show radar overlay** or **Show route overlay**, then select **3D radar** / **3D route overlay** independently. Both default to 3D; clearing either switch restores its original 2D presentation. **Overlays: north-up top view** changes the fixed tilted camera to an overhead view. Map layers and opacity above apply to the 3D overlays. These presentation choices can be changed and saved while hunting.
 
 The radar follows the character using **Radar radius (map units)**. Red/orange markers represent known/unknown-HP living monsters; teal rings identify engaged targets. Gold marks live chests and amber marks remembered chests. Player heading, direction cone, traveled trail, current path and recorded blocked/avoid areas remain visual annotations. Dynamic markers require fresh connected readings. The route overlay fits the selected target's current-zone saved paths and player, retaining route colors, anchor facing, start corridor and farming area. Increasing the farming-area radius annotates the view without enlarging its zoom.

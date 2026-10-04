@@ -33,6 +33,23 @@ confirmed-dead bodies are excluded. Model-based faction and the zone-policy
 limitations below still apply. Real client playback/placement should be checked
 after upgrading; offline verification does not establish live attackability.
 
+## Enemy identification
+
+Sentinel lists the five nearest enemies separately, using session numbers that
+remain stable as players cross, move or leave the selected watch radius. Overlap
+badges show how many observed identities share a small radar area, plus their
+numbers; leader lines retain the actual positions. More distant enemies remain
+in the total count. A nearby enemy is drawn above the white self marker.
+
+Names come from the client's verified creature-name field. If that field is empty,
+the interface displays `Player` followed by its eight-digit hexadecimal UID and
+states that names are unavailable. This is an observed body ID, not a permanent
+character identity or a guessed real name. Raw name and name availability remain
+separate in private status data. No verified alternate enemy-name reader exists.
+Labels reset on connection, character or zone change; duplicate simultaneous UID
+records are excluded before classification. Distinct UIDs at the same position
+remain separate observations.
+
 ## Faction families
 
 | Exact player body | Model-based faction |

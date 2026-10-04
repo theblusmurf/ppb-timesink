@@ -23,7 +23,8 @@ public sealed partial class HunterForm
         // The asynchronous hunt loop may replace entities between UI ticks.
         recognitionSelf=self;recognitionZone=navigationZone;
         recognitionHealth=latestHealth.GetValueOrDefault(self.Id);
-        recognizedPlayers=entities.Where(e=>CombatCourtesy.IsOtherPlayer(e,self.Id)&&e.Position.Finite&&
+        recognizedPlayers=entities.GroupBy(e=>e.Id).Where(group=>group.Count()==1).Select(group=>group.Single())
+            .Where(e=>CombatCourtesy.IsOtherPlayer(e,self.Id)&&e.Position.Finite&&
                 !latestHealth.GetValueOrDefault(e.Id).Dead)
             .OrderBy(e=>(e.Position-self.Position).Length).Take(128).Select(e=>new ObservedPlayer(e,
                 PlayerRecognition.Classify(e,self,navigationZone,currentParty.Available&&
@@ -52,7 +53,8 @@ public sealed partial class HunterForm
             EnemyCountWithin25=players.Count(p=>p.Recognition.Enemy&&(p.Entity.Position-navigationPosition).Length<=25),
             Attackability="Not determined",Sentinel=SentinelRadarState() };
     }
-    object[] RecognizedPlayerState()=>RecognizedPlayers().Select(p=>(object)new {p.Entity.Id,p.Entity.Generation,p.Entity.Name,p.Entity.Model,p.Entity.Position,
+    object[] RecognizedPlayerState()=>RecognizedPlayers().Select(p=>(object)new {p.Entity.Id,p.Entity.Generation,p.Entity.Name,
+        DisplayName=PlayerRecognition.DisplayName(p.Entity.Id,p.Entity.Name),NameAvailable=!string.IsNullOrWhiteSpace(p.Entity.Name),p.Entity.Model,p.Entity.Position,
         Faction=p.Recognition.OtherFaction.ToString(),FactionLabel=PlayerRecognition.FactionLabel(p.Recognition.OtherFaction),
         Relation=p.Recognition.Relation.ToString(),p.Recognition.Status,p.Recognition.Enemy,
         Distance=(p.Entity.Position-navigationPosition).Length,Attackability="Not determined"}).ToArray();
@@ -77,7 +79,7 @@ public sealed partial class HunterForm
             PlayerRelation.Enemy=>"Enemy",PlayerRelation.Party=>"Party",PlayerRelation.SameFaction=>"Same faction",
             PlayerRelation.OpposingSafe=>"Non-PvP opponent",_=>"Unknown"
         };
-        string name=string.IsNullOrWhiteSpace(player.Entity.Name)?$"{player.Entity.Id:X8}":player.Entity.Name;
+        string name=PlayerRecognition.DisplayName(player.Entity.Id,player.Entity.Name);
         return status+": "+name;
     }
     MapMarker3D[] Player3DMarkers(double range=double.PositiveInfinity)=>RecognizedPlayers()

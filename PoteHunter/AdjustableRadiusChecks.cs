@@ -51,8 +51,8 @@ internal static class AdjustableRadiusChecks
         RejectPlan(()=>RecoveryTravel.Plan([route],route,new(25,9),false));
         Require(RecoveryTravel.StartupSlot([route],new(0,9),6,"Test",10,0,30)==-1 &&
             RecoveryTravel.StartupSlot([route],new(0,9),5,"Other",10,0,30)==-1 &&
-            RecoveryTravel.StartupSlot([route],new(0,9),5,"Test",20,0,30)==-1,
-            "A wider corridor admitted a different zone, character or floor.");
+            RecoveryTravel.StartupSlot([route],route.Anchor,5,"Test",20,0,30)==-1,
+            "A wider corridor admitted a different zone, character or endpoint floor.");
         foreach(double invalid in new[]{0,-1,double.NaN,double.PositiveInfinity})
             Require(Join(new(0,9),invalid)==-1,"An invalid corridor admitted startup travel.");
 

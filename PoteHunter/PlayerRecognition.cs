@@ -15,6 +15,8 @@ public readonly record struct PlayerRecognitionResult(
 // server's attackability flags, start combat, change courtesy, or send an alert.
 public static class PlayerRecognition
 {
+    // This is an explicit identity fallback, never a guessed character name.
+    public static string DisplayName(uint id,string? name)=>string.IsNullOrWhiteSpace(name)?$"Player {id:X8}":name.Trim();
     // Exact known bodies only: unknown PC_* variants and separate mount objects
     // must not acquire a faction merely by resemblance or their player name.
     public static PlayerFaction Faction(string? model) => model?.ToUpperInvariant() switch

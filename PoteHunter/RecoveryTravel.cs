@@ -20,9 +20,13 @@ internal static class RecoveryTravel
     }
     internal static int StartupSlot(IReadOnlyList<SavedNavigationRoute?> routes,Vec current,int zone,string character,double height,int preferred,double corridorRadius=DefaultStartupRadius)
     {
-        if(!current.Finite || !double.IsFinite(corridorRadius) || corridorRadius<=0)return -1;
+        if(!current.Finite || !double.IsFinite(height) || !double.IsFinite(corridorRadius) || corridorRadius<=0)return -1;
         var candidates=Enumerable.Range(0,routes.Count).Where(i=>routes[i] is {} route && Recorded(route) &&
-            RecoveryRouting.Compatible(route,zone,character,height)).Select(i=>(Slot:i,Distance:Nearest(routes[i]!,current).Distance))
+            RecoveryRouting.CompatibleIdentity(route,zone,character) && double.IsFinite(route.Height) &&
+            // Legacy paths contain X/Y only. Reject a wrong endpoint floor when
+            // already near that endpoint; do not apply its height along the path.
+            ((route.Anchor-current).Length>2.5 || RecoveryRouting.Compatible(route,zone,character,height)))
+            .Select(i=>(Slot:i,Distance:Nearest(routes[i]!,current).Distance))
             .Where(item=>item.Distance<=corridorRadius).ToArray();
         return candidates.OrderBy(item=>item.Slot==preferred?0:1).ThenBy(item=>item.Distance).Select(item=>item.Slot).DefaultIfEmpty(-1).First();
     }
@@ -31,7 +35,10 @@ internal static class RecoveryTravel
         route.Points.Zip(route.Points.Skip(1)).All(p=>(p.First-p.Second).Length<=8.01);
     internal static bool SharedOrigin(SavedNavigationRoute a,SavedNavigationRoute b)=>Recorded(a) && Recorded(b) &&
         a.Zone==b.Zone && (a.RevivalOrigin-b.RevivalOrigin).Length<=3 &&
-        (a.Height<=0 || b.Height<=0 || Math.Abs(a.Height-b.Height)<2);
+        // Endpoint heights may differ even when both recorded paths start at
+        // the same revival point. No origin height exists in the legacy schema.
+        (string.IsNullOrWhiteSpace(a.Character) || string.IsNullOrWhiteSpace(b.Character) ||
+            a.Character.Equals(b.Character,StringComparison.OrdinalIgnoreCase));
 
     static IEnumerable<Vec> Connector(Vec from,Vec to)
     {

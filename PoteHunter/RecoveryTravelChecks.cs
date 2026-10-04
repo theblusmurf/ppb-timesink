@@ -22,7 +22,28 @@ internal static class RecoveryTravelChecks
         Require(RecoveryTravel.StartupSlot(routes,new(0,0),5,"Test",10,2)==2,"Selected compatible route was not preferred.");
         Require(RecoveryTravel.StartupSlot([primary],new(0,6),6,"Test",10,0)==-1 &&
             RecoveryTravel.StartupSlot([primary],new(0,6),5,"Other",10,0)==-1 &&
-            RecoveryTravel.StartupSlot([primary],new(0,6),5,"Test",20,0)==-1,"Startup accepted a different map, character, or floor.");
+            RecoveryTravel.StartupSlot([primary],primary.Anchor,5,"Test",20,0)==-1,"Startup accepted a different map, character, or endpoint floor.");
+        var sloped=primary with{Height=170};
+        Require(RecoveryTravel.StartupSlot([sloped],sloped.RevivalOrigin,5,"Test",96,0)==0 &&
+            RecoveryTravel.StartupSlot([sloped],new(0,6),5,"Test",96,0)==0,
+            "A recorded uphill path was rejected because its endpoint differs from the current elevation.");
+        Require(RecoveryTravel.StartupSlot([sloped],new(2.5,12),5,"Test",96,0)==-1 &&
+            RecoveryTravel.StartupSlot([sloped],new(2.5001,12),5,"Test",96,0)==0 &&
+            RecoveryTravel.StartupSlot([sloped],sloped.Anchor,5,"Test",168,0)==-1 &&
+            RecoveryTravel.StartupSlot([sloped],sloped.Anchor,5,"Test",168.001,0)==0,
+            "Endpoint position or two-unit floor boundaries changed during route joining.");
+        Require(RecoveryTravel.StartupSlot([sloped],new(10.01,6),5,"Test",96,0)==-1 &&
+            RecoveryTravel.StartupSlot([sloped],sloped.RevivalOrigin,6,"Test",96,0)==-1 &&
+            RecoveryTravel.StartupSlot([sloped],sloped.RevivalOrigin,5,"Other",96,0)==-1 &&
+            RecoveryTravel.StartupSlot([sloped],sloped.RevivalOrigin,5,"Test",double.NaN,0)==-1,
+            "Uphill joining bypassed the corridor, map, character, or valid current-height guards.");
+        Require(RecoveryRouting.CompatibleIdentity(sloped,5,"Test") &&
+            !RecoveryRouting.Compatible(sloped,5,"Test",96) &&
+            RecoveryRouting.SavedReturnProblem(sloped,5,"Test",170,sloped.Anchor)==null,
+            "Path identity eligibility weakened the saved endpoint floor validation.");
+        Require(RecoveryRouting.Compatible(sloped,5,"Test",170)&&
+            !RecoveryRouting.Compatible(sloped,5,"Test",96)&&!RecoveryRouting.Compatible(sloped,5,"Test",double.NaN),
+            "Live arrival at the endpoint accepted a different or unreadable floor.");
         var segmentJoin=RecoveryTravel.Plan([primary],primary,new(10,9),false);
         Require(segmentJoin.Points.Contains(new Vec(0,9)) && segmentJoin.Points.Last()==primary.Anchor &&
             !segmentJoin.Points.Contains(primary.RevivalOrigin),"Startup failed to join the path segment and travel toward its anchor.");
@@ -43,8 +64,14 @@ internal static class RecoveryTravelChecks
         Invalid(()=>RecoveryTravel.Plan(routes,primary with{Points=[primary.Anchor]},primary.Anchor,false));
         Invalid(()=>RecoveryTravel.Plan(routes,primary with{Points=[primary.Anchor,new(0,0)]},primary.Anchor,false));
         Invalid(()=>RecoveryTravel.Plan([primary with{Character="Other"}],alternative,primary.Anchor,false));
-        Require(!RecoveryTravel.SharedOrigin(primary,alternative with{Zone=6}) && !RecoveryTravel.SharedOrigin(primary,alternative with{Height=20}) &&
-            !RecoveryTravel.SharedOrigin(primary,Route(new(20,20),new(20,14),new(20,8))),"Fallback accepted an incompatible zone, floor, or revival origin.");
+        Require(RecoveryTravel.SharedOrigin(sloped,alternative with{Height=96}) &&
+            !RecoveryTravel.SharedOrigin(primary,alternative with{Zone=6}) &&
+            !RecoveryTravel.SharedOrigin(primary,alternative with{Character="Other"}) &&
+            !RecoveryTravel.SharedOrigin(primary,Route(new(20,20),new(20,14),new(20,8))),
+            "Fallback confused different endpoint heights with origin compatibility or accepted another map, character, or origin.");
+        var uphillFallback=RecoveryTravel.Plan([sloped,alternative with{Height=96}],sloped,alternative.Anchor,false);
+        Require(uphillFallback.Points.SequenceEqual(new Vec[]{new(12,0),new(6,0),new(0,0),new(0,6),new(0,12)}),
+            "Different-height anchors sharing a recorded origin could not follow their saved paths.");
 
         var cycle=new RecoveryFallbackCycle(1);
         Require(cycle.Candidates(3).SequenceEqual(new[]{1,2,0}),"Fallback omitted the primary route or changed circular order.");
@@ -77,7 +104,7 @@ internal static class RecoveryTravelChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"recovery-travel-checks.json"),JsonSerializer.Serialize(new
         {
             Passed=true,HardwareInputEmitted=false,
-            Checks=new[]{"fallback follows current route to shared origin then destination route","reverse path when all spots occupied","mid-route recovery","bounded route connectors","invalid/far/disconnected routes rejected","circular fallback includes primary","ten-minute active wait","death/pause preserves cooldown","leash returns before waiting","Gamekeeper/group boundaries retained","stop during wait"}
+            Checks=new[]{"legacy uphill route joins use identity and XY corridor instead of endpoint height","endpoint position and floor boundaries retained","different-height anchors share recorded origins without borrowing another character or map","legacy path-segment elevation remains unknown","fallback follows current route to shared origin then destination route","reverse path when all spots occupied","mid-route recovery","bounded route connectors","invalid/far/disconnected routes rejected","circular fallback includes primary","ten-minute active wait","death/pause preserves cooldown","leash returns before waiting","Gamekeeper/group boundaries retained","stop during wait"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 }

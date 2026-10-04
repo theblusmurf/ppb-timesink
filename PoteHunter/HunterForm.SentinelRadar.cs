@@ -9,6 +9,7 @@ public sealed partial class HunterForm
     readonly NumericUpDown sentinelVolume=new(){Name="sentinelVolume",Minimum=0,Maximum=100,Value=45,Width=90,AccessibleName="Sentinel sound volume percent"};
     readonly Button resetSentinelPosition=new(){Name="resetSentinelPosition",Text="Reset radar position",AutoSize=true};
     readonly SentinelAlertPolicy sentinelPolicy=new();
+    readonly SentinelDisplayNumbers sentinelNumbers=new();
     SentinelAlertContext sentinelContext;
     SentinelAlertFrame sentinelFrame=SentinelAlertFrame.Empty("Waiting for player reading");
     SentinelRadarSnapshot sentinelSnapshot=SentinelRadarSnapshot.Unavailable("Unknown zone",ZoneCombatRule.Unknown);
@@ -68,13 +69,14 @@ public sealed partial class HunterForm
         var players=RecognizedPlayers();
         var rule=ZoneCombatRules.For(navigationZone);
         bool alive=fresh&&recognitionHealth.Known&&!recognitionHealth.Dead;
-        sentinelSnapshot=new(fresh,alive,self?.Position??default,rule.Name,rule.Rule,
-            players.Select(p=>new SentinelPlayerMarker(p.Entity.Id,p.Entity.Generation,p.Entity.Name,p.Entity.Position,
-                p.Recognition.OtherFaction,p.Recognition.Relation,p.Health.Known&&!p.Health.Dead,p.Health.Dead)),sentinelRange.Value);
-        // Offline fixtures must never reach an audio device or a game operation.
-        bool audioAllowed=!offlinePreviewMode&&gameBounds.HasValue&&gameForeground;
         if(self!=null)sentinelContext=new(world.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SentinelPlayerIdentity.Of(self),navigationZone);
+        sentinelNumbers.Update(connected,fresh,sentinelContext,players.Where(p=>p.Recognition.Enemy).Select(p=>p.Entity),Environment.TickCount64);
+        sentinelSnapshot=new(fresh,alive,self?.Position??default,rule.Name,rule.Rule,
+            players.Select(p=>new SentinelPlayerMarker(p.Entity.Id,p.Entity.Generation,p.Entity.Name,p.Entity.Position,
+                p.Recognition.OtherFaction,p.Recognition.Relation,p.Health.Known&&!p.Health.Dead,p.Health.Dead,sentinelNumbers.Number(p.Entity))),sentinelRange.Value);
+        // Offline fixtures must never reach an audio device or a game operation.
+        bool audioAllowed=!offlinePreviewMode&&gameBounds.HasValue&&gameForeground;
         sentinelFrame=sentinelPolicy.Update(new(showSentinelRadar.Checked,connected,fresh,alive,
             sentinelContext,
             players.Select(p=>new SentinelPlayerObservation(SentinelPlayerIdentity.Of(p.Entity),p.Entity.Name,
@@ -103,12 +105,17 @@ public sealed partial class HunterForm
         Enabled=showSentinelRadar.Checked,Visible=sentinelOverlay is {Visible:true},Range=sentinelRange.Value,
         SoundEnabled=sentinelSoundEnabled.Checked,Volume=(int)sentinelVolume.Value,Sound="Paired sonar",
         IntendedPlayback=sentinelSonar?.Playing??false,AudioError=sentinelSonar?.LastError,Status=sentinelFrame.Status,
-        NearestEnemy=sentinelSnapshot.NearestEnemy?.Name,EnemyCount=sentinelSnapshot.EnemyCount,
-        LastPollArrivals=sentinelFrame.Arrivals.Select(p=>p.Name).ToArray(),Position=sentinelOverlay?.Location
+        NearestEnemy=sentinelSnapshot.NearestEnemy is SentinelPlayerMarker nearest?PlayerRecognition.DisplayName(nearest.Id,nearest.Name):null,
+        NearestEnemyName=sentinelSnapshot.NearestEnemy?.Name,EnemyCount=sentinelSnapshot.EnemyCount,
+        Enemies=sentinelSnapshot.Players.Where(p=>p.Relation==PlayerRelation.Enemy).Select(p=>new
+        {
+            p.Id,p.Generation,p.DisplayNumber,DisplayName=PlayerRecognition.DisplayName(p.Id,p.Name),NameAvailable=!string.IsNullOrWhiteSpace(p.Name),
+            Distance=(p.Position-sentinelSnapshot.SelfPosition).Length,Bearing=SentinelRadarPresentation.Bearing(p.Position-sentinelSnapshot.SelfPosition)
+        }).ToArray(),LastPollArrivals=sentinelFrame.Arrivals.Select(p=>PlayerRecognition.DisplayName(p.Identity.Id,p.Name)).ToArray(),Position=sentinelOverlay?.Location
     };
     void HideSentinelRadar(){if(sentinelOverlay is {IsDisposed:false,Visible:true})sentinelOverlay.Hide();}
     void DisposeSentinelRadar()
     {
-        sentinelOverlay?.Dispose();sentinelOverlay=null;sentinelSonar?.Dispose();sentinelSonar=null;sentinelPolicy.Reset();
+        sentinelOverlay?.Dispose();sentinelOverlay=null;sentinelSonar?.Dispose();sentinelSonar=null;sentinelPolicy.Reset();sentinelNumbers.Reset();
     }
 }

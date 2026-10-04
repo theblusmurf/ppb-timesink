@@ -997,11 +997,16 @@ public sealed partial class HunterForm : Form
         var self=world.LocalPlayer();int zone=world.ActiveZone();Vec anchor=world.PlayerPosition();
         navigation.SelectTargetSelection(options.Target);
         int slot=options.GroupMode?-1:RecoveryTravel.StartupSlot(navigation.SavedRoutes,anchor,zone,self.Name,self.Height,SelectedSavedNavigationSlot(),(double)options.RouteCorridorRadius);
-        SavedNavigationRoute? route=slot>=0?navigation.GetSavedRoute(slot):navigation.SavedRoutesForZone(zone)
+        // StartupSlot verifies the recorded path, identity and entry corridor.
+        // Its destination height is not the player's current path elevation.
+        if(slot>=0)return null;
+        SavedNavigationRoute? route=navigation.SavedRoutesForZone(zone)
             .Where(item=>RecoveryRouting.Compatible(item.Route,zone,self.Name,self.Height) && (item.Route.Anchor-anchor).Length<=2.5)
             .OrderBy(item=>(item.Route.Anchor-anchor).Length).Select(item=>item.Route).FirstOrDefault();
-        if(slot>=0 && route!=null && (route.Anchor-anchor).Length>2.5)anchor=route.Anchor;
-        if(route==null && navigation.UnassignedRouteCount>0)
+        bool assigned=navigation.SavedRoutes.Any(item=>item!=null&&RecoveryTravel.Recorded(item));
+        if(route==null && assigned)
+            return $"Start within {options.RouteCorridorRadius:0.#} map units of a recorded {navigation.RouteTargetLabel} path for this character and map, or stand at its saved anchor on the matching floor.";
+        if(route==null && !assigned && navigation.UnassignedRouteCount>0)
             return $"Choose {navigation.RouteTargetLabel} in Overview, then Assign existing routes in Navigation, or record its return route with Home / End.";
         return RecoveryRouting.SavedReturnProblem(route,zone,self.Name,self.Height,anchor);
     }
@@ -1017,7 +1022,7 @@ public sealed partial class HunterForm : Form
         string? routeProblem=ClientRecoveryStartProblem(requested) ?? StartRecoveryRouteProblem(requested);
         if(routeProblem!=null)
         {
-            message=routeProblem;TraceLog.Record("start blocked by recovery route",new{Reason=routeProblem});return;
+            message=routeProblem;TraceLog.Record("start blocked by recovery route",new{Reason=routeProblem,Position=world.PlayerPosition(),Height=world.LocalPlayer().Height,Zone=world.ActiveZone(),Target=requested.Target,JoinRadius=requested.RouteCorridorRadius});return;
         }
         if(requested.HealerMode && requested.GroupMode)
         {
@@ -1741,7 +1746,7 @@ public sealed partial class HunterForm : Form
                     anchor=activationLocation=route.Anchor;savedHuntHeading=route.Heading;
                     if(route.Height>0)savedHuntHeight=route.Height;
                 }
-                TraceLog.Record("startup route selected",new{Slot=startupSlot,JoinRadius=o.RouteCorridorRadius,Position=world.PlayerPosition(),Anchor=anchor});
+                TraceLog.Record("startup route selected",new{Slot=startupSlot,JoinRadius=o.RouteCorridorRadius,Position=world.PlayerPosition(),Anchor=anchor,Height=runCharacter.Height,DestinationHeight=route.Height,DistanceToPath=RecoveryTravel.Nearest(route,runCharacter.Position).Distance,PathHeightsRecorded=false});
             }
             if(resumingClient is {} resumed)
             {
@@ -1986,7 +1991,7 @@ public sealed partial class HunterForm : Form
                     var route=navigation.GetSavedRoute(slot)!;
                     return RecoveryRouting.Occupied(route.Anchor,route.Height,route.HuntRadius>0?route.HuntRadius:(double)o.HuntRadius,entities,guardSelfId);
                 }
-                bool CompatibleSlot(int slot)=>navigation.GetSavedRoute(slot) is {} route && RouteCompatible(route) && RecoveryTravel.SharedOrigin(reference,route);
+                bool CompatibleSlot(int slot)=>navigation.GetSavedRoute(slot) is {} route && RecoveryRouting.CompatibleIdentity(route,runZone.Value,runCharacter.Name) && RecoveryTravel.SharedOrigin(reference,route);
                 void ResetPath(){path=null;progressIndex=-1;bestDistance=double.PositiveInfinity;progressAt=Environment.TickCount64;drive.StopApproach();drive.ResetTurnResponse();}
                 void Activate(int slot)
                 {
@@ -2024,7 +2029,7 @@ public sealed partial class HunterForm : Form
                         if(path==null)
                         {
                             var destination=fallbackCycle.Waiting?reference:activeRouteProfile!;
-                            if(!RouteCompatible(destination))throw new RouteUnavailableException("Saved route no longer matches the character or map.");
+                            if(!RecoveryRouting.CompatibleIdentity(destination,runZone.Value,runCharacter.Name))throw new RouteUnavailableException("Saved route no longer matches the character or map.");
                             var routes=alternatives?navigation.SavedRoutes:new SavedNavigationRoute?[]{destination};
                             var plan=RecoveryTravel.Plan(routes,destination,current,fallbackCycle.Waiting,!afterDeath && startupRouteTravel?(double)o.RouteCorridorRadius:20);
                             // Activation may be up to 2.5 units from the route's
@@ -2052,6 +2057,9 @@ public sealed partial class HunterForm : Form
                                 await Input.Delay(100,returnToken);continue;
                             }
                             RefreshGuardScene();if(ChooseDestination())continue;
+                            var arrivedBody=world.LocalPlayer();
+                            if(!RecoveryRouting.Compatible(activeRouteProfile!,runZone.Value,runCharacter.Name,arrivedBody.Height))
+                                throw new RouteUnavailableException("Saved anchor position reached on a different or unreadable floor; route arrival was not confirmed.");
                             await RestoreSavedHuntFacing(returnToken);
                             RefreshGuardScene();if(ChooseDestination())continue;
                             if((world.PlayerPosition()-anchor).Length>.5){ResetPath();continue;}

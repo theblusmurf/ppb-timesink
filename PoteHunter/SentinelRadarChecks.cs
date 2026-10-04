@@ -55,6 +55,61 @@ internal static class SentinelRadarChecks
         Rectangle monitor=new(-1920,-200,1200,800);
         Require(SentinelRadarPresentation.ClampPosition(new(-5000,-1000),new(460,250),monitor)==new Point(-1920,-200)&&
             SentinelRadarPresentation.ClampPosition(new(1000,1000),new(460,250),monitor)==new Point(-1180,350),"Clamping must preserve negative multi-monitor coordinates");
+        var crowdedMarkers=new[]{
+            new SentinelPlayerMarker(0x03b2,1,"",default,PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:1),
+            new SentinelPlayerMarker(0x0676,1,"",new(1.5,0),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:2),
+            new SentinelPlayerMarker(0x07bd,1,"",new(1.5,0),PlayerFaction.Kartefant,PlayerRelation.Enemy,false,DisplayNumber:3),
+            new SentinelPlayerMarker(0x088a,1,"Gale",new(-48,44),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:4),
+            new SentinelPlayerMarker(0x0912,1,"",new(42,-48),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:5)};
+        var crowded=new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,crowdedMarkers,100);
+        Require(crowded.EnemyCount==5&&crowded.Enemies.Select(p=>p.Id).Distinct().Count()==5&&crowded.NearestEnemy?.DisplayNumber==1,
+            "Five nearby identities, including exact self/coincident positions and unknown HP, must remain individual enemies");
+        var clusters=SentinelRadarRenderer.EnemyClusters(crowded,center,76);
+        Require(clusters.Count==3&&clusters.Sum(p=>p.Members.Count)==5&&clusters[0].Members.Count==3,
+            "Coincident and close projected enemies must form one accurate three-player overlap badge without losing member identities");
+        Require(clusters.All(group=>group.Members.Any(member=>member.Point==group.Anchor))&&
+            clusters.SelectMany(group=>group.Members).All(member=>member.Point==
+                SentinelRadarPresentation.RadarPoint(member.Player.Position-crowded.SelfPosition,center,76,100)),
+            "Clusters must retain actual coordinates and anchor on a real member rather than move enemies for label placement");
+        var crossing=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
+            crowdedMarkers.Select(p=>p with{Position=new(-p.Position.X,-p.Position.Y)}),100);
+        Require(crossing.Enemies.All(p=>p.DisplayNumber==crowded.Enemies.Single(original=>original.Id==p.Id).DisplayNumber),
+            "Supplied stable numbers must remain attached to UID/generation when distances or order change");
+        var fallback=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
+            crowdedMarkers.Select(p=>p with{DisplayNumber=0}).Reverse(),100);
+        var fallbackCrossing=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
+            crowdedMarkers.Select(p=>p with{DisplayNumber=0,Position=p.Id==0x03b2?new(90,0):p.Position}),100);
+        Require(fallback.Enemies.All(p=>p.DisplayNumber==fallbackCrossing.Enemies.Single(other=>other.Id==p.Id).DisplayNumber),
+            "Unassigned test numbers must follow deterministic UID ordering rather than nearest-distance ordering");
+        Require(PlayerRecognition.DisplayName(0x03b2,"")=="Player 000003B2"&&PlayerRecognition.DisplayName(0x088a," Gale ")=="Gale"&&
+            crowded.Enemies.Single(p=>p.Id==0x03b2).Name=="",
+            "Blank names must remain raw blank data, with explicit UID display fallback rather than invented character names");
+        using(var image=SentinelRadarRenderer.Render(crowded))
+        using(var graphics=Graphics.FromImage(image))
+        {
+            var badges=SentinelRadarRenderer.EnemyBadges(graphics,crowded,center,76);
+            Require(badges.Count==3&&badges.Sum(p=>p.Cluster.Members.Count)==5&&badges[0].Caption.StartsWith("×3 #1,2,3",StringComparison.Ordinal),
+                "Every overlap badge must report its exact current member count and corresponding stable numbers");
+            Require(badges.All(p=>new RectangleF(12,48,190,164).Contains(p.Bounds)&&!p.Bounds.IntersectsWith(new(102,122,16,16))),
+                "Number/count badges must stay in the radar pane and clear the self position");
+            Color nearSelf=image.GetPixel(110,130);
+            Require(nearSelf.R>230&&nearSelf.G<140&&nearSelf.B>70,
+                "The self marker must not cover an enemy at its exact position at the largest watch range");
+            image.Save(Path.Combine(outputDirectory,"sentinel-radar-five-enemies-clustered.png"));
+        }
+        var many=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
+            Enumerable.Range(1,20).Select(index=>new SentinelPlayerMarker((uint)index,1,"",new(1.5,0),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:index)),100);
+        Require(SentinelRadarRenderer.EnemyClusters(many,center,76).Single().Members.Count==20&&many.EnemyCount==20,
+            "A dense badge and total count must retain all identities beyond the five-row visible list");
+        using(var image=SentinelRadarRenderer.Render(many))image.Save(Path.Combine(outputDirectory,"sentinel-radar-twenty-enemies.png"));
+        foreach(var sample in new[]{("clustered-non-pvp",new SentinelRadarSnapshot(true,true,default,"Almighty Land · Zone 12",ZoneCombatRule.Safe,crowdedMarkers,100)),
+            ("clustered-unknown",new SentinelRadarSnapshot(true,true,default,"Unverified map",ZoneCombatRule.Unknown,crowdedMarkers,100)),
+            ("clustered-stale",new SentinelRadarSnapshot(false,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,crowdedMarkers,100))})
+        {
+            Require(sample.Item2.Enemies.Count==0&&SentinelRadarRenderer.EnemyClusters(sample.Item2,center,76).Count==0,
+                "Non-PvP, unverified and stale states cannot retain previous enemy numbers or cluster groups");
+            using var image=SentinelRadarRenderer.Render(sample.Item2);image.Save(Path.Combine(outputDirectory,$"sentinel-radar-{sample.Item1}.png"));
+        }
         foreach(var sample in new[]{("pvp",pvp),("non-pvp",safe),("unknown",unknown),("no-data",stale),
             ("no-enemy",new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,[]))})
         {
@@ -77,6 +132,7 @@ internal static class SentinelRadarChecks
             "Hiding the radar must hide the drag header and preserve foreground");
         File.WriteAllText(Path.Combine(outputDirectory,"sentinel-radar-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,ImmutableSnapshots=true,StalePlayersCleared=true,ZoneStatusGated=true,NorthUp=true,
+            StableEnemyNumbers=true,CoincidentIdentityCounts=true,ExactProjectedPositions=true,SelfDoesNotHideEnemy=true,BlankNamesUseIds=true,
             BodyClickThrough=true,HeaderPassive=true,ForegroundPreserved=true,HardwareInputEmitted=false},new JsonSerializerOptions{WriteIndented=true}));
     }
 
