@@ -34,7 +34,7 @@ public sealed partial class HunterForm
         };
         setupClientRecovery.Click+=async(_,_)=>await ConfigureClientLogin();
         testClientLogin.Click+=async(_,_)=>await TestClientLogin();
-        priorityHint.SetToolTip(autoClientRecovery,"Only an unexpected client exit during a solo hunt resumes automatically. PPB retains your anchor/facing and selected saved route. F9, manual Stop and focus loss cancel recovery. Password is encrypted for this Windows account.");
+        priorityHint.SetToolTip(autoClientRecovery,"Only an unexpected client exit during a solo hunt resumes automatically. PlayPoteBot retains your anchor/facing and selected saved route. F9, manual Stop and focus loss cancel recovery. Password is encrypted for this Windows account.");
     }
     void CancelClientRecovery(){armedClientResume=null;pendingClientResume=null;resumingClient=null;clientRecoveryCancel?.Cancel();}
     string? ClientRecoveryStartProblem(Options options)
@@ -221,9 +221,9 @@ public sealed partial class HunterForm
     }
     internal Form CreateClientLoginSetup()
     {
-        var dialog=new LoginSetupDialog{Text="PPB · Login setup",Size=new(730,850),MinimumSize=new(650,610),StartPosition=FormStartPosition.CenterParent,BackColor=UiWindow,ForeColor=UiText,Font=Font};
+        var dialog=new LoginSetupDialog{Text="PlayPoteBot · Login setup",Size=new(730,850),MinimumSize=new(650,610),StartPosition=FormStartPosition.CenterParent,BackColor=UiWindow,ForeColor=UiText,Font=Font};
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,AutoScroll=true,Padding=new(16)};dialog.Controls.Add(layout);
-        var instructions=new Label{AutoSize=true,MaximumSize=new(660,0),Text="Choose the game launcher and capture its Play/Start button first. Keep client.exe selected separately for verification and login captures; PPB never starts it directly. Add one password-field step followed by Login and character/Enter Game buttons. Open each screen manually before Capture. Capture with the game password EMPTY and pointer away. Select static screen text distinct from the button. Setup sends no game input.\n\nPassword stays encrypted for this Windows account. Blank keeps the existing secret. Your saved account name stays in the game."};layout.Controls.Add(instructions);
+        var instructions=new Label{AutoSize=true,MaximumSize=new(660,0),Text="Choose the game launcher and capture its Play/Start button first. Keep client.exe selected separately for verification and login captures; PlayPoteBot never starts it directly. Add one password-field step followed by Login and character/Enter Game buttons. Open each screen manually before Capture. Capture with the game password EMPTY and pointer away. Select static screen text distinct from the button. Setup sends no game input.\n\nPassword stays encrypted for this Windows account. Blank keeps the existing secret. Your saved account name stays in the game."};layout.Controls.Add(instructions);
         LauncherCalibration? launcher=clientRecoveryProfile?.Launcher;
         var launcherPath=new TextBox{Width=620,ReadOnly=true,Text=launcher?.Executable??""};layout.Controls.Add(launcherPath);
         var launcherActions=new FlowLayoutPanel{AutoSize=true};var browseLauncher=new Button{Text="Choose game launcher",AutoSize=true};var captureLauncher=new Button{Text="Capture launcher Play · 5s",AutoSize=true};launcherActions.Controls.AddRange([browseLauncher,captureLauncher]);layout.Controls.Add(launcherActions);
@@ -257,7 +257,7 @@ public sealed partial class HunterForm
                 selected=selected with{Width=bounds.Width,Height=bounds.Height};
                 var temporary=new ClientRecoveryProfile(1,false,executable.Text,"",0,0,"",[]){Launcher=selected};
                 using var frame=new LoginSurface(process,identity,temporary,true).Capture(default);dialog.Activate();
-                using var editor=RepairSetupForm.ForLogin(frame,false,UiWindow,UiText);editor.Text="PPB launcher setup · Play/Start";
+                using var editor=RepairSetupForm.ForLogin(frame,false,UiWindow,UiText);editor.Text="PlayPoteBot launcher setup · Play/Start";
                 if(editor.ShowDialog(dialog)==DialogResult.OK && editor.Selection is {} captured)
                 {
                     selected=selected with{Play=new("Launcher Play",false,captured.Marker,captured.Button,captured.Click)};selected.VerifyFile();launcher=selected;

@@ -16,7 +16,7 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    const int UiCornerRadius = 8;
+    const int UiCornerRadius = 13;
     // Imperial Command: PlayPOTE midnight surfaces and warm gold trim.
     static readonly Color UiWindow = Color.FromArgb(14, 13, 14);
     static readonly Color UiSidebar = Color.FromArgb(26, 23, 24);
@@ -37,12 +37,15 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PPB · Crownfire";
+        Text = "PlayPoteBot · Crownfire";
+        using(var stream=typeof(HunterForm).Assembly.GetManifestResourceStream("PoteHunter.PlayPoteBotIcon"))
+            if(stream!=null)Icon=new Icon(stream);
+        FormClosed+=(_,_)=>Icon?.Dispose();
         Font = new Font("Segoe UI", 10f);
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
         MinimumSize = new Size(1120, 760);
-        Size = new Size(1280, 940);
+        Size = new Size(1280, 980);
         BackColor = UiWindow;
         ForeColor = UiText;
         Padding = Padding.Empty;
@@ -72,7 +75,7 @@ public sealed partial class HunterForm
         tabs.SelectedIndex = 0;
         var indexPage=new TabPage("Index"){AutoScroll=true,Padding=new Padding(16)};
         indexPage.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(620,0),Text=
-            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PPB in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nChoose a target preset or name filter in Overview first. Each target selection has its own Primary route and two alternatives; custom filters are separate, and capitalization does not matter. Older routes are preserved as unassigned: select the correct target, then use Assign existing routes in Navigation on an empty set. In Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Revive + return to anchor and Resume farming on arrival. Enable alternatives in Navigation and record them for the same target selection from the same revival start for occupied-spot fallback. Startup, recovery and fallback only use that target's routes. Changing targets during recording cancels the unfinished route; clearing target routes leaves other selections intact. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
+            "HOTKEYS\n\nF6 — Calibrate movement and turning (hunt stopped).\nF8 — Calibrate if needed, start hunting; press again to stop.\nF9 — Stop the current operation.\nHome — Start recording the selected route.\nEnd — Finish and save the selected route, including facing.\n\nHome / End require connection, stopped hunting, and the game or PlayPoteBot in front. F6 / F8 require the game in front.\n\nSTOP GUARDS\nEscape stops automated input. Manually pressing Enter for chat or switching away from the game also stops input.\n\nRETURN TO ANCHOR\nChoose a target preset or name filter in Overview first. Each target selection has its own Primary route and two alternatives; custom filters are separate, and capitalization does not matter. Older routes are preserved as unassigned: select the correct target, then use Assign existing routes in Navigation on an empty set. In Navigation, select Primary or an Alternative slot. At the route start press Home, walk to the farming anchor, face the targets, then press End. A saved spot alone is not a route.\n\nTo run the route, stand within 10 map units of its recorded path and press F8 with the game in front. The selected compatible slot is preferred; otherwise the nearest compatible route is used. The character joins the path, follows it to the anchor, restores facing, and hunts selected targets. Outside 10 units, Start uses the activation location as usual. Solo hunting only.\n\nFor death recovery, enable Setup > Death recovery > Revive + return to anchor and Resume farming on arrival. Enable alternatives in Navigation and record them for the same target selection from the same revival start for occupied-spot fallback. Startup, recovery and fallback only use that target's routes. Changing targets during recording cancels the unfinished route; clearing target routes leaves other selections intact. Test revival leaves hunting stopped; it does not run the return route.\n\nGAME INPUT\nW / S move forward / backward; A / D strafe. Attack, skill, healing, potion and revive keys follow your configured hotbar and recovery settings; they are not global app hotkeys."});
         tabs.TabPages.Add(indexPage);
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } groupLayout &&
             groupLayout.Controls.OfType<FlowLayoutPanel>().FirstOrDefault() is { } groupHeader)
@@ -102,12 +105,12 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Name = "ironboundMasthead", Text = "PPB   /   CROWNFIRE", Dock = DockStyle.Fill,
+            Name = "ironboundMasthead", Text = "PlayPoteBot   /   CROWNFIRE", Dock = DockStyle.Fill,
             Padding = new Padding(40, 0, 0, 0),
             Font = new Font("Georgia",16f), ForeColor = UiAccent,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
         },0,0);
-        masthead.Controls[0].Paint += (_, e) => DrawIronboundShield(e.Graphics, new Rectangle(3, 14, 27, 30));
+        masthead.Controls[0].Paint += (_, e) => e.Graphics.DrawImage(ImperialTheme.Logo.Value,new Rectangle(0,9,36,44));
         masthead.Controls.Add(new Label
         {
             Text = AppUpdates.CurrentVersion, Dock = DockStyle.Fill,
@@ -199,7 +202,8 @@ public sealed partial class HunterForm
         tabs.TabPages.Add(overviewPage);
         var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
         var advancedPages = new[]{protectionPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Overview",new[]{overviewPage}),("Setup",new[]{setupPage}),("Support",new[]{supportPage}),("Monitor",monitors),("Navigation",new[]{navigationPage}),("Advanced",advancedPages),("Index",new[]{indexPage})};
+        var sections=new[]{("Overview",new[]{overviewPage}),("Hunt",new[]{setupPage,supportPage}),("Routes",new[]{navigationPage}),("Recovery",new[]{setupPage}),("Settings",monitors.Concat(advancedPages).Append(indexPage).ToArray())};
+        string selectedSection="Hunt";
         var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
         foreach(var (name,pages) in sections)
         {
@@ -215,7 +219,11 @@ public sealed partial class HunterForm
                 picker.Items.AddRange(pages);picker.SelectedIndex=0;pagePickers.Controls.Add(picker);
                 picker.SelectionChangeCommitted+=(_,_)=>{if(picker.SelectedItem is TabPage page)tabs.SelectedTab=page;};
             }
-            button.Click+=(_,_)=>tabs.SelectedTab=picker?.SelectedItem as TabPage??pages[0];
+            button.Click+=(_,_)=>
+            {
+                selectedSection=name;tabs.SelectedTab=picker?.SelectedItem as TabPage??pages[0];RefreshNavigation();
+                if(name=="Recovery")setupPage.ScrollControlIntoView(autoRevive);
+            };
             navButtons.Add((button,pages,picker));
         }
         void RefreshNavigation()
@@ -226,7 +234,7 @@ public sealed partial class HunterForm
             pageSubtitle.AutoEllipsis=true;
             foreach(var (button,pages,picker) in navButtons)
             {
-                bool active=pages.Contains(selected);button.BackColor=active?UiAccentDark:UiSidebar;button.ForeColor=active?UiAccent:UiMuted;
+                bool active=pages.Contains(selected) && (selected!=setupPage || button.Text==(selectedSection=="Recovery"?"Recovery":"Hunt"));button.BackColor=active?UiAccentDark:UiSidebar;button.ForeColor=active?UiAccent:UiMuted;
                 button.FlatAppearance.BorderColor=active?UiAccent:UiBorder;
                 if(picker!=null){picker.Visible=active;if(active)picker.SelectedItem=selected;}
             }

@@ -35,7 +35,7 @@ internal static class ClientRecoveryChecks
         restored.Validate();Require(restored.Launcher?.Executable==launcher.Executable && restored.Launcher.Play.Point==launcher.Play.Point && restored.ProtectedPassword==profile.ProtectedPassword && restored.Steps.Length==profile.Steps.Length,"launcher migration discarded existing calibration/secret");
         foreach(var bad in new[]{launcher with{Executable=profile.Executable},launcher with{Play=profile.Steps[0]},launcher with{Width=0},launcher with{Play=launcher.Play with{Button=marker}},launcher with{Hash="invalid"}})
         {bool failed=false;try{bad.Validate();}catch(InvalidOperationException){failed=true;}Require(failed,"invalid launcher accepted");}
-        var folder=Path.Combine(Path.GetTempPath(),"PPB-client-check-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
+        var folder=Path.Combine(Path.GetTempPath(),"PlayPoteBot-client-check-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
         var executable=Path.Combine(folder,"client.exe");
         try
         {

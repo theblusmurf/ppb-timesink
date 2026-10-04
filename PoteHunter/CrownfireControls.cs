@@ -5,7 +5,7 @@ namespace PoteHunter;
 /// <summary>Presentation only. Native controls retain their input, bindings and accessibility.</summary>
 internal static class CrownfireControls
 {
-    internal static GraphicsPath Frame(RectangleF r,float radius=7)
+    internal static GraphicsPath Frame(RectangleF r,float radius=13)
     {
         float d=Math.Min(radius*2,Math.Min(r.Width,r.Height));
         var p=new GraphicsPath();
@@ -101,9 +101,9 @@ internal static class CrownfireControls
             case "Pulkhan":g.DrawEllipse(pen,5,7,14,14);g.DrawLines(pen,new PointF[]{new(6,9),new(2,5),new(3,1)});g.DrawLines(pen,new PointF[]{new(18,9),new(22,5),new(21,1)});g.DrawLine(pen,8,13,10,14);g.DrawLine(pen,14,14,16,13);break;
             case "Tribal":g.DrawPolygon(pen,new PointF[]{new(12,2),new(21,7),new(18,19),new(12,23),new(6,19),new(3,7)});g.DrawLine(pen,7,10,10,12);g.DrawLine(pen,14,12,17,10);g.DrawLine(pen,12,12,12,18);break;
             case "Monitor":for(int i=0;i<3;i++)g.FillRectangle(brush,3+i*7,14-i*5,4,8+i*5);break;
-            case "Navigation":case "Route":g.DrawEllipse(pen,2,2,20,20);g.DrawPolygon(pen,new PointF[]{new(17,6),new(14,15),new(6,18),new(9,9)});break;
-            case "Support":g.DrawEllipse(pen,2,3,20,16);g.DrawLine(pen,7,18,5,23);break;
-            case "Index":g.DrawRectangle(pen,3,3,18,18);g.DrawLine(pen,12,3,12,21);break;
+            case "Routes":case "Navigation":case "Route":g.DrawEllipse(pen,2,2,20,20);g.DrawPolygon(pen,new PointF[]{new(17,6),new(14,15),new(6,18),new(9,9)});break;
+            case "Recovery":case "Support":g.DrawEllipse(pen,2,3,20,16);g.DrawLine(pen,7,18,5,23);break;
+            case "Settings":case "Index":g.DrawRectangle(pen,3,3,18,18);g.DrawLine(pen,12,3,12,21);break;
             case "Connect":g.DrawEllipse(pen,2,4,12,8);g.DrawEllipse(pen,10,12,12,8);g.DrawLine(pen,9,10,15,14);break;
             default:g.DrawEllipse(pen,5,5,14,14);g.DrawLine(pen,12,1,12,6);g.DrawLine(pen,12,18,12,23);g.DrawLine(pen,1,12,6,12);g.DrawLine(pen,18,12,23,12);break;
         }

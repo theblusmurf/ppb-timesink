@@ -13,7 +13,7 @@ internal static class ImperialTheme
     internal static readonly Color RouteBlue = Color.FromArgb(137,175,204);
     internal static readonly Color RouteRose = Color.FromArgb(206,146,146);
     internal static readonly Lazy<Bitmap> Banner = new(()=>Load("news-bg"));
-    internal static readonly Lazy<Bitmap> Logo = new(()=>Load("logo"));
+    internal static readonly Lazy<Bitmap> Logo = new(()=>Load("playpotebot-compass"));
 
     static Bitmap Load(string name)
     {

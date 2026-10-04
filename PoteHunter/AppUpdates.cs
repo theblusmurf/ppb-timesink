@@ -53,7 +53,7 @@ internal static class AppUpdates
         if((int)code is >=200 and <300)return;
         throw new InvalidOperationException(code switch {
             System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden=>"The public GitHub update feed is temporarily unavailable or rate limited. Try again later.",
-            System.Net.HttpStatusCode.NotFound=>"No official release is available from the public PPB update feed yet.",
+            System.Net.HttpStatusCode.NotFound=>"No official release is available from the public PlayPoteBot update feed yet.",
             _=>$"GitHub returned HTTP {(int)code}. Try again later."});
     }
     public static async Task<AvailableUpdate?> Check(CancellationToken token,string? current=null)
@@ -163,7 +163,7 @@ public partial class HunterForm
     }
     async void OpenUpdates()
     {
-        using var dialog=new Form{Text="PPB updates",Width=570,Height=340,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false,MaximizeBox=false};
+        using var dialog=new Form{Text="PlayPoteBot updates",Width=570,Height=340,StartPosition=FormStartPosition.CenterParent,MinimizeBox=false,MaximizeBox=false};
         var layout=new FlowLayoutPanel{Dock=DockStyle.Fill,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new(16),AutoScroll=true};dialog.Controls.Add(layout);
         layout.Controls.Add(new Label{Text=$"Installed: {AppUpdates.CurrentVersion} · {AppUpdates.Repository}",AutoSize=true});
         layout.Controls.Add(new Label{Text="Public downloads · No GitHub sign-in or token required.",AutoSize=true});
@@ -192,7 +192,7 @@ public partial class HunterForm
             {
                 string path=await AppUpdates.Download(available,cancellation.Token);
                 if(!AutoPatcher.Idle(working,busy || clientRecoveryRunning || pendingClientResume!=null,navigation.Recording,false) || dialog.IsDisposed)return;
-                if(MessageBox.Show(dialog,$"Install {available.Version}? PPB will close. Your settings and saved routes stay in place.","Install update",MessageBoxButtons.OKCancel)!=DialogResult.OK)return;
+                if(MessageBox.Show(dialog,$"Install {available.Version}? PlayPoteBot will close. Your settings and saved routes stay in place.","Install update",MessageBoxButtons.OKCancel)!=DialogResult.OK)return;
                 var start=new ProcessStartInfo(path){UseShellExecute=true};start.ArgumentList.Add("/DIR="+AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
                 Process.Start(start);dialog.Close();Close();
             }

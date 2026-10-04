@@ -38,7 +38,7 @@ static class Entry
         Startup("Initializing Windows Forms");
         ApplicationConfiguration.Initialize();
         Startup("Constructing hunter window");
-        Application.ThreadException += (_, e) => { Input.Release(); MessageBox.Show(e.Exception.Message, "PPB"); };
+        Application.ThreadException += (_, e) => { Input.Release(); MessageBox.Show(e.Exception.Message, "PlayPoteBot"); };
         var form = new HunterForm();form.ConfigureUpdates(); Startup("Running hunter window");
         Application.Run(form); return 0;
     }

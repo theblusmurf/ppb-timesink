@@ -45,7 +45,7 @@ public sealed partial class HunterForm
                 if(!Find<Label>("overviewResource"+name).Text.StartsWith(LootTrackerSnapshot.DisplayName(name)+"\n")) throw new Exception("Overview resource missing: "+name);
             if(Find<Label>("overviewResourceGold").Text!="Gold (net)\n—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
-            if(Text!="PPB · Crownfire")throw new Exception("PPB title branding was lost.");
+            if(Text!="PlayPoteBot · Crownfire")throw new Exception("PlayPoteBot title branding was lost.");
             foreach(string name in new[]{"overviewGamekeeper","overviewRevive","overviewRepair"})
             {
                 var check=Find<CheckBox>(name);
@@ -79,8 +79,8 @@ public sealed partial class HunterForm
         var body = CompactTable(); body.Name = "fieldOverviewBody";
         page.Controls.Add(body);
         var columns = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
-        columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 57));
-        columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 43));
+        columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
         columns.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var left = CompactTable(); left.Margin = new Padding(0, 0, 5, 0);
         var right = CompactTable(); right.Margin = new Padding(5, 0, 0, 0);
@@ -115,12 +115,12 @@ public sealed partial class HunterForm
         Label Detail(string name)
             => new() { Name = name, AutoSize = true, ForeColor = UiMuted, Margin = new Padding(0, 2, 0, 6) };
 
-        var targets = CompactCard("TARGET SELECTION"); CompactAdd(left, targets);
-        var targetButtons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 72, WrapContents = false, Margin = Padding.Empty };
+        var targets = CompactCard("HUNT PREFERENCES"); CompactAdd(right, targets);
+        var targetButtons = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 43, WrapContents = false, Margin = Padding.Empty };
         var targetPresets = new List<(string Name, Button Button)>();
         foreach(string family in new[] { "Mimic", "Pulkhan", "Tribal", "Tower" })
         {
-            var button = new Button { Name = "overviewTarget"+family, Text = family, Size = new Size(106, 66), Margin = new Padding(0, 0, 6, 6), AccessibleDescription = "Select the "+family+" target filter" };
+            var button = new Button { Name = "overviewTarget"+family, Text = family, Size = new Size(103, 36), Margin = new Padding(0, 0, 6, 6), AccessibleDescription = "Select the "+family+" target filter" };
             button.Click += (_, _) => { if(CanEdit(filter)) { filter.Text = family; QueueCompactSave(); } refreshOverview?.Invoke(); };
             targetPresets.Add((family, button)); targetButtons.Controls.Add(button);
         }
@@ -132,7 +132,7 @@ public sealed partial class HunterForm
         CompactAdd(targets, Toggle("overviewGamekeeper", "Prioritize Gamekeeper", prioritizeGamekeeper));
         priorityHint.SetToolTip(targetButtons, "Choose one target family, or enter a name filter. Gamekeeper priority is independent.");
 
-        var combat = CompactCard("COMBAT SETTINGS"); CompactAdd(left, combat);
+        var combat = CompactCard("SKILLS & COMBAT"); CompactAdd(right, combat);
         var mode = new ComboBox { Name = "overviewMode", DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
         mode.Items.AddRange(compactMode.Items.Cast<object>().ToArray());
         mode.SelectionChangeCommitted += (_, _) => { if(CanEdit(compactMode)) compactMode.SelectedIndex = mode.SelectedIndex; refreshOverview?.Invoke(); };
@@ -140,26 +140,43 @@ public sealed partial class HunterForm
         var range = Number(1, 30, 1); range.Name = "overviewAttackRange"; range.DecimalPlaces = melee.DecimalPlaces;
         range.ValueChanged += (_, _) => { if(!syncing && CanEdit(melee)) { melee.Value = Math.Clamp(range.Value, melee.Minimum, melee.Maximum); QueueCompactSave(); } };
         melee.ValueChanged += (_, _) => refreshOverview?.Invoke();
-        CompactAdd(combat, CompactRow("Mode / range", mode, Caption("Range"), range));
+        CompactAdd(targets, CompactRow("Mode / range", mode, Caption("Range"), range));
         priorityHint.SetToolTip(range, "Effective attack range in map units; ranged/class limits follow detailed Hunt settings.");
         CompactAdd(combat, Toggle("overviewAutoSkills", "Detect attack skills automatically", autoSkills));
         CompactAdd(combat, new Label { Text = "Combat skill gap  1.5 s  ·  Self-heals exempt", AutoSize = true, ForeColor = UiMuted, Margin = new Padding(0, 0, 0, 5) });
+        var skillsToggle=Link("Skills and combat ▸",()=>{combat.Visible=!combat.Visible;});
+        skillsToggle.Name="overviewSkillsToggle";CompactAdd(targets,skillsToggle);
+        combat.Visible=false;
         CompactAdd(combat, Link("All hunt settings", () => OpenSetup()));
 
-        var anchor = CompactCard("ANCHOR & LOOT"); CompactAdd(left, anchor);
+        var introduction=new Label {Text="Hold your ground.\nCommand the hunt.",AutoSize=true,Font=new Font("Georgia",22f),ForeColor=UiText,Margin=new Padding(0,0,0,16)};
+        CompactAdd(left,introduction);
+        var anchor = CompactCard("ANCHOR ROUTE"); CompactAdd(left, anchor);
         var anchorText = Detail("overviewAnchor"); CompactAdd(anchor, anchorText);
+        var routeMap=new Panel {Name="overviewRouteMap",Dock=DockStyle.Top,Height=170,Margin=new Padding(0,4,0,8),BackColor=UiWindow};
+        routeMap.Paint+=(_,e)=>DrawRouteOverlay(e.Graphics,routeMap.ClientSize);
+        CompactAdd(anchor,routeMap);
+        CompactAdd(anchor,Toggle("overviewShowRoutes","Show route overlay",showRouteOverlay));
         CompactAdd(anchor, Toggle("overviewPickup", "Collect loot within 10 units; return to anchor", nearbyLootPickup));
         priorityHint.SetToolTip(anchor, "Solo loot excursions use the saved activation anchor. Pickup, return, combat and recovery rules are unchanged.");
 
-        var recovery = CompactCard("RECOVERY"); CompactAdd(right, recovery);
+        var recovery = CompactCard("PROTECTION & RECOVERY"); CompactAdd(right, recovery);
+        CompactAdd(recovery,Toggle("overviewSelfHealRule","Self-heal health rule",healthSkillCondition));
+        var healThreshold=Number(1,100);healThreshold.Name="overviewSelfHealPercent";
+        healThreshold.ValueChanged+=(_,_)=>{if(!syncing && CanEdit(healthSkillPercent)){healthSkillPercent.Value=healThreshold.Value;QueueCompactSave();}};
+        updates.Add(()=>{healThreshold.Value=healthSkillPercent.Value;healThreshold.Enabled=CanEdit(healthSkillPercent);});
+        healthSkillPercent.ValueChanged+=(_,_)=>refreshOverview?.Invoke();
+        CompactAdd(recovery,CompactRow("Self-heal below",healThreshold,Caption("% HP")));
         CompactAdd(recovery, Toggle("overviewRevive", "Auto revive + return to anchor", autoRevive));
         CompactAdd(recovery, Toggle("overviewRepair", "Auto repair after revival", autoRepair));
         CompactAdd(recovery, Toggle("overviewResume", "Resume farming on arrival", farmOnArrival));
         var recoveryText = Detail("overviewRecoveryStatus"); CompactAdd(recovery, recoveryText);
         CompactAdd(recovery, Link("Revival & repair setup", () => OpenSetup(autoRevive)));
 
-        var routes = CompactCard("SAVED ROUTES"); CompactAdd(right, routes);
-        var routeTargetText=Detail("overviewRouteTarget");CompactAdd(routes,routeTargetText);
+        var routes = CompactCard("SAVED ROUTES"); CompactAdd(left, routes);
+        routes.Visible=false;
+        CompactAdd(anchor,Link("Saved routes ▸",()=>routes.Visible=!routes.Visible));
+        var routeTargetText=Detail("overviewRouteTarget");CompactAdd(anchor,routeTargetText);
         var routeButtons = new List<Button>();
         for(int slot = 0; slot < Navigation.SavedRouteSlotCount; slot++)
         {
@@ -176,11 +193,13 @@ public sealed partial class HunterForm
         CompactAdd(routes, new Label { Text = "Home  Start recording    /    End  Finish & save", AutoSize = true, ForeColor = UiMuted, Margin = new Padding(0, 3, 0, 7) });
         CompactAdd(routes, Link("Open navigation", () => tabs.SelectedTab = navigationPage));
 
-        var session = CompactCard("SESSION SUMMARY"); CompactAdd(body, session);
+        var session = CompactCard("LOOT SESSION"); CompactAdd(body, session);
         var sessionInfo = Detail("overviewSession");
-        var sessionHeader = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 34, WrapContents = false, Margin = Padding.Empty };
+        var sessionHeader = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 34, AutoSize=true, WrapContents = true, Margin = Padding.Empty };
         sessionInfo.Margin = new Padding(0, 8, 14, 0);
         sessionHeader.Controls.Add(sessionInfo);
+        sessionHeader.Controls.Add(Link("Reset loot", ResetTrackedLoot));
+        sessionHeader.Controls.Add(Link("Reset timer", ResetTrackedLootTimer));
         sessionHeader.Controls.Add(Link("Loot details", () => tabs.SelectedTab = lootPage));
         CompactAdd(session, sessionHeader);
         var resources = new TableLayoutPanel { Dock = DockStyle.Top, Height = 55, ColumnCount = 6, RowCount = 1, Margin = Padding.Empty };
@@ -188,7 +207,7 @@ public sealed partial class HunterForm
         foreach(string resource in new[] { "Gold", "Silvin", "Mithril", "Iternium", "Fehu", "Gems" })
         {
             resources.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f/6));
-            var value = new Label { Name = "overviewResource"+resource, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Segoe UI Semibold", 11f), ForeColor = resource == "Gold" ? UiAccent : UiText, Margin = new Padding(6, 0, 6, 0) };
+            var value = new Label { Name = "overviewResource"+resource, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, Font = new Font("Georgia", 11f), ForeColor = resource == "Gold" ? UiAccent : UiText, Margin = new Padding(6, 0, 6, 0) };
             resources.Controls.Add(value); resourceLabels.Add(resource, value);
         }
         CompactAdd(session, resources);
@@ -201,6 +220,7 @@ public sealed partial class HunterForm
             try
             {
                 foreach(var update in updates) update();
+                routeMap.Invalidate();
                 if(targetFilter.Text != filter.Text) targetFilter.Text = filter.Text;
                 targetFilter.Enabled = CanEdit(filter) && !healerMode.Checked;
                 foreach(var (family, button) in targetPresets)

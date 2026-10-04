@@ -6,13 +6,13 @@
 #endif
 [Setup]
 AppId={{EAACF1DA-2231-4E70-A901-30D01AEECA30}
-AppName=PPB
+AppName=PlayPoteBot
 AppVersion={#Copy(ReleaseTag,8,100)}
-AppVerName=PPB {#ReleaseTag}
+AppVerName=PlayPoteBot {#ReleaseTag}
 AppPublisher=theblusmurf
 AppPublisherURL=https://github.com/theblusmurf/PoteHunter
 DefaultDirName={localappdata}\Programs\PoteHunter
-DefaultGroupName=PPB
+DefaultGroupName=PlayPoteBot
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -34,8 +34,10 @@ Source: "{#PackageSource}\settings.json"; DestDir: "{app}"; Flags: onlyifdoesnte
 [InstallDelete]
 Type: files; Name: "{autoprograms}\PoteHunter.lnk"
 Type: files; Name: "{autodesktop}\PoteHunter.lnk"
+Type: files; Name: "{autoprograms}\PPB.lnk"
+Type: files; Name: "{autodesktop}\PPB.lnk"
 [Icons]
-Name: "{autoprograms}\PPB"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\PPB"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\PlayPoteBot"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\PlayPoteBot"; Filename: "{app}\PoteHunter.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 [Run]
-Filename: "{app}\PoteHunter.exe"; Description: "Launch PPB"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\PoteHunter.exe"; Description: "Launch PlayPoteBot"; Flags: nowait postinstall skipifsilent

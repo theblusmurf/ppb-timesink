@@ -29,7 +29,7 @@ internal sealed class RepairSetupForm : Form
             :"Click the center of the REVIVE button in this image. This image editor sends no game input. Then choose Save selection.",opening);
 
     internal static RepairSetupForm ForLogin(Bitmap image,bool password,Color background,Color foreground)=>new(image,background,foreground,
-        "PPB login setup · "+(password?"password field":"screen/button"),
+        "PlayPoteBot login setup · "+(password?"password field":"screen/button"),
         "Drag around distinctive STATIC text identifying this login screen. Exclude account names, password, animated artwork and changing text. Then choose Next.",
         password?"Click the centre of the EMPTY password field in this image. No game input is sent.":
             "Click the centre of the button or character entry in this image. Choose a distinctive area with text/icon detail. No game input is sent.",password);

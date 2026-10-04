@@ -11,7 +11,7 @@ internal sealed partial class LootTrackerOverlay
         g.FillRectangle(header,0,0,Width,HeaderHeight);
         g.DrawRectangle(framePen,0,0,Width-1,Height-1);
         g.DrawLine(framePen,0,HeaderHeight,Width,HeaderHeight);
-        g.DrawString("PPB · LOOT TRACKER",titleFont,gold,new PointF(10,6));
+        g.DrawString("PlayPoteBot · LOOT TRACKER",titleFont,gold,new PointF(10,6));
         Text($"Session {FormatDuration(snapshot.Elapsed)}  ·  Active {FormatDuration(snapshot.RateElapsed)}",detailFont,ImperialTheme.Muted,new(10,37,Width-20,16));
         Text("Gold: net wallet · other totals are detected drops",detailFont,ImperialTheme.Muted,new(10,53,Width-20,16));
         string[] names=["Gold","Silvin","Mithril","Iternium","Fehu","Gems"];

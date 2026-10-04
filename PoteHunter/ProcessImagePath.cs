@@ -19,7 +19,7 @@ internal static class ProcessImagePath
     internal static string Read(Process process)
     {
         using var handle=OpenProcess(0x1000,false,process.Id); // PROCESS_QUERY_LIMITED_INFORMATION
-        if(handle.IsInvalid)throw new Win32Exception(Marshal.GetLastWin32Error(),"Could not verify the executable path. Keep PPB and the client at compatible permissions.");
+        if(handle.IsInvalid)throw new Win32Exception(Marshal.GetLastWin32Error(),"Could not verify the executable path. Keep PlayPoteBot and the client at compatible permissions.");
         var path=new StringBuilder(32768);uint length=(uint)path.Capacity;
         if(!QueryFullProcessImageNameW(handle,0,path,ref length) || length==0)
             throw new Win32Exception(Marshal.GetLastWin32Error(),"The executable path is unavailable. No login input sent.");

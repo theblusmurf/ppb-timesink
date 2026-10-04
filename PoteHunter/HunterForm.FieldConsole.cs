@@ -54,15 +54,14 @@ public sealed partial class HunterForm
 {
     void CheckFieldConsoleUi(TabControl tabs)
     {
-        var sidebar=Controls.Find("imperialSidebar",true).Single();
         var banner=Controls.Find("imperialBanner",true).Single();
-        var sidebarRight=PointToClient(sidebar.PointToScreen(new Point(sidebar.Width,0))).X;
-        if(sidebarRight>PointToClient(tabs.PointToScreen(Point.Empty)).X || banner.Height<80 ||
-            banner.Bottom>tabs.Top || !banner.Parent!.ClientRectangle.Contains(banner.Bounds))
-            throw new Exception("Imperial sidebar overlaps page content or banner is clipped.");
+        var nav=Controls.Find("fieldNavigation",true).Single();
+        if(banner.Height<60 || PointToClient(nav.PointToScreen(Point.Empty)).Y<=PointToClient(tabs.PointToScreen(new Point(0,tabs.Height))).Y ||
+            !banner.Parent!.ClientRectangle.Contains(banner.Bounds))
+            throw new Exception("Bottom navigation overlaps content or banner is clipped.");
         if(ImperialTheme.Logo.Value.Width<1 || ImperialTheme.Banner.Value.Width<1)
             throw new Exception("Imperial embedded reference artwork is unavailable.");
-        foreach(string name in new[]{"Overview","Setup","Support","Monitor","Navigation","Advanced","Index"})
+        foreach(string name in new[]{"Overview","Hunt","Routes","Recovery","Settings"})
         {
             var button=(Button)Controls.Find("fieldNav"+name,true).Single();
             if(!button.Visible || !button.Parent!.ClientRectangle.Contains(button.Bounds))
@@ -72,7 +71,7 @@ public sealed partial class HunterForm
             if(tabs.SelectedTab!=(picker?.SelectedItem as TabPage??button.Tag as TabPage))
                 throw new Exception("Field Console navigation did not open its section: "+name);
         }
-        foreach(string name in new[]{"Monitor","Advanced"})
+        foreach(string name in new[]{"Hunt","Settings"})
         {
             ((Button)Controls.Find("fieldNav"+name,true).Single()).PerformClick();
             var picker=(ComboBox)Controls.Find("fieldPicker"+name,true).Single();
@@ -111,6 +110,6 @@ public sealed partial class HunterForm
         }
         compactMode.SelectedIndex=originalMode;PerformLayout();Application.DoEvents();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"field-console-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
-        {Passed=true,Checks=new[]{"all sidebar navigation sections accessible","all grouped pages selectable","minimum-size columns and actions fit","unknown/zero/full/over-max vitals","no new game queries or input"}}));
+        {Passed=true,Checks=new[]{"all bottom navigation sections accessible","all grouped pages selectable","minimum-size columns and actions fit","unknown/zero/full/over-max vitals","no new game queries or input"}}));
     }
 }

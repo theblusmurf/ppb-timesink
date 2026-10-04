@@ -996,3 +996,10 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Share the existing Navigation reset actions: save the current log before resetting. Reset loot starts fresh session totals and wallet baseline; Reset timer restarts the earning-rate window while retaining totals and wallet baseline.
 - Validate scaled hit areas, one action per click, cancelled releases, opaque layered button pixels, reset semantics and rendered layouts. No live game input or installed settings changes during validation.
 
+
+# Release1.96 — PlayPoteBot Solar Forge interface
+
+- Rename display branding, installer and shortcuts to PlayPoteBot; add the user-selected Adventurer’s Compass emblem and app icon. Preserve the existing installation, executable and public update feed identities.
+- Apply the approved Solar Forge layout with Crownfire charcoal/brass styling, 13-pixel corners and bottom Overview, Hunt, Routes, Recovery and Settings navigation. All existing detailed pages remain reachable.
+- Show the actual selected target’s saved routes in Overview, move hunt/recovery controls alongside the map, collapse skill and saved-route details, and include session loot/timer reset actions. No change to hunting, revival, repair, wallet or route execution rules.
+- Validate native pages, settings bindings, running-state locks, minimum-size layout, existing offline checks and installer preservation. No live game input during validation.

@@ -79,7 +79,7 @@ internal static class LoginSecret
         try
         {
             Marshal.Copy(value,0,input.Data,value.Length);
-            bool ok=protect?CryptProtectData(ref input,"PPB client login",0,0,0,1,out output):CryptUnprotectData(ref input,0,0,0,0,1,out output);
+            bool ok=protect?CryptProtectData(ref input,"PlayPoteBot client login",0,0,0,1,out output):CryptUnprotectData(ref input,0,0,0,0,1,out output);
             if(!ok)throw new InvalidOperationException("Windows could not access the saved login secret. Enter it again in setup.");
             var result=new byte[output.Length];Marshal.Copy(output.Data,result,0,result.Length);return result;
         }
