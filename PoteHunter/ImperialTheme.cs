@@ -3,13 +3,13 @@ namespace PoteHunter;
 /// <summary>Shared presentation colors; no settings or game state.</summary>
 internal static class ImperialTheme
 {
-    internal static readonly Color Window = Color.FromArgb(10,19,27);
-    internal static readonly Color Surface = Color.FromArgb(18,31,42);
-    internal static readonly Color Raised = Color.FromArgb(29,44,55);
-    internal static readonly Color Border = Color.FromArgb(126,97,52);
-    internal static readonly Color Gold = Color.FromArgb(231,181,91);
-    internal static readonly Color Text = Color.FromArgb(243,234,219);
-    internal static readonly Color Muted = Color.FromArgb(181,166,150);
+    internal static readonly Color Window = Color.FromArgb(9,20,30);
+    internal static readonly Color Surface = Color.FromArgb(19,35,47);
+    internal static readonly Color Raised = Color.FromArgb(27,48,61);
+    internal static readonly Color Border = Color.FromArgb(61,77,82);
+    internal static readonly Color Gold = Color.FromArgb(231,188,112);
+    internal static readonly Color Text = Color.FromArgb(238,233,220);
+    internal static readonly Color Muted = Color.FromArgb(184,190,192);
     internal static readonly Color RouteBlue = Color.FromArgb(137,175,204);
     internal static readonly Color RouteRose = Color.FromArgb(206,146,146);
     internal static readonly Lazy<Bitmap> Banner = new(()=>Load("fantasy-stone"));
@@ -38,13 +38,11 @@ internal sealed class ImperialBanner : Panel
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         if(Width<=0 || Height<=0)return;
-        var image=ImperialTheme.Banner.Value;
-        e.Graphics.DrawImage(image,ClientRectangle,new Rectangle(0,0,image.Width,image.Height/3),GraphicsUnit.Pixel);
-        using var shade=new SolidBrush(Color.FromArgb(75,ImperialTheme.Window));
-        e.Graphics.FillRectangle(shade,ClientRectangle);
+        using var background=new System.Drawing.Drawing2D.LinearGradientBrush(ClientRectangle,
+            Color.FromArgb(19,43,56),Color.FromArgb(11,25,37),0f);
+        e.Graphics.FillRectangle(background,ClientRectangle);
         using var trim=new Pen(ImperialTheme.Gold);
         e.Graphics.DrawLine(trim,0,Height-1,Width,Height-1);
-        FantasyFrame.Draw(e.Graphics,ClientRectangle);
     }
 }
 

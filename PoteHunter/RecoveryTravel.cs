@@ -4,7 +4,7 @@ internal sealed record SavedTravel(Vec[] Points,Vec Destination);
 
 internal static class RecoveryTravel
 {
-    internal const double StartupRadius=10;
+    internal const double DefaultStartupRadius=10;
     internal static (Vec Point,int Index,double Distance) Nearest(SavedNavigationRoute route,Vec current)
     {
         var best=(Point:route.Points[0],Index:0,Distance:(route.Points[0]-current).Length);
@@ -18,12 +18,12 @@ internal static class RecoveryTravel
         }
         return best;
     }
-    internal static int StartupSlot(IReadOnlyList<SavedNavigationRoute?> routes,Vec current,int zone,string character,double height,int preferred)
+    internal static int StartupSlot(IReadOnlyList<SavedNavigationRoute?> routes,Vec current,int zone,string character,double height,int preferred,double corridorRadius=DefaultStartupRadius)
     {
-        if(!current.Finite)return -1;
+        if(!current.Finite || !double.IsFinite(corridorRadius) || corridorRadius<=0)return -1;
         var candidates=Enumerable.Range(0,routes.Count).Where(i=>routes[i] is {} route && Recorded(route) &&
             RecoveryRouting.Compatible(route,zone,character,height)).Select(i=>(Slot:i,Distance:Nearest(routes[i]!,current).Distance))
-            .Where(item=>item.Distance<=StartupRadius).ToArray();
+            .Where(item=>item.Distance<=corridorRadius).ToArray();
         return candidates.OrderBy(item=>item.Slot==preferred?0:1).ThenBy(item=>item.Distance).Select(item=>item.Slot).DefaultIfEmpty(-1).First();
     }
     internal static bool Recorded(SavedNavigationRoute route)=>route.HasRecordedRoute && route.Points.Length<=2000 &&
@@ -42,9 +42,9 @@ internal static class RecoveryTravel
     {
         double length=0;foreach(var point in points){length+=(point-start).Length;start=point;}return length;
     }
-    internal static SavedTravel Plan(IReadOnlyList<SavedNavigationRoute?> routes,SavedNavigationRoute target,Vec current,bool retreat)
+    internal static SavedTravel Plan(IReadOnlyList<SavedNavigationRoute?> routes,SavedNavigationRoute target,Vec current,bool retreat,double joinRadius=20)
     {
-        if(!current.Finite || !Recorded(target))throw new RouteUnavailableException("A valid recorded return route is required.");
+        if(!current.Finite || !Recorded(target) || !double.IsFinite(joinRadius) || joinRadius<=0)throw new RouteUnavailableException("A valid recorded return route and join radius are required.");
         // Prefer the path we are actually standing on. Switching farms follows
         // that path back to the shared origin, then the destination's path.
         var entries=routes.Where(r=>r!=null && SharedOrigin(r,target) &&
@@ -53,11 +53,11 @@ internal static class RecoveryTravel
             {
                 var nearest=Nearest(route,current);
                 return(Route:route,nearest.Point,nearest.Index,nearest.Distance);
-            }).Where(e=>e.Distance<=20).ToArray();
-        if(entries.Length==0)throw new RouteUnavailableException("Character is more than 20 units from the compatible saved routes.");
+            }).Where(e=>e.Distance<=joinRadius).ToArray();
+        if(entries.Length==0)throw new RouteUnavailableException($"Character is more than {joinRadius:0.#} units from the compatible saved routes.");
         double closest=entries.Min(e=>e.Distance);
         var choices=new List<SavedTravel>();
-        foreach(var entry in entries.Where(e=>e.Distance<=Math.Min(20,closest+.5)))
+        foreach(var entry in entries.Where(e=>e.Distance<=Math.Min(joinRadius,closest+.5)))
         {
             var points=Connector(current,entry.Point).ToList();
             if(!retreat && entry.Route==target)

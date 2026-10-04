@@ -7,23 +7,23 @@ public readonly record struct NearbyLootDecision(int NearbyCount)
 
 public static class NearbyLootPickup
 {
-    public const double AnchorRadius=10;
+    public const double DefaultAnchorRadius=10;
     public const double PickupReach=3;
     public const double AnchorArrivalTolerance=.15;
-    public static bool InsideAnchor(Vec point,Vec anchor) => point.Finite && anchor.Finite &&
-        (point-anchor).Length<=AnchorRadius+1e-9;
+    public static bool InsideAnchor(Vec point,Vec anchor,double radius=DefaultAnchorRadius) => point.Finite && anchor.Finite &&
+        double.IsFinite(radius) && radius>0 && (point-anchor).Length<=radius+1e-9;
     public static bool ArrivedAtAnchor(Vec position,Vec anchor) => position.Finite && anchor.Finite &&
         (position-anchor).Length<=AnchorArrivalTolerance;
     // E collects a neighborhood, not an individual selected item. Do not send
     // it beside drops outside the requested circle, even if one inside is near.
-    public static bool MayPickupAt(Vec position,Vec anchor,IEnumerable<GroundItem> drops) =>
-        InsideAnchor(position,anchor) && !drops.Any(d=>d.Position.Finite &&
-            (d.Position-position).Length<=PickupReach && !InsideAnchor(d.Position,anchor));
-    public static NearbyLootDecision EvaluateAnchor(Vec position,Vec anchor,IEnumerable<GroundItem> drops)
+    public static bool MayPickupAt(Vec position,Vec anchor,IEnumerable<GroundItem> drops,double radius=DefaultAnchorRadius) =>
+        InsideAnchor(position,anchor,radius) && !drops.Any(d=>d.Position.Finite &&
+            (d.Position-position).Length<=PickupReach && !InsideAnchor(d.Position,anchor,radius));
+    public static NearbyLootDecision EvaluateAnchor(Vec position,Vec anchor,IEnumerable<GroundItem> drops,double radius=DefaultAnchorRadius)
     {
         var snapshot=drops.ToArray();
-        return MayPickupAt(position,anchor,snapshot) ? Evaluate(position,PickupReach,
-            snapshot.Where(d=>InsideAnchor(d.Position,anchor))) : new(0);
+        return MayPickupAt(position,anchor,snapshot,radius) ? Evaluate(position,PickupReach,
+            snapshot.Where(d=>InsideAnchor(d.Position,anchor,radius))) : new(0);
     }
 
     public static NearbyLootDecision Evaluate(Vec position,double radius,IEnumerable<GroundItem> drops)

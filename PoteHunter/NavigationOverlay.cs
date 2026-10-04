@@ -20,7 +20,8 @@ internal sealed class NavigationOverlay : Form
     const uint SwpNosize = 0x0001;
 
     readonly Action<Graphics, Size> drawNavigation;
-    readonly string title,legend;
+    string title;
+    readonly string legend;
     readonly Font titleFont = new("Georgia", 10f, FontStyle.Regular);
     readonly Pen framePen = new(ImperialTheme.Gold, 1f);
 
@@ -43,6 +44,12 @@ internal sealed class NavigationOverlay : Form
     }
 
     protected override bool ShowWithoutActivation => true;
+
+    internal void SetTitle(string value)
+    {
+        if(title==value)return;
+        title=value;Invalidate();
+    }
 
     protected override void SetVisibleCore(bool value)
     {

@@ -8,6 +8,11 @@ public sealed class Options
     public string Player { get; set; } = ""; // Last detected name; never an identity selector.
     public string Target { get; set; } = "";
     public decimal HuntRadius { get; set; } = 35;
+    // Independent route-join and ground-loot areas; keep older settings at
+    // their former ten-unit behavior without changing their farming radius.
+    decimal routeCorridorRadius = 10, lootPickupRadius = 10;
+    public decimal RouteCorridorRadius { get => routeCorridorRadius; set => routeCorridorRadius = Math.Clamp(value, .5m, 30m); }
+    public decimal LootPickupRadius { get => lootPickupRadius; set => lootPickupRadius = Math.Clamp(value, .5m, 30m); }
     public bool LeaveAreaWhenEmpty { get; set; }
     // The client melee gate is 1.5 units; keep the default aligned with that
     // verified range so a fresh profile does not stop short of valid swings.

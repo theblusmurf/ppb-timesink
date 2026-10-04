@@ -95,6 +95,7 @@ static class SelfTests
             AutoRepairChecks.Run().GetAwaiter().GetResult();
             VisualRecoveryChecks.Run().GetAwaiter().GetResult();
             RecoveryTravelChecks.Run().GetAwaiter().GetResult();
+            AdjustableRadiusChecks.Run();
             Input.CheckRepairPointer();
             Input.CheckReviveInput().GetAwaiter().GetResult();
             ChestCatalog.SelfTest();

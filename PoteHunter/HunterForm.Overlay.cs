@@ -102,7 +102,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(lootTrackerBackgroundOpacity);
         void UpdateLootSizeVisibility(){lootTrackerScale.Visible=lootTrackerScaleLabel.Visible=lootTrackerBackgroundOpacity.Visible=lootTrackerBackgroundLabel.Visible=lootTrackerDesign.SelectedIndex is 1 or 3;}
         UpdateLootSizeVisibility();
-        priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows saved paths for the selected target filter, anchors, facing and the 10-unit start corridor; auto-fits the full routes.");
+        priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows saved paths for the selected target filter, anchors, facing, your configured route corridor and the farming area around the selected or active anchor; auto-fits the full routes.");
         priorityHint.SetToolTip(lootTrackerDesign,"Runic Fold and Runic Strip float outlined text and resource icons over the game with an adjustable background. Drag the header to move. Design, size, background opacity and position are saved. Silvin is a low-tier metal.");
         priorityHint.SetToolTip(lootTrackerScale,"Transparent loot overlay size: 50% to 200% in 5% steps. Text, icons and spacing scale together; your size is saved. Automatically fits smaller screens.");
         priorityHint.SetToolTip(lootTrackerBackgroundOpacity,"Runic Fold / Runic Strip background only: 0% is fully transparent, 100% is solid. Text and icons stay bright. Saved automatically, including during hunting.");
@@ -128,7 +128,7 @@ public sealed partial class HunterForm
         navControls.Controls.Add(clearAllSavedNavigationRoutes);
         navControls.Controls.Add(assignUnassignedNavigationRoutes);
         navControls.Controls.Add(savedNavigationRoutesStatus);
-        navControls.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(650,0),Text="Each target filter has its own Primary + two alternatives. F8 within 10 map units of a matching saved path: follow route to anchor, restore facing, then hunt. Selected slot preferred. See Index for all hotkeys."});
+        navControls.Controls.Add(new Label{AutoSize=true,MaximumSize=new Size(650,0),Text="Each target filter has its own Primary + two alternatives. F8 within your configured route corridor: follow a matching path to its anchor, restore facing, then hunt. Selected slot preferred. Set the corridor in Overview. See Index for all hotkeys."});
         navControls.Controls.Add(resetLootTracker);
         navControls.Controls.Add(resetLootTimer);
 
@@ -448,7 +448,8 @@ public sealed partial class HunterForm
             if(width<100 || height<100)HideRouteOverlay();
             else
             {
-                routeOverlay??=new NavigationOverlay(DrawRouteOverlay,"SAVED ROUTES  ·  10m start corridor","Primary: gold  ·  Alt 1: blue  ·  Alt 2: rose  ·  You: white");
+                routeOverlay??=new NavigationOverlay(DrawRouteOverlay,RouteOverlayTitle(),"Primary: gold  ·  Alt 1: blue  ·  Alt 2: rose  ·  You: white");
+                routeOverlay.SetTitle(RouteOverlayTitle());
                 routeOverlay.Bounds=new(clientBounds.Right-NavigationOverlayMargin-width,clientBounds.Bottom-NavigationOverlayMargin-height,width,height);
                 if(!routeOverlay.Visible)routeOverlay.Show();
                 routeOverlay.Invalidate();
@@ -513,21 +514,33 @@ public sealed partial class HunterForm
         if(routeOverlay is {IsDisposed:false,Visible:true})routeOverlay.Hide();
     }
 
+    double CurrentRouteCorridorRadius()=>(double)(working?activeGuardOptions?.RouteCorridorRadius ?? routeCorridorRadius.Value:routeCorridorRadius.Value);
+    string RouteOverlayTitle()=>$"SAVED ROUTES  ·  {CurrentRouteCorridorRadius():0.#}m start corridor";
+    Vec? CurrentAnchorAreaCenter()
+    {
+        if(working && activeHuntAnchor is Vec anchor && anchor.Finite)return anchor;
+        var route=navigation.GetSavedRoute(SelectedSavedNavigationSlot());
+        return route?.Zone==navigationZone ? route.Anchor : null;
+    }
+
     void DrawRouteOverlay(Graphics g,Size size)
     {
         bool hasMap=zoneMapBackground.TryGet(navigationZone,out var image,out var b);
         DrawSavedRouteOverlay(g,size,navigation.SavedRoutesForZone(navigationZone).ToArray(),navigationPosition,
-            hasMap?image:null,hasMap?new GameMapLayout.Extent(b.MinX,b.MinY,b.MaxX,b.MaxY):null,navigationMapOverview && navigationMapOverviewZone==navigationZone);
+            hasMap?image:null,hasMap?new GameMapLayout.Extent(b.MinX,b.MinY,b.MaxX,b.MaxY):null,navigationMapOverview && navigationMapOverviewZone==navigationZone,
+            CurrentRouteCorridorRadius(),
+            (double)(working?activeGuardOptions?.HuntRadius ?? radius.Value:radius.Value),CurrentAnchorAreaCenter());
     }
 
-    static void DrawSavedRouteOverlay(Graphics g,Size size,(int Slot,SavedNavigationRoute Route)[] routes,Vec position,Bitmap? mapImage=null,GameMapLayout.Extent? layout=null,bool fitMap=false)
+    static void DrawSavedRouteOverlay(Graphics g,Size size,(int Slot,SavedNavigationRoute Route)[] routes,Vec position,Bitmap? mapImage=null,GameMapLayout.Extent? layout=null,bool fitMap=false,double corridorRadius=RecoveryTravel.DefaultStartupRadius,double? farmingRadius=null,Vec? farmingAnchor=null)
     {
         g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
         g.Clear(ImperialTheme.Window);
         if(routes.Length==0 && mapImage==null){using var emptyFont=new Font("Segoe UI",9);g.DrawString("No routes for this target in this zone.\nHome: start · End: save at anchor",emptyFont,Brushes.Wheat,new PointF(12,15));return;}
         var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).Append(position).Where(p=>p.Finite).ToList();
         if(layout is {} extent && (fitMap || routes.Length==0)){points.Add(new(extent.MinX,extent.MinY));points.Add(new(extent.MaxX,extent.MaxY));}
-        double minX=points.Min(p=>p.X)-12,maxX=points.Max(p=>p.X)+12,minY=points.Min(p=>p.Y)-12,maxY=points.Max(p=>p.Y)+12;
+        double margin=Math.Max(12,corridorRadius+2);
+        double minX=points.Min(p=>p.X)-margin,maxX=points.Max(p=>p.X)+margin,minY=points.Min(p=>p.Y)-margin,maxY=points.Max(p=>p.Y)+margin;
         float scale=(float)Math.Min((size.Width-32)/Math.Max(1,maxX-minX),(size.Height-32)/Math.Max(1,maxY-minY));
         float left=(size.Width-(float)(maxX-minX)*scale)/2,top=(size.Height-(float)(maxY-minY)*scale)/2;
         PointF Project(Vec p)=>new(left+(float)(p.X-minX)*scale,top+(float)(maxY-p.Y)*scale);
@@ -537,6 +550,26 @@ public sealed partial class HunterForm
             g.DrawImage(mapImage,RectangleF.FromLTRB(a.X,a.Y,b.X,b.Y));
             using var shade=new SolidBrush(Color.FromArgb(60,ImperialTheme.Window));g.FillRectangle(shade,new Rectangle(Point.Empty,size));
         }
+        if(farmingRadius is >0 and <double.PositiveInfinity && farmingAnchor is Vec home && home.Finite)
+        {
+            // The farming area is an annotation of the existing route/map
+            // view. Large areas clip at its edge; they never change its zoom.
+            var state=g.Save();
+            try
+            {
+                g.SetClip(new Rectangle(Point.Empty,size),System.Drawing.Drawing2D.CombineMode.Intersect);
+                var center=Project(home);float area=(float)farmingRadius.Value*scale;
+                var bounds=new RectangleF(center.X-area,center.Y-area,area*2,area*2);
+                Color areaColor=Color.FromArgb(127,199,174);
+                using var fill=new SolidBrush(Color.FromArgb(12,areaColor));g.FillEllipse(fill,bounds);
+                using var outline=new Pen(Color.FromArgb(150,areaColor),1.25f){DashStyle=System.Drawing.Drawing2D.DashStyle.Dash};g.DrawEllipse(outline,bounds);
+                using var areaFont=new Font("Segoe UI",7f,FontStyle.Bold);
+                using var areaBrush=new SolidBrush(areaColor);
+                g.DrawString($"Anchor area · {farmingRadius.Value:0.#}m",areaFont,areaBrush,
+                    new PointF(Math.Clamp(center.X+8,3,Math.Max(3,size.Width-122)),Math.Clamp(center.Y+9,3,Math.Max(3,size.Height-18))));
+            }
+            finally{g.Restore(state);}
+        }
         Color[] colors=[ImperialTheme.Gold,ImperialTheme.RouteBlue,ImperialTheme.RouteRose];
         using var labelFont=new Font("Segoe UI",8f,FontStyle.Bold);
         foreach(var (slot,route) in routes)
@@ -545,7 +578,7 @@ public sealed partial class HunterForm
             using var pen=new Pen(colors[slot],2);
             if(projected.Length>1)
             {
-                using var corridor=new Pen(Color.FromArgb(35,colors[slot]),(float)(RecoveryTravel.StartupRadius*2)*scale){StartCap=System.Drawing.Drawing2D.LineCap.Round,EndCap=System.Drawing.Drawing2D.LineCap.Round,LineJoin=System.Drawing.Drawing2D.LineJoin.Round};
+                using var corridor=new Pen(Color.FromArgb(35,colors[slot]),(float)(corridorRadius*2)*scale){StartCap=System.Drawing.Drawing2D.LineCap.Round,EndCap=System.Drawing.Drawing2D.LineCap.Round,LineJoin=System.Drawing.Drawing2D.LineJoin.Round};
                 if(RecoveryTravel.Recorded(route))g.DrawLines(corridor,projected);
                 g.DrawLines(pen,projected);
                 var start=Project(route.RevivalOrigin);g.DrawRectangle(pen,start.X-3,start.Y-3,6,6);
@@ -597,6 +630,26 @@ public sealed partial class HunterForm
         using var routePreview=new NavigationOverlay((graphics,size)=>DrawSavedRouteOverlay(graphics,size,routes,new(0,10)),"SAVED ROUTES · 10m start corridor","Primary: gold · Alt 1: blue · Alt 2: rose · You: white"){Size=new(450,450)};
         if(!routePreview.HasPassiveWindowStyles)throw new Exception("Route overlay can intercept input or activate the game.");
         using var routeBitmap=new Bitmap(450,450);routePreview.DrawToBitmap(routeBitmap,new Rectangle(0,0,450,450));routeBitmap.Save(Path.Combine(AppContext.BaseDirectory,"route-overlay-preview.png"));
+        using(var baseline=new Bitmap(450,450))
+        using(var areaPreview=new Bitmap(450,450))
+        using(var wideAreaPreview=new Bitmap(450,450))
+        {
+            using(var graphics=Graphics.FromImage(baseline))DrawSavedRouteOverlay(graphics,new(450,450),routes,new(0,10));
+            using(var graphics=Graphics.FromImage(areaPreview))DrawSavedRouteOverlay(graphics,new(450,450),routes,new(0,10),farmingRadius:35,farmingAnchor:routes[0].Route.Anchor);
+            using(var graphics=Graphics.FromImage(wideAreaPreview))DrawSavedRouteOverlay(graphics,new(450,450),routes,new(0,10),farmingRadius:150,farmingAnchor:routes[0].Route.Anchor);
+            var playerPixels=new List<Point>();var areaPlayerPixels=new List<Point>();var widePlayerPixels=new List<Point>();int changed=0;
+            static bool White(Color color)=>color.ToArgb()==Color.White.ToArgb();
+            for(int y=0;y<450;y++)for(int x=0;x<450;x++)
+            {
+                Color before=baseline.GetPixel(x,y),after=areaPreview.GetPixel(x,y),wide=wideAreaPreview.GetPixel(x,y);
+                if(White(before))playerPixels.Add(new(x,y));if(White(after))areaPlayerPixels.Add(new(x,y));if(White(wide))widePlayerPixels.Add(new(x,y));
+                if(before!=after)changed++;
+            }
+            if(playerPixels.Count==0 || !playerPixels.SequenceEqual(areaPlayerPixels) || !playerPixels.SequenceEqual(widePlayerPixels) || changed<25)
+                throw new Exception("Farming area was not drawn or changed the map zoom/player marker at a larger radius.");
+            areaPreview.Save(Path.Combine(AppContext.BaseDirectory,"anchor-area-overlay-preview.png"));
+            wideAreaPreview.Save(Path.Combine(AppContext.BaseDirectory,"anchor-area-clipped-preview.png"));
+        }
         using(var map=new Bitmap(512,512))
         using(var mg=Graphics.FromImage(map))
         using(var mapped=new Bitmap(450,450))

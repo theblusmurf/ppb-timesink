@@ -48,7 +48,7 @@ public sealed partial class HunterForm
                 throw new InvalidOperationException("Login setup belongs to a different client build. Calibrate the connected client.");
             var self=world.LocalPlayer();
             var route=navigation.SavedRoutesForZone(world.ActiveZone()).FirstOrDefault(x=>RecoveryRouting.Compatible(x.Route,world.ActiveZone(),self.Name,self.Height) && RecoveryTravel.Recorded(x.Route) && (x.Route.Anchor-self.Position).Length<=2.5);
-            if(route.Route==null && RecoveryTravel.StartupSlot(navigation.SavedRoutes,self.Position,world.ActiveZone(),self.Name,self.Height,SelectedSavedNavigationSlot())<0)
+            if(route.Route==null && RecoveryTravel.StartupSlot(navigation.SavedRoutes,self.Position,world.ActiveZone(),self.Name,self.Height,SelectedSavedNavigationSlot(),(double)options.RouteCorridorRadius)<0)
                 return "Record a compatible route for the selected targets before enabling client recovery (Home / End in Navigation).";
             var secret=LoginSecret.Open(profile.ProtectedPassword);System.Security.Cryptography.CryptographicOperations.ZeroMemory(secret);
         }
@@ -96,7 +96,7 @@ public sealed partial class HunterForm
             navigation.SelectTargetSelection(saved.Target);
             var route=navigation.GetSavedRoute(saved.Slot);
             if(route==null || route!=saved.Route && !route.Points.SequenceEqual(saved.Route.Points) ||
-                !RecoveryRouting.Compatible(route,saved.Zone,saved.Character,saved.Height) || RecoveryTravel.Nearest(route,self.Position).Distance>10)
+                !RecoveryRouting.Compatible(route,saved.Zone,saved.Character,saved.Height) || RecoveryTravel.Nearest(route,self.Position).Distance>(double)CurrentOptions().RouteCorridorRadius)
                 throw new InvalidOperationException("The character is outside the saved route corridor, or the route changed. Recovery stopped.");
             TraceLog.Record("client login verified; saved return pending",new{Character=self.Name,Anchor=saved.Anchor});
             restart=true;

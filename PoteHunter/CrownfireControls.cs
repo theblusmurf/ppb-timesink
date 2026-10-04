@@ -26,7 +26,7 @@ internal static class CrownfireControls
             if(button.Width<3 || button.Height<3)return;
             var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;
             g.Clear(button.Parent?.BackColor??ImperialTheme.Surface);
-            bool selected=button.BackColor==Color.FromArgb(55,39,23) || button.BackColor==ImperialTheme.Gold;
+            bool selected=button.BackColor==Color.FromArgb(52,43,30) || button.BackColor==ImperialTheme.Gold;
             Color face=button.Enabled?button.BackColor:ImperialTheme.Surface;
             using var shape=Frame(new RectangleF(1,1,button.Width-3,button.Height-3));
             using var fill=new LinearGradientBrush(button.ClientRectangle,ControlPaint.Light(face,hover?.18f:.08f),

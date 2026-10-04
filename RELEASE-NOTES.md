@@ -1,5 +1,13 @@
 # Release notes
 
+## Release1.102
+
+- Apply the approved navy-and-brass Wayfinder interface and logo pair 1: matching application emblem and Windows desktop icon, bottom navigation, route map and six expandable command sections. Closed sections retain live summaries; Collapse all and keyboard/accessibility actions change presentation only. Detailed Setup, Support and other settings remain available.
+- Add saved route-corridor and solo loot-pickup radii, each adjustable from 0.5 to 30 map units in 0.5-unit steps, default 10. Start and client-resume path joining use actual path segments and the configured corridor. Solo pickup trips use the separate loot radius and retain return to the saved anchor/facing. Existing death-return and fallback safety limits remain intact.
+- Expose the existing anchor farming radius with half-unit adjustment while preserving its 5–150 bounds and saved values. Draw the configured route band and a subtle anchor-area circle. These controls do not change melee range, stationary target rules or Gamekeeper priority.
+- Keep two-way settings bindings and hunting, busy, recovery and healer locks. Preserve target-specific routes, original loot item images, wallet-baseline gold, loot/timer resets, hunting and loot session logs, repair/revival/login profiles and the public updater.
+- Validate radius serialization and path/loot boundaries, native section expansion/accessibility, settings synchronization, running-state guards, minimum-size layout and existing offline checks. Live gameplay and the running installed application are not altered by validation; route travel and pickup at newly chosen radii require verification after upgrading.
+
 ## Release1.94
 
 - Fix Login setup freezing before the capture countdown. A live thread stack showed the UI blocked in Process.MainModule module enumeration while verifying Client.exe. Use Windows QueryFullProcessImageName with limited query access for executable identity; retain exact path/hash checks for the launcher and client.
