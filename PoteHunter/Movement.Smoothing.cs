@@ -4,30 +4,52 @@ namespace PoteHunter;
 // caller happens to poll. This controller does not emit any input.
 internal sealed class SmoothSteering
 {
-    long lastAt, sentAt;
-    double velocity, sentHeading;
+    long lastAt, sentAt, lastProgressAt;
+    double velocity, sentHeading, observedHeading, outstandingTurn;
     bool started, awaitingHeading;
-    public void Reset() { started=awaitingHeading=false; velocity=0; }
+    public void Reset() { started=awaitingHeading=false; velocity=outstandingTurn=0; }
     public int Next(double error,double heading,double sensitivity,bool walking,long now)
     {
         int limit=Math.Abs(Movement.CalculateTurn(error,sensitivity,walking));
-        if(limit==0) { Reset(); return 0; }
         if(!double.IsFinite(heading))throw new InvalidOperationException("Player heading is unavailable.");
+        if(started)
+        {
+            // Client heading runs opposite to the calibrated geometric turn.
+            // Consume observed partial feedback before checking send cadence.
+            double observed=-Wrap(heading-observedHeading);
+            if(Math.Sign(observed)==Math.Sign(outstandingTurn) && Math.Abs(observed)>0)
+            {
+                outstandingTurn=Math.Sign(outstandingTurn)*Math.Max(0,Math.Abs(outstandingTurn)-Math.Abs(observed));
+                if(Math.Abs(outstandingTurn)<1e-9)outstandingTurn=0;
+                lastProgressAt=now;
+            }
+            observedHeading=heading;
+            // A lost command may retry after a quiet 220 ms, but do not forget
+            // a newer turn or an angle that is still arriving in partial updates.
+            if(now-Math.Max(lastProgressAt,sentAt)>=220)outstandingTurn=0;
+        }
+        if(limit==0) { velocity=0;return 0; }
         if(started && now-lastAt<25)return 0;
-        // Give the client up to 80 ms to reflect a sent turn before adding
-        // another one. Existing turn-unresponsive checks still bound retries.
         if(awaitingHeading && now-sentAt<80 && Math.Abs(Wrap(heading-sentHeading))<.001)return 0;
         double dt=started ? Math.Clamp((now-lastAt)/1000.0,.025,.05) : .03;
         if(!started || now-lastAt>250)velocity=0;
         error=Wrap(error);
+        // Reserve unreported corrections against the remaining angle. Small
+        // sensitivity can pipeline turns without blindly stacking near the goal.
+        if(outstandingTurn!=0 && Math.Sign(outstandingTurn)!=Math.Sign(error))return 0;
+        double available=Math.Max(0,Math.Abs(error)*.70-Math.Abs(outstandingTurn));
+        int budgetPixels=(int)Math.Min(limit,Math.Floor(available/Math.Abs(sensitivity)));
+        if(budgetPixels<1)return 0;
         if(Math.Sign(velocity)!=Math.Sign(error))velocity=0;
-        const double acceleration=24;
-        double maximum=walking?3.5:5.0;
+        const double acceleration=32;
+        double maximum=walking?4.5:6.0;
         double desired=Math.Sign(error)*Math.Min(maximum,Math.Sqrt(2*acceleration*Math.Max(0,Math.Abs(error)-.035)));
         velocity=Math.Clamp(desired,velocity-acceleration*dt,velocity+acceleration*dt);
         double correction=Math.Sign(error)*Math.Min(Math.Abs(error)*.70,Math.Abs(velocity)*dt);
-        int pixels=Math.Clamp((int)Math.Round(correction/sensitivity),-limit,limit);
+        int pixels=Math.Clamp((int)Math.Round(correction/sensitivity),-budgetPixels,budgetPixels);
         if(pixels==0)pixels=Math.Sign(error/sensitivity);
+        if(!started) { observedHeading=heading;lastProgressAt=now; }
+        outstandingTurn+=pixels*sensitivity;
         lastAt=sentAt=now;sentHeading=heading;started=awaitingHeading=true;
         return pixels;
     }

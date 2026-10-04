@@ -11,27 +11,62 @@ internal static class MovementSmoothingChecks
     {
         foreach(double sensitivity in new[]{-.004,.004,-.0007,.0007})
         foreach(double initial in new[]{-.1,.1,-.5,.5,-Math.PI,Math.PI})
-        foreach(int latency in new[]{20,60,100})
+        foreach(bool walking in new[]{false,true})
+        foreach(int latency in new[]{20,60,100,160})
+        foreach(int portions in new[]{1,4})
+        foreach(double initialHeading in new[]{0.0,Math.PI-.01,-Math.PI+.01})
         {
-            var steering=new SmoothSteering();var pending=new Queue<(long At,double Turn)>();
-            double error=initial,heading=0;long now;
-            for(now=0;now<4000 && (Math.Abs(error)>.035 || pending.Count>0);now+=20)
+            var steering=new SmoothSteering();var pending=new PriorityQueue<double,long>();
+            double error=initial,heading=initialHeading;long now;
+            int deadline=!walking && portions==1 && latency<=100?4000:8000;
+            for(now=0;now<deadline && (Math.Abs(error)>.035 || pending.Count>0);now+=20)
             {
-                while(pending.TryPeek(out var p) && p.At<=now) {pending.Dequeue();error-=p.Turn;heading+=p.Turn;}
-                int pixels=steering.Next(error,heading,sensitivity,false,now);
-                Require(Math.Abs(pixels)<=112,"turn exceeded the existing pixel bound");
+                while(pending.TryPeek(out double turn,out long at) && at<=now)
+                {
+                    pending.Dequeue();error-=turn;
+                    heading=Math.Atan2(Math.Sin(heading-turn),Math.Cos(heading-turn));
+                }
+                Require(Math.Sign(error)==Math.Sign(initial) || Math.Abs(error)<=.035,
+                    "delayed or partial feedback overshot the target beyond facing tolerance");
+                int pixels=steering.Next(error,heading,sensitivity,walking,now);
+                Require(Math.Abs(pixels)<=(walking?64:112),"turn exceeded the existing pixel bound");
                 if(pixels!=0)
                 {
                     Require(Math.Sign(pixels*sensitivity)==Math.Sign(error),"turn corrected away from the target");
-                    Require(Math.Abs(pixels*sensitivity)<=.251,"turn failed the elapsed-time angular cap");
-                    pending.Enqueue((now+latency,pixels*sensitivity));
+                    Require(Math.Abs(pixels*sensitivity)<=(walking?.226:.301),"turn failed the elapsed-time angular cap");
+                    for(int part=0;part<portions;part++)pending.Enqueue(pixels*sensitivity/portions,now+latency+part*20);
                 }
             }
-            Require(Math.Abs(error)<=.035 && now<4000,"delayed heading did not converge for either sensitivity sign");
+            Require(Math.Abs(error)<=.035 && now<deadline,"delayed heading did not converge for either sensitivity sign");
         }
+        int stationaryQuarterTurn=QuarterTurn(false),walkingQuarterTurn=QuarterTurn(true);
+        Require(stationaryQuarterTurn<=440 && walkingQuarterTurn<=480,
+            "responsive 90-degree turning regressed to the previous slower ramp");
         var held=new SmoothSteering();
         Require(held.Next(1,0,.004,false,0)!=0 && held.Next(1,0,.004,false,20)==0 && held.Next(1,0,.004,false,60)==0,
             "new turns stacked before the client reported the previous heading");
+        var partial=new SmoothSteering();int first=partial.Next(1,0,.004,false,0);
+        double observed=first*.004*.25,remaining=1-observed;
+        int second=partial.Next(remaining,-observed,.004,false,80);
+        Require(second!=0 && first*.004*.75+second*.004<=remaining*.70,
+            "partial feedback allowed pending turns beyond the remaining angular budget");
+        var lost=new SmoothSteering();lost.Next(.04,0,.004,false,0);
+        Require(lost.Next(.04,0,.004,false,80)!=0 && lost.Next(.04,0,.004,false,160)==0 &&
+            lost.Next(.04,0,.004,false,299)==0 && lost.Next(.04,0,.004,false,300)!=0,
+            "a dropped turn did not respect the bounded retry interval after the latest command");
+        var reversed=new SmoothSteering();int old=reversed.Next(.08,0,.004,false,0);
+        Require(reversed.Next(.02,0,.004,false,40)==0 && reversed.Next(-.08,0,.004,false,80)==0 &&
+            reversed.Next(-.08,-old*.004,.004,false,120)<0,
+            "deadzone/reversed goals discarded an outstanding turn before feedback");
+        foreach(double initialHeading in new[]{Math.PI-.01,-Math.PI+.01})
+        {
+            var wrapped=new SmoothSteering();int sent=wrapped.Next(-.1,initialHeading,.004,false,0);
+            double responded=Math.Atan2(Math.Sin(initialHeading-sent*.004),Math.Cos(initialHeading-sent*.004));
+            Require(wrapped.Next(.1,responded,.004,false,40)>0,
+                "fully observed wraparound feedback left a residual budget blocking reversal");
+            wrapped.Reset();
+            Require(wrapped.Next(.1,2.8,.004,false,60)>0,"reset fabricated feedback from an old nonzero heading");
+        }
         var response=new TurnResponse();bool stalled=false;
         for(int now=0;now<=1600;now+=20)
         {
@@ -136,12 +171,28 @@ internal static class MovementSmoothingChecks
 
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"movement-smoothing-checks.json"),JsonSerializer.Serialize(new
         {
-            Passed=true,HardwareInputEmitted=false,
-            Checks=new[]{"delayed heading response and both calibration signs","time-bounded turn size","unresponsive turn deadline",
+            Passed=true,HardwareInputEmitted=false,StationaryQuarterTurnMilliseconds=stationaryQuarterTurn,
+            WalkingQuarterTurnMilliseconds=walkingQuarterTurn,
+            Checks=new[]{"delayed and partial heading response while walking/stationary with both calibration signs",
+                "no overshoot beyond facing tolerance","responsive 90-degree turning","pending commanded-angle budget",
+                "deadzone/reversal retains pending feedback",
+                "bounded lost-command retry","time-bounded turn size","unresponsive turn deadline",
                 "unsent turns cannot start stall timing","new facing goal clears idle timer","bounded post-loot facing retry and cancellation",
                 "recorded sub-frame steps excluded from speed training","frame-sized pulse and filtered speed gain",
                 "frame-quantized precise arrival","recorded post-facing drift rejected","settle then face then recheck",
                 "blocked/cancelled/focus-lost return releases movement","persistent damage quiet period","stationary defense family/range/protection gates"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static int QuarterTurn(bool walking)
+    {
+        var steering=new SmoothSteering();double error=Math.PI/2,heading=0;
+        for(int now=0;now<2000;now+=20)
+        {
+            if(Math.Abs(error)<=.035)return now;
+            int pixels=steering.Next(error,heading,.004,walking,now);
+            double turn=pixels*.004;error-=turn;heading-=turn;
+        }
+        throw new InvalidOperationException("Movement smoothing: 90-degree turn did not converge");
     }
 }

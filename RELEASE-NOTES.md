@@ -1028,3 +1028,9 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Read-only local DDS decoding supports DXT1, DXT3, DXT5 and BGRA maps. All four quadrants are required. Unknown client builds/zones and malformed assets use the existing route view; explicit calibrated maps take precedence.
 - Client map projection was verified for the supported zones; eleven installed map sets passed independent decoding and native route-rendering checks. Game assets and runtime routes remain private and are not bundled or uploaded.
 - Map artwork assists recording, but is not a verified collision mesh. Automatic terrain shortcuts are not inferred from the picture. Existing recovery, route movement and obstacle handling are preserved; live travel remains unverified.
+
+## Release1.100
+
+- Increase body-turn acceleration by one third and steering speed limits by 20% when stationary and about 29% while walking. Keep the fine-angle taper, calibrated mouse sensitivity and existing movement/arrival limits.
+- Reserve unreported heading changes against the remaining turn angle, including partial feedback, so faster steering can stay responsive without stacking corrections past the goal. Retry lost commands only after 220 ms without a newer command or heading progress; the existing no-response stop remains active.
+- Add offline walking/stationary, delayed/partial-feedback, direction, convergence, no-overshoot and faster 90-degree turn checks. Build and offline checks pass; live turning still requires verification after upgrading.
