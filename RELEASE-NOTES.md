@@ -1,3 +1,13 @@
+## Release1.110
+
+Repair automatically at the lowest equipped-item durability threshold.
+
+- Add independent Repair low durability controls in Equipment repair and the Overview recovery section. Choose an inclusive 1–99% threshold, default 20%; the new trigger is opt-in and retains the existing repair-after-revival option and saved repair setup.
+- Read the lowest current / maximum durability from the client’s actual equipped, repairable items. Verify equipment ownership, eligibility, value/update/repair code signatures and loaded code; inspect every equipped slot twice. Exclude bag, empty and confirmed nonrepairable slots; unknown, invalid or changing readings never trigger repair.
+- Wait for a quiet living-health window, finished combat, group/healer duties and route/anchor returns. Repair in the owning hunt/support loop, release held input and preserve the character’s location and anchor. Stop if damage, threats, equipment or higher-priority duties change during repair.
+- Attempt once per low-durability episode, share manual/revival attempt bookkeeping, and require a fresh improvement on the same equipped items above the threshold before resuming hunting and pickup. Unchanged or unavailable results stop without repeating the repair confirmation.
+- Preserve existing settings, profiles, routes, combat behavior, in-game artwork and public updater. Include durability telemetry, a bounded read-only observation command and offline reader/policy/UI checks. The running application is not replaced and no live repair is triggered during validation.
+
 ## Release1.109
 
 Orbital Ops interface and new PlayPoteBot branding.

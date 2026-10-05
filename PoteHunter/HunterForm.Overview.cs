@@ -13,6 +13,8 @@ public sealed partial class HunterForm
         var previousMode = compactMode.SelectedIndex;
         var previousRange = melee.Value;
         bool previousRepair = autoRepair.Checked;
+        bool previousDurabilityRepair=durabilityRepair.Checked;
+        decimal previousDurabilityThreshold=durabilityThreshold.Value;
         var previousFolds = Controls.Find("orbitalControlBody", true).Single()
             .Controls.OfType<CollapsibleSection>().Select(fold => (Fold: fold, Expanded: fold.Expanded)).ToArray();
         try
@@ -37,6 +39,17 @@ public sealed partial class HunterForm
             if(Find<TextBox>("overviewTargetFilter").Text != "Tribal") throw new Exception("Overview did not follow detailed target edits.");
             var repair = Find<CheckBox>("overviewRepair"); repair.Checked = !autoRepair.Checked;
             if(repair.Checked != autoRepair.Checked) throw new Exception("Overview repair toggle did not bind.");
+            var lowRepair=Find<CheckBox>("overviewDurabilityRepair");var lowThreshold=Find<NumericUpDown>("overviewDurabilityThreshold");
+            lowRepair.Checked=true;lowThreshold.Value=23;
+            if(!durabilityRepair.Checked || durabilityThreshold.Value!=23 || !CurrentOptions().AutoRepairLowDurability || CurrentOptions().RepairDurabilityPercent!=23)
+                throw new Exception("Overview durability threshold did not bind to persisted settings.");
+            for(int modeIndex=0;modeIndex<4;modeIndex++)
+            {
+                compactMode.SelectedIndex=modeIndex;refreshOverview?.Invoke();
+                if(!lowRepair.Enabled || !lowThreshold.Enabled)
+                    throw new Exception("Durability repair was unavailable in a stopped operating mode.");
+            }
+            compactMode.SelectedIndex=0;
             if(navigation.RouteTargetKey!="TRIBAL" || !Find<Label>("overviewRouteTarget").Text.Contains("Tribal"))throw new Exception("Route set label did not follow target selection.");
             navigation.BeginRecording(new(0,0));filter.Text="Mimic";
             if(navigation.Recording || !navigation.RecordingCancelled || navigation.RouteTargetKey!="MIMIC")throw new Exception("Changing target did not cancel the old recording.");
@@ -47,6 +60,9 @@ public sealed partial class HunterForm
                 throw new Exception("Overview permits settings changes while hunting.");
             bool lockedRepair = autoRepair.Checked; repair.Checked = !lockedRepair;
             if(autoRepair.Checked != lockedRepair) throw new Exception("Overview bypassed running-state guard.");
+            if(lowRepair.Enabled || lowThreshold.Enabled)throw new Exception("Durability settings remained enabled during hunting.");
+            lowRepair.Checked=false;lowThreshold.Value=24;
+            if(!durabilityRepair.Checked || durabilityThreshold.Value!=23)throw new Exception("Overview durability settings bypassed the running-state guard.");
             working = false;RefreshNavigationRecordingControls(); compactMode.SelectedIndex = 3; refreshOverview?.Invoke();
             if(Find<ComboBox>("overviewMode").SelectedIndex != 3 || Find<CheckBox>("overviewRevive").Enabled || Find<Button>("overviewTargetMimic").Enabled)
                 throw new Exception("Overview healer state differs from detailed settings.");
@@ -79,6 +95,7 @@ public sealed partial class HunterForm
         {
             working = false; compactMode.SelectedIndex = previousMode; filter.Text = previousFilter;
             melee.Value = previousRange; autoRepair.Checked = previousRepair;
+            durabilityRepair.Checked=previousDurabilityRepair;durabilityThreshold.Value=previousDurabilityThreshold;
             foreach(var (fold, expanded) in previousFolds) fold.Expanded = expanded;
             compactSaveTimer.Stop(); tabs.SelectedTab = previousPage; refreshOverview?.Invoke();
         }
@@ -292,9 +309,11 @@ public sealed partial class HunterForm
         var recovery = Fold(right, "overviewFoldRecovery", "Death & client recovery", "Recovery");
         CompactAdd(recovery.Content, Toggle("overviewRevive", "Auto revive + return to anchor", autoRevive, true));
         CompactAdd(recovery.Content, Toggle("overviewRepair", "Auto repair after revival", autoRepair, true));
+        CompactAdd(recovery.Content, Toggle("overviewDurabilityRepair", "Repair low durability", durabilityRepair));
+        CompactAdd(recovery.Content, CompactRow("Repair at", BoundNumber("overviewDurabilityThreshold",durabilityThreshold),Caption("% or lower")));
         CompactAdd(recovery.Content, Toggle("overviewResume", "Resume farming on arrival", farmOnArrival, true));
         var recoveryText = Detail("overviewRecoveryStatus"); CompactAdd(recovery.Content, recoveryText);
-        CompactAdd(recovery.Content, Link("Revival & repair setup", () => OpenSetup(autoRevive), "overviewRecoverySetup"));
+        CompactAdd(recovery.Content, Link("Revival & repair setup", () => OpenSetup(durabilityRepair.Checked?durabilityRepair:autoRevive), "overviewRecoverySetup"));
         CompactAdd(recovery.Content, Toggle("overviewClientRecovery", "Recover client closure", autoClientRecovery, true));
         var clientText = Detail("overviewClientRecoveryStatus"); CompactAdd(recovery.Content, clientText);
         CompactAdd(recovery.Content, Link("Client crash and login setup", () => OpenSetup(autoClientRecovery), "overviewClientRecoverySetup"));
@@ -362,7 +381,7 @@ public sealed partial class HunterForm
                 radii.Summary = "Route: " + NumberText(routeCorridorRadius.Value) + " units · Anchor: " + NumberText(radius.Value) + " units";
                 mapLegend.Text = "Route corridor · " + NumberText(routeCorridorRadius.Value) + " units     Anchor area · " + NumberText(radius.Value) + " units";
                 anchorText.Text = activeHuntAnchor is { } point ? $"Saved anchor  {point.X:0.0}, {point.Y:0.0} · {selectedTitle}" : "Start saves your hunting anchor and facing. · " + selectedTitle;
-                recoveryText.Text = healerMode.Checked ? "Death recovery is unavailable in healer mode."
+                recoveryText.Text = durabilityRepair.Checked ? "Lowest equipped durability: " + (latestDurability.LowestPercent is decimal lowest ? NumberText(lowest)+"%" : "unknown") + " · repair at " + NumberText(durabilityThreshold.Value) + "% or lower, between fights." : healerMode.Checked ? "Death recovery is unavailable in healer mode."
                     : "Uses recognized revival and configured repair, then the target’s saved route.";
                 clientText.Text = clientRecoveryStatus.Text;
                 routeTargetText.Text = $"Targets: {navigation.RouteTargetLabel}" + (navigation.UnassignedRouteCount > 0 ? " · Assign existing routes in Navigation" : "");

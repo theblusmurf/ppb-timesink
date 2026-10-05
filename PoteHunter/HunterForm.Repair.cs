@@ -3,29 +3,38 @@ namespace PoteHunter;
 public sealed partial class HunterForm
 {
     readonly CheckBox autoRepair=new(){Text="Auto repair after revival",AutoSize=true};
+    readonly CheckBox durabilityRepair=new(){Text="Repair low durability",AutoSize=true};
+    readonly NumericUpDown durabilityThreshold=new(){Minimum=1,Maximum=99,Value=20,Width=68};
+    readonly Label durabilityStatus=new(){AutoSize=true,MaximumSize=new Size(540,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,6)};
     readonly CheckBox visualRevival=new(){Text="Recognize Revive button",AutoSize=true,Checked=true};
     readonly Button configureRepair=new(){Text="Custom repair setup",AutoSize=true};
     readonly Button testRepair=new(){Text="Test repair · 5s",AutoSize=true};
     readonly Label repairStatus=new(){AutoSize=true,MaximumSize=new Size(540,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,6)};
     bool repairInProgress;
 
-    void AddRepairSettings(TableLayoutPanel card)
+    void AddRepairSettings(TableLayoutPanel card,TableLayoutPanel equipmentCard)
     {
         AddRevivalSettings(card);
         CompactAdd(card,CompactRow("Repair",autoRepair));
-        var actions=CompactFlow(configureRepair,testRepair);CompactAdd(card,actions);CompactAdd(card,repairStatus);
+        CompactAdd(equipmentCard,CompactRow("Durability",durabilityRepair,durabilityThreshold,new Label{Text="% or lower",AutoSize=true}));
+        CompactAdd(equipmentCard,durabilityStatus);
+        var actions=CompactFlow(configureRepair,testRepair);CompactAdd(equipmentCard,actions);CompactAdd(equipmentCard,repairStatus);
         priorityHint.SetToolTip(autoRepair,"Recognize the inventory hammer and repair confirmation, repair once after revival, then follow the saved return route. Off by default. Requires the game's repair capability and cost.");
         priorityHint.SetToolTip(configureRepair,"Optional fallback for another inventory layout. Automatic recognition normally uses the included Domitus templates. Saved custom setup survives client updates while the same controls and window size still match. Custom setup sends no game input.");
         priorityHint.SetToolTip(testRepair,"With hunting stopped, wait 5 seconds, switch to the game, and run the configured repair sequence once. This confirms the game's repair cost.");
         void Refresh()
         {
-            actions.Visible=repairStatus.Visible=autoRepair.Checked;
+            actions.Visible=repairStatus.Visible=autoRepair.Checked||durabilityRepair.Checked;
+            durabilityThreshold.Enabled=durabilityRepair.Checked;durabilityStatus.Visible=durabilityRepair.Checked;
             revivalDelaySeconds.Enabled=farmOnArrival.Enabled=visualRevival.Enabled=autoRevive.Checked;
             reviveKey.Enabled=autoRevive.Checked&&!visualRevival.Checked;
-            repairStatus.Text=!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
+            repairStatus.Text=durabilityRepair.Checked?"Repairs the lowest equipped-item durability at the threshold, between fights. Uses the same inventory setup; does not move the character. Unknown readings block the trigger.":!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
                 :"Saved setup must match the inventory layout and UI scale. If recognition fails, capture Inventory + Hammer and Question + Yes again. Test once before automatic recovery.";
         }
         autoRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};autoRevive.CheckedChanged+=(_,_)=>Refresh();
+        durabilityRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
+        durabilityThreshold.ValueChanged+=(_,_)=>QueueCompactSave();
+        priorityHint.SetToolTip(durabilityRepair,"Use the lowest current / maximum durability among equipped repairable items. Waits for combat and travel to finish; attempts repair once and requires a verified durability increase before resuming.");
         visualRevival.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
         priorityHint.SetToolTip(visualRevival,"Recognize the Revive button before clicking and wait for living HP. Turn off to use the configured revival key instead.");
         configureRepair.Click+=async(_,_)=>await RunRepairTool(true);
@@ -102,9 +111,11 @@ public sealed partial class HunterForm
         TraceLog.Record("repair setup saved",new{Width=inventoryImage.Width,Height=inventoryImage.Height,Client=world.ClientHash});
     }
 
-    async Task RunRepairAsync(CancellationToken token)
+    async Task RunRepairAsync(CancellationToken token,Action? additionalValidation=null,Func<Task>? verifyDurability=null)
     {
         var self=world.LocalPlayer();int zone=world.ActiveZone();
+        var durabilityBaseline=world.ReadDurability();
+        durabilityRepairPolicy.RecordAttempt(durabilityBaseline,activeGuardOptions?.RepairDurabilityPercent??durabilityThreshold.Value,DateTime.UtcNow);
         RepairProfile? profile=null;
         if(File.Exists(RepairProfile.PathName))
         {
@@ -127,6 +138,7 @@ public sealed partial class HunterForm
             {ObserveDeath(hp);throw new DeathRecoveryRequiredException();}
             if(!LocalCharacter.Same(self,current) || world.ActiveZone()!=zone || !hp.Known || hp.Dead)
                 throw new InvalidOperationException("Repair stopped because the character, map, or health changed.");
+            additionalValidation?.Invoke();
         }
         repairInProgress=true;
         Input.PickupHoldProvider=null;ReleaseCombatPickup();movement?.StopApproach();Input.Release();
@@ -135,8 +147,9 @@ public sealed partial class HunterForm
             Input.Preflight=()=>{previousPreflight?.Invoke();Validate();};
             message=repairStatus.Text="Running inventory repair";
             await AutoRepair.Run(new LiveRepairSurface(world,profile,Validate,token),token);
+            if(verifyDurability!=null)await verifyDurability();
             repairStatus.Text="Repair UI sequence completed; inventory closed.";
-            TraceLog.Record("repair sequence completed",new{DurabilityVerified=false,BeforeReturn=deathRecovery.Pending});
+            TraceLog.Record("repair sequence completed",new{DurabilityVerified=verifyDurability!=null,BeforeReturn=deathRecovery.Pending});
         }
         catch(InvalidOperationException ex) when(deathRecovery.Pending)
         {

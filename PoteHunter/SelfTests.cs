@@ -98,6 +98,8 @@ static class SelfTests
             DeathRecoveryChecks.Run();
             Input.CheckFaultWatchSafety();
             AutoRepairChecks.Run().GetAwaiter().GetResult();
+            DurabilityRepairPolicy.SelfTest();
+            DurabilityReaderChecks.Run();
             VisualRecoveryChecks.Run().GetAwaiter().GetResult();
             RecoveryTravelChecks.Run().GetAwaiter().GetResult();
             AdjustableRadiusChecks.Run();

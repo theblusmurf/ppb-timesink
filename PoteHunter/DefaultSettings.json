@@ -23,6 +23,8 @@
   "AutoHeal": true,
   "AutoReviveAfterDeath": true,
   "AutoRepairAfterDeath": false,
+  "AutoRepairLowDurability": false,
+  "RepairDurabilityPercent": 20,
   "RevivalDelaySeconds": 0,
   "FarmOnArrival": true,
   "ReviveKey": "R",

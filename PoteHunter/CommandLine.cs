@@ -7,6 +7,22 @@ static class CommandLine
 {
     public static int? Run(string[] args)
     {
+        if(args.Contains("--observe-durability"))
+        {
+            // A bounded read-only observation. This branch never initializes
+            // gameplay input, opens inventory, activates a window or starts a hunt.
+            if(args.Any(arg=>arg is not "--observe-durability" and not "--native-read-compat"))return 2;
+            PoteMemoryProbe.WindowsClientRead.Enabled=args.Contains("--native-read-compat");
+            try
+            {
+                using var world=new World();world.Connect();
+                var samples=new List<DurabilityReading>();
+                for(int i=0;i<5;i++){samples.Add(world.ReadDurability());if(i<4)Thread.Sleep(200);}
+                File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"durability-observation.json"),JsonSerializer.Serialize(samples,new JsonSerializerOptions{WriteIndented=true}));
+                return samples.Any(sample=>sample.Known)?0:1;
+            }
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"durability-observation-error.txt"),ex.ToString());return 1;}
+        }
         if(args.Contains("--potion-catalog"))
         {
             try

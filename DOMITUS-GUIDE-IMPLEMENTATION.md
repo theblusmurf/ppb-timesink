@@ -56,7 +56,9 @@ adapted into PoteHunter and the remaining verification limits.
   bound to the game build/window size; the test button performs the sequence
   once. Recognition failure or interruption stops the hunt.
   Confirmation is attempted at most once per recovery cycle. This feature
-  requires the game's repair capability/cost and does not verify durability.
+  requires the game's repair capability/cost. Post-revival repair confirms UI
+  completion; the independent low-durability trigger additionally verifies
+  equipment improvement, as described in DURABILITY-REPAIR.md.
 - Cancellable image searches run on a worker; the input thread rechecks
   focus, character, HP, dialog markers, and pointer position before clicking.
 - Enemies leaving the allowed area cause anchor return and waiting, retaining
@@ -64,12 +66,14 @@ adapted into PoteHunter and the remaining verification limits.
 
 ## Not automated from the guide
 
-Automatic durability thresholds, repair inventory/price APIs, and verification
-of the resulting durability are not exposed by the current memory client.
+Direct repair inventory/price APIs are not exposed by the current memory client.
+Release1.110 independently derives equipped durability from verified client
+display/update/repair code and adds an optional lowest-durability threshold
+with post-repair improvement checks; this was not imported from the guide.
 `/kill` group switching and the source's six named farming groups are not
 imported. The occupied-spot wait policy is adapted to the three existing local
 route slots. Recognition uses synthetic composites of the supplied templates;
 revival, repair, route, cooldown, input, and UI checks run offline without game
-input. Actual durability, visual detection in the user's client, and complete
-return travel still need live verification. Existing five-target/80%-HP skill
+input. A complete live threshold-triggered repair, visual detection in the
+user's client, and complete return travel still need live verification. Existing five-target/80%-HP skill
 gates, skill spacing, and swing ranges are retained.

@@ -6,7 +6,7 @@ namespace PoteHunter;
 public sealed record SignatureEvidence(string Name, uint CodeRva, string Pattern, int CaptureOffset, uint? CapturedRva);
 public sealed record ProfileDetection(BuildProfile Profile, bool Automatic, uint TimeDateStamp, IReadOnlyList<SignatureEvidence> Evidence);
 
-public static class ProfileDiscovery
+public static partial class ProfileDiscovery
 {
     sealed record Rule(string Name, string Pattern, int CaptureOffset = -1);
     sealed record Manifest(int Version, Rule[] Roots, Rule[] Checks);

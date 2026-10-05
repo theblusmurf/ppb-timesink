@@ -27,6 +27,7 @@
   <ItemGroup><None Include="../NAVIGATION-3D.md" Link="NAVIGATION-3D.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><None Include="../PLAYER-RECOGNITION.md" Link="PLAYER-RECOGNITION.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><None Include="../ORBITAL-OPS.md" Link="ORBITAL-OPS.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Include="../DURABILITY-REPAIR.md" Link="DURABILITY-REPAIR.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <PropertyGroup Condition="'$(Portable)' == 'true'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>

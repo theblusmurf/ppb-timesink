@@ -84,7 +84,8 @@ public sealed partial class HunterForm
         CompactAdd(deathSettings,CompactRow("On death",autoRevive));
         CompactAdd(deathSettings,CompactRow("Revival",Caption("Delay (s)"),revivalDelaySeconds,Caption("Key"),reviveKey));
         CompactAdd(deathSettings,CompactRow("After return",farmOnArrival));
-        AddRepairSettings(deathSettings);
+        var equipmentSettings=CompactCard("EQUIPMENT REPAIR");
+        AddRepairSettings(deathSettings,equipmentSettings);
         AddClientRecoverySettings(deathSettings);
         CompactAdd(deathSettings,new Label{Text="Record routes with Home / End in Navigation. Turning revival off stops the hunt on death.",AutoSize=true,MaximumSize=new Size(580,0),ForeColor=UiMuted,Margin=new Padding(0,4,0,4)});
         var advanced=CompactCard("ADVANCED SETTINGS");advanced.Visible=false;
@@ -120,7 +121,7 @@ public sealed partial class HunterForm
         var combatColumn=CompactTable();combatColumn.Name="fieldCombatColumn";combatColumn.Margin=new Padding(0,0,5,0);
         var recoveryColumn=CompactTable();recoveryColumn.Name="fieldRecoveryColumn";recoveryColumn.Margin=new Padding(5,0,0,0);
         CompactAdd(combatColumn,operating);CompactAdd(combatColumn,actions);CompactAdd(combatColumn,advanced);
-        CompactAdd(recoveryColumn,recovery);CompactAdd(recoveryColumn,deathSettings);
+        CompactAdd(recoveryColumn,recovery);CompactAdd(recoveryColumn,equipmentSettings);CompactAdd(recoveryColumn,deathSettings);
         settings.Controls.Add(combatColumn,0,0);settings.Controls.Add(recoveryColumn,1,0);
         healerMode.Visible=false;groupEnabled.Visible=false;
         if(groupPage.Controls.OfType<TableLayoutPanel>().FirstOrDefault() is { } layout)
@@ -191,6 +192,10 @@ public sealed partial class HunterForm
         if(recoverySettings.AutoReviveAfterDeath || !recoverySettings.AutoRepairAfterDeath || recoverySettings.RevivalDelaySeconds!=37 || recoverySettings.ReviveKey!="Enter" || recoverySettings.FarmOnArrival ||
             !recoverySettings.VisualRevivalDetection || visualRevival.Enabled || revivalDelaySeconds.Enabled || reviveKey.Enabled || farmOnArrival.Enabled || !configureRepair.Visible || !testRepair.Visible)
             throw new Exception("Death recovery controls did not persist.");
+        autoRepair.Checked=false;durabilityRepair.Checked=true;durabilityThreshold.Value=23;SaveCompactSettings();
+        if(!Options.Read().AutoRepairLowDurability || Options.Read().AutoRepairAfterDeath || Options.Read().RepairDurabilityPercent!=23 || !configureRepair.Visible || !testRepair.Visible || !durabilityThreshold.Enabled)
+            throw new Exception("Durability repair did not persist independently of automatic revival.");
+        durabilityRepair.Checked=false;durabilityThreshold.Value=20;
         autoRevive.Checked=true;autoRepair.Checked=false;revivalDelaySeconds.Value=0;reviveKey.Text="R";farmOnArrival.Checked=true;SaveCompactSettings();
         if(Options.Read().AutoRepairAfterDeath || !Options.Read().AutoReviveAfterDeath || configureRepair.Visible || testRepair.Visible ||
             !revivalDelaySeconds.Enabled || reviveKey.Enabled || !visualRevival.Enabled || !farmOnArrival.Enabled)
