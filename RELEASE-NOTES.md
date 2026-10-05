@@ -1,3 +1,11 @@
+## Release1.112
+
+Show enemy player names prominently in Sentinel Radar.
+
+- Make the nearest enemy's available character name the main heading, with faction and PvP status secondary. Give the five nearest player names more room beside their distance and bearing.
+- Show available names on individual radar badges while retaining stable numbers, accurate overlap counts and unchanged player positions. Names stay attached to the observed player identity as enemies move.
+- Preserve explicit player-ID labels for unavailable names, and existing safe-zone, unknown-zone, freshness and audio rules. This changes presentation; no alternate name reader or server attackability flag is inferred.
+
 ## Release1.111
 
 Repair low durability during combat and resume the engaged target.

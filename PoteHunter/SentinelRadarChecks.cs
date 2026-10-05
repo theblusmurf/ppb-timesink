@@ -19,6 +19,8 @@ internal static class SentinelRadarChecks
         Require(pvp.Players.Count==5&&pvp.EnemyCount==2&&pvp.NearestEnemy?.Name=="Ashen Rival","In-range nearest enemy must exclude non-finite/outside markers and include the 25-unit boundary");
         markers[0]=markers[0] with{Name="Replaced"};
         Require(pvp.NearestEnemy?.Name=="Ashen Rival","An accepted snapshot must not retain a mutable observations array");
+        Require(SentinelRadarRenderer.NearestEnemyName(pvp)=="Ashen Rival",
+            "The primary enemy heading must use the nearest player's accepted name rather than a faction label");
         var uncertain=new SentinelPlayerMarker(0x2001,1,"Unknown HP",new(1,1),PlayerFaction.Kartefant,PlayerRelation.Enemy,false);
         var invalidIdentity=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
             [uncertain,uncertain with{Id=0x2002,Name="Dead",ConfirmedDead=true},
@@ -31,6 +33,8 @@ internal static class SentinelRadarChecks
         Require(unknown.EnemyCount==0&&unknown.NearestEnemy==null,"Unverified zone cannot display an enemy based on prior PvP status");
         var stale=new SentinelRadarSnapshot(false,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,pvp.Players);
         Require(!stale.Fresh&&stale.Players.Count==0&&stale.EnemyCount==0&&stale.NearestEnemy==null,"Stale observations must clear the radar and nearest enemy");
+        Require(new[]{safe,unknown,stale}.All(snapshot=>SentinelRadarRenderer.NearestEnemyName(snapshot)==null),
+            "Safe, unverified and stale states must not retain a prior enemy's name heading");
         var invalidSelf=new SentinelRadarSnapshot(true,true,new(double.PositiveInfinity,0),"Zone 8",ZoneCombatRule.PvP,pvp.Players);
         Require(!invalidSelf.Fresh&&invalidSelf.Players.Count==0,"Non-finite self position cannot project player markers");
         foreach(var pair in new[]{(new Vec(0,1),"N"),(new Vec(1,1),"NE"),(new Vec(1,0),"E"),(new Vec(1,-1),"SE"),
@@ -84,18 +88,50 @@ internal static class SentinelRadarChecks
         Require(PlayerRecognition.DisplayName(0x03b2,"")=="Player 000003B2"&&PlayerRecognition.DisplayName(0x088a," Gale ")=="Gale"&&
             crowded.Enemies.Single(p=>p.Id==0x03b2).Name=="",
             "Blank names must remain raw blank data, with explicit UID display fallback rather than invented character names");
+        Require(SentinelRadarRenderer.NearestEnemyName(crowded)=="Player 000003B2",
+            "An unavailable nearest name must remain an explicit UID fallback in the primary heading");
         using(var image=SentinelRadarRenderer.Render(crowded))
         using(var graphics=Graphics.FromImage(image))
         {
             var badges=SentinelRadarRenderer.EnemyBadges(graphics,crowded,center,76);
             Require(badges.Count==3&&badges.Sum(p=>p.Cluster.Members.Count)==5&&badges[0].Caption.StartsWith("×3 #1,2,3",StringComparison.Ordinal),
                 "Every overlap badge must report its exact current member count and corresponding stable numbers");
+            Require(badges.Single(p=>p.Cluster.Members.Count==1&&p.Cluster.Members[0].Player.Id==0x088a).Caption=="#4 Gale"&&
+                badges.Single(p=>p.Cluster.Members.Count==1&&p.Cluster.Members[0].Player.Id==0x0912).Caption=="#5 Player 00000912",
+                "Individual badges must use the real name or explicit UID fallback alongside their stable number");
             Require(badges.All(p=>new RectangleF(12,48,190,164).Contains(p.Bounds)&&!p.Bounds.IntersectsWith(new(102,122,16,16))),
                 "Number/count badges must stay in the radar pane and clear the self position");
             Color nearSelf=image.GetPixel(110,130);
             Require(nearSelf.R>230&&nearSelf.G<140&&nearSelf.B>70,
                 "The self marker must not cover an enemy at its exact position at the largest watch range");
             image.Save(Path.Combine(outputDirectory,"sentinel-radar-five-enemies-clustered.png"));
+        }
+        const string longName="Σκιὰ・雪狼・The Eternal Nightwarden";
+        var namedMarkers=new[]{
+            new SentinelPlayerMarker(0x3101,1,"Ashen Rival",new(-12,15),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:1),
+            new SentinelPlayerMarker(0x3102,1,"Vex",new(14,15),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:2),
+            new SentinelPlayerMarker(0x3103,1,longName,new(-18,-12),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:3),
+            new SentinelPlayerMarker(0x3104,1,"Morgana",new(18,-12),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:4),
+            new SentinelPlayerMarker(0x3105,1,"Iron Warden",new(0,-24),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:5)};
+        var fiveNamed=new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,namedMarkers);
+        var namesCrossing=new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,
+            namedMarkers.Select(p=>p.Id==0x3103?p with{Position=new(0,.5)}:p));
+        Require(SentinelRadarRenderer.NearestEnemyName(fiveNamed)=="Ashen Rival"&&
+            SentinelRadarRenderer.NearestEnemyName(namesCrossing)==longName&&namesCrossing.NearestEnemy?.DisplayNumber==3&&
+            namesCrossing.Enemies.All(p=>p.Name==fiveNamed.Enemies.Single(original=>original.Id==p.Id).Name),
+            "Distance-order changes must promote the current nearest name without swapping names or stable numbers between identities");
+        using(var image=SentinelRadarRenderer.Render(fiveNamed))image.Save(Path.Combine(outputDirectory,"sentinel-radar-five-named-enemies.png"));
+        using(var image=SentinelRadarRenderer.Render(namesCrossing))image.Save(Path.Combine(outputDirectory,"sentinel-radar-nearest-unicode-name.png"));
+        using(var image=SentinelRadarRenderer.Render(fiveNamed,new Size(320,174)))image.Save(Path.Combine(outputDirectory,"sentinel-radar-five-names-small.png"));
+        var longNamed=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,[namedMarkers[2]]);
+        using(var image=SentinelRadarRenderer.Render(longNamed))
+        using(var graphics=Graphics.FromImage(image))
+        {
+            var badge=SentinelRadarRenderer.EnemyBadges(graphics,longNamed,center,76).Single();
+            Require(badge.Caption=="#3 "+longName&&badge.Bounds.Width<=146&&new RectangleF(12,48,190,164).Contains(badge.Bounds)&&
+                badge.Cluster.Members.Single().Point==SentinelRadarPresentation.RadarPoint(namedMarkers[2].Position,center,76),
+                "Long Unicode names must retain their accepted text and exact marker location while the visible badge remains bounded");
+            image.Save(Path.Combine(outputDirectory,"sentinel-radar-long-name.png"));
         }
         var many=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
             Enumerable.Range(1,20).Select(index=>new SentinelPlayerMarker((uint)index,1,"",new(1.5,0),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:index)),100);
@@ -133,6 +169,7 @@ internal static class SentinelRadarChecks
         File.WriteAllText(Path.Combine(outputDirectory,"sentinel-radar-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,ImmutableSnapshots=true,StalePlayersCleared=true,ZoneStatusGated=true,NorthUp=true,
             StableEnemyNumbers=true,CoincidentIdentityCounts=true,ExactProjectedPositions=true,SelfDoesNotHideEnemy=true,BlankNamesUseIds=true,
+            NamesPrimary=true,NamedIndividualBadges=true,NearestNameTracksIdentity=true,LongUnicodeNameBounded=true,
             BodyClickThrough=true,HeaderPassive=true,ForegroundPreserved=true,HardwareInputEmitted=false},new JsonSerializerOptions{WriteIndented=true}));
     }
 

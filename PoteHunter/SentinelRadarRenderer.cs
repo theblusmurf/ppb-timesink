@@ -115,7 +115,9 @@ internal static class SentinelRadarRenderer
     static void DrawDetails(Graphics graphics,SentinelRadarSnapshot snapshot)
     {
         Text(graphics,snapshot.ZoneLabel,8,ImperialTheme.Muted,new(214,41,233,19));
-        string title=snapshot.ZoneRule switch{ZoneCombatRule.PvP=>"PvP · opposing factions",ZoneCombatRule.Safe=>"Non-PvP · alerts suppressed",_=>"PvP rules unverified"};
+        string title=snapshot.ZoneRule switch{
+            ZoneCombatRule.PvP when snapshot.EnemyCount>0=>$"PvP · {snapshot.EnemyCount} enem{(snapshot.EnemyCount==1?"y":"ies")} · {snapshot.Radius:0.#}u",
+            ZoneCombatRule.PvP=>"PvP · enemy watch",ZoneCombatRule.Safe=>"Non-PvP · alerts suppressed",_=>"PvP rules unverified"};
         Color statusColor=snapshot.ZoneRule==ZoneCombatRule.PvP&&snapshot.EnemyCount>0?SentinelRadarPresentation.Enemy:ImperialTheme.Gold;
         using(var status=new SolidBrush(statusColor))graphics.FillEllipse(status,215,65,5,5);
         Text(graphics,title,8,statusColor,new(226,59,220,18));
@@ -126,20 +128,19 @@ internal static class SentinelRadarRenderer
         }
         else if(snapshot.NearestEnemy is SentinelPlayerMarker enemy)
         {
-            Text(graphics,$"{snapshot.EnemyCount} enem{(snapshot.EnemyCount==1?"y":"ies")} · {snapshot.Radius:0.#}u",12,
-                ImperialTheme.Text,new(213,80,168,26),FontStyle.Regular,"Georgia");
-            if(snapshot.EnemyCount>5)Text(graphics,$"+{snapshot.EnemyCount-5} more",7.5f,ImperialTheme.Muted,new(377,85,69,18));
+            Text(graphics,NearestEnemyName(snapshot)!,14,
+                ImperialTheme.Text,new(213,80,234,26),FontStyle.Regular,"Georgia");
             string faction=enemy.Faction switch{PlayerFaction.Kartefant=>"Human",PlayerFaction.Merkhadian=>"Akkan",_=>"Unknown faction"};
             Text(graphics,$"Nearest #{enemy.DisplayNumber} · {faction} · inferred",8,ImperialTheme.Gold,new(214,105,232,19));
             int row=0;
             foreach(var player in snapshot.Enemies.Take(5))
             {
                 float y=126+row++*18;
-                Text(graphics,$"#{player.DisplayNumber}",7.5f,SentinelRadarPresentation.Enemy,new(214,y,31,18),FontStyle.Bold);
-                Text(graphics,PlayerRecognition.DisplayName(player.Id,player.Name),8,ImperialTheme.Text,new(247,y,112,18));
+                Text(graphics,$"#{player.DisplayNumber}",7.5f,SentinelRadarPresentation.Enemy,new(214,y,27,18),FontStyle.Bold);
+                Text(graphics,PlayerRecognition.DisplayName(player.Id,player.Name),8,ImperialTheme.Text,new(242,y,133,18));
                 Vec delta=player.Position-snapshot.SelfPosition;
                 string bearing=delta.Length<.05?"HERE":SentinelRadarPresentation.Bearing(delta);
-                Text(graphics,$"{delta.Length:0.0}u {bearing}",8,ImperialTheme.Gold,new(362,y,85,18));
+                Text(graphics,$"{delta.Length:0.0}u {bearing}",7.5f,ImperialTheme.Gold,new(377,y,70,18),alignment:StringAlignment.Far);
             }
         }
         else
@@ -161,6 +162,9 @@ internal static class SentinelRadarRenderer
     internal readonly record struct EnemyProjection(SentinelPlayerMarker Player,PointF Point);
     internal sealed record EnemyCluster(IReadOnlyList<EnemyProjection> Members,PointF Anchor);
     internal readonly record struct EnemyBadge(EnemyCluster Cluster,RectangleF Bounds,string Caption);
+
+    internal static string? NearestEnemyName(SentinelRadarSnapshot snapshot)=>
+        snapshot.NearestEnemy is SentinelPlayerMarker enemy?PlayerRecognition.DisplayName(enemy.Id,enemy.Name):null;
 
     internal static IReadOnlyList<EnemyCluster> EnemyClusters(SentinelRadarSnapshot snapshot,PointF center,float radius)
     {
@@ -196,9 +200,12 @@ internal static class SentinelRadarRenderer
         foreach(var cluster in EnemyClusters(snapshot,center,radius))
         {
             string numbers=string.Join(",",cluster.Members.Take(3).Select(p=>p.Player.DisplayNumber));
-            string caption=cluster.Members.Count==1?$"#{numbers}":
+            var first=cluster.Members[0].Player;
+            string caption=cluster.Members.Count==1?$"#{first.DisplayNumber} {PlayerRecognition.DisplayName(first.Id,first.Name)}":
                 $"×{cluster.Members.Count} #{numbers}{(cluster.Members.Count>3?$"+{cluster.Members.Count-3}":"")}";
-            float width=Math.Clamp(graphics.MeasureString(caption,font).Width+7,22,area.Width),height=18;
+            // Names may be longer than the radar pane. Ellipsis keeps the badge
+            // away from other points while the roster retains the same identity.
+            float width=Math.Clamp(graphics.MeasureString(caption,font).Width+7,22,146),height=18;
             var point=cluster.Anchor;
             var candidates=new List<PointF>{new(point.X+9,point.Y-23),new(point.X-width-9,point.Y-23),
                 new(point.X+9,point.Y+8),new(point.X-width-9,point.Y+8),new(point.X-width/2,point.Y-29),new(point.X-width/2,point.Y+13)};
@@ -240,11 +247,11 @@ internal static class SentinelRadarRenderer
     }
 
     static void Text(Graphics graphics,string text,float points,Color color,RectangleF bounds,
-        FontStyle style=FontStyle.Regular,string family="Segoe UI")
+        FontStyle style=FontStyle.Regular,string family="Segoe UI",StringAlignment alignment=StringAlignment.Near)
     {
         using var font=new Font(family,points,style);
         using var brush=new SolidBrush(color);
-        using var format=new StringFormat{Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap};
+        using var format=new StringFormat{Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap,Alignment=alignment};
         graphics.DrawString(text,font,brush,bounds,format);
     }
 }

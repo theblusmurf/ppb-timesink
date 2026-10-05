@@ -35,9 +35,11 @@ after upgrading; offline verification does not establish live attackability.
 
 ## Enemy identification
 
-Sentinel lists the five nearest enemies separately, using session numbers that
+Sentinel makes the nearest enemy's available name the main heading and lists
+the five nearest enemies separately, using session numbers that
 remain stable as players cross, move or leave the selected watch radius. Overlap
-badges show how many observed identities share a small radar area, plus their
+Individual radar badges show available names alongside their session number.
+Overlap badges show how many observed identities share a small radar area, plus their
 numbers; leader lines retain the actual positions. More distant enemies remain
 in the total count. A nearby enemy is drawn above the white self marker.
 
