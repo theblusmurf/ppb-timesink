@@ -574,9 +574,8 @@ public sealed partial class HunterForm
                 using var fill=new SolidBrush(Color.FromArgb(12,areaColor));g.FillEllipse(fill,bounds);
                 using var outline=new Pen(Color.FromArgb(150,areaColor),1.25f){DashStyle=System.Drawing.Drawing2D.DashStyle.Dash};g.DrawEllipse(outline,bounds);
                 using var areaFont=new Font("Segoe UI",7f,FontStyle.Bold);
-                using var areaBrush=new SolidBrush(areaColor);
-                g.DrawString($"Anchor area · {farmingRadius.Value:0.#}m",areaFont,areaBrush,
-                    new PointF(Math.Clamp(center.X+8,3,Math.Max(3,size.Width-122)),Math.Clamp(center.Y+9,3,Math.Max(3,size.Height-18))));
+                MapOverlayText.Draw(g,$"Anchor area · {farmingRadius.Value:0.#}m",areaFont,
+                    new PointF(Math.Clamp(center.X+8,3,Math.Max(3,size.Width-122)),Math.Clamp(center.Y+9,3,Math.Max(3,size.Height-18))),areaColor);
             }
             finally{g.Restore(state);}
         }
@@ -596,7 +595,7 @@ public sealed partial class HunterForm
             var anchor=Project(route.Anchor);using var brush=new SolidBrush(colors[slot]);
             g.FillEllipse(brush,anchor.X-4,anchor.Y-4,8,8);
             Vec facing=Movement.FromClientHeading(route.Heading);g.DrawLine(pen,anchor,new PointF(anchor.X+(float)facing.X*14,anchor.Y-(float)facing.Y*14));
-            g.DrawString(slot==0?"Primary":$"Alt {slot}",labelFont,brush,new PointF(Math.Clamp(anchor.X+6,2,size.Width-66),Math.Clamp(anchor.Y-15,2,size.Height-20)));
+            MapOverlayText.Draw(g,slot==0?"Primary":$"Alt {slot}",labelFont,new PointF(Math.Clamp(anchor.X+6,2,size.Width-66),Math.Clamp(anchor.Y-15,2,size.Height-20)),colors[slot]);
         }
         var self=Project(position);g.FillEllipse(Brushes.White,self.X-4,self.Y-4,8,8);
     }

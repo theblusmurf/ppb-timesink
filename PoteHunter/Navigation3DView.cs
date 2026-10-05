@@ -449,7 +449,7 @@ internal sealed class Navigation3DView : Control
         if(!area.Center.Finite||!double.IsFinite(area.Radius)||area.Radius<=0||area.Radius>2000)return;
         var points=new Vec[65];for(int i=0;i<points.Length;i++){double a=i*Math.PI/32;points[i]=area.Center+new Vec(Math.Cos(a),Math.Sin(a))*area.Radius;}
         DrawPolyline(points,area.Color,1.5f);
-        if(area.Name.Length>0&&MapSceneGeometry.Height(scene,area.Center) is double h)DrawLabel(area.Name,area.Center,h,area.Color);
+        if(area.Name.Length>0&&MapSceneGeometry.Height(scene,area.Center) is double h)DrawLabel(area.Name,area.Center,h);
     }
     void DrawPolyline(Vec[] points,Color color,float width)
     {
@@ -468,12 +468,31 @@ internal sealed class Navigation3DView : Control
         GL.glBegin(GL.LINE_LOOP);for(int i=0;i<corners;i++){double a=i*Math.PI*2/corners;GL.glVertex3d(point.X+Math.Cos(a)*radius,height+1,-point.Y-Math.Sin(a)*radius);}GL.glEnd();
         if(engaged){GL.glColor4ub(127,199,174,255);GL.glBegin(GL.LINE_LOOP);for(int i=0;i<24;i++){double a=i*Math.PI/12;GL.glVertex3d(point.X+Math.Cos(a)*radius*1.5,height+1,-point.Y-Math.Sin(a)*radius*1.5);}GL.glEnd();GL.glColor4ub(color.R,color.G,color.B,255);}
         if(double.IsFinite(heading)){var d=Movement.FromClientHeading(heading);GL.glBegin(GL.LINES);GL.glVertex3d(point.X,height+1,-point.Y);GL.glVertex3d(point.X+d.X*radius*2.8,height+1,-point.Y-d.Y*radius*2.8);GL.glEnd();}
-        DrawLabel(name,point,height+radius+1,color,radius);if(passive)GL.glEnable(GL.DEPTH_TEST);GL.glLineWidth(1);
+        DrawLabel(name,point,height+radius+1,radius);if(passive)GL.glEnable(GL.DEPTH_TEST);GL.glLineWidth(1);
     }
-    void DrawLabel(string name,Vec point,double height,Color color,double offset=0)
+    void DrawLabel(string name,Vec point,double height,double offset=0)
     {
-        if(fontLists==0||name.Length==0)return;GL.glColor4ub(color.R,color.G,color.B,255);GL.glDisable(GL.DEPTH_TEST);GL.glRasterPos3d(point.X+offset,height+1,-point.Y);
-        GL.glListBase(fontLists-32);var ascii=Encoding.ASCII.GetBytes(new string(name.Take(36).Select(c=>c is >= ' ' and <= '~'?c:'?').ToArray()));GL.glCallLists(ascii.Length,GL.UNSIGNED_BYTE,ascii);GL.glEnable(GL.DEPTH_TEST);
+        if(fontLists==0||name.Length==0)return;
+        var ascii=Encoding.ASCII.GetBytes(new string(name.Take(36).Select(c=>c is >= ' ' and <= '~'?c:'?').ToArray()));
+        int halo=Math.Max(1,(int)Math.Round(DeviceDpi/96d));
+        GL.glPushAttrib(GL.CURRENT_BIT|GL.ENABLE_BIT|GL.LIST_BIT);
+        try
+        {
+            GL.glDisable(GL.DEPTH_TEST);GL.glDisable(GL.LIGHTING);GL.glDisable(GL.TEXTURE_2D);GL.glDisable(GL.BLEND);
+            GL.glListBase(fontLists-32);
+            void Paint(Color ink,int dx,int dy)
+            {
+                // Bitmap glyph lists advance the raster cursor. Reset its
+                // position and color for every pass before a pixel-space shift.
+                GL.glColor4ub(ink.R,ink.G,ink.B,255);GL.glRasterPos3d(point.X+offset,height+1,-point.Y);
+                if(dx!=0||dy!=0)GL.glBitmap(0,0,0,0,dx,dy,IntPtr.Zero);
+                GL.glCallLists(ascii.Length,GL.UNSIGNED_BYTE,ascii);
+            }
+            for(int dy=-1;dy<=1;dy++)for(int dx=-1;dx<=1;dx++)
+                if(dx!=0||dy!=0)Paint(MapOverlayText.Background,dx*halo,dy*halo);
+            Paint(MapOverlayText.Foreground,0,0);
+        }
+        finally {GL.glPopAttrib();}
     }
     void BuildFont()
     {
@@ -536,6 +555,7 @@ internal sealed class Navigation3DView : Control
     static class GL
     {
         internal const uint DEPTH_TEST=0x0B71,NORMALIZE=0x0BA1,COLOR_MATERIAL=0x0B57,FRONT_AND_BACK=0x0408,AMBIENT_AND_DIFFUSE=0x1602,LIGHT0=0x4000,DIFFUSE=0x1201,LIGHT_MODEL_AMBIENT=0x0B53,LEQUAL=0x0203,CULL_FACE=0x0B44,PERSPECTIVE_CORRECTION_HINT=0x0C50,NICEST=0x1102,COLOR_BUFFER_BIT=0x4000,DEPTH_BUFFER_BIT=0x100,PROJECTION=0x1701,MODELVIEW=0x1700,POSITION=0x1203,LIGHTING=0x0B50,TEXTURE_2D=0x0DE1,BLEND=0x0BE2,SRC_ALPHA=0x0302,ONE_MINUS_SRC_ALPHA=0x0303,POLYGON_OFFSET_FILL=0x8037,COMPILE=0x1300,VERTEX_ARRAY=0x8074,NORMAL_ARRAY=0x8075,COLOR_ARRAY=0x8076,FLOAT=0x1406,UNSIGNED_BYTE=0x1401,UNSIGNED_INT=0x1405,TRIANGLES=4,LINE_STRIP=3,LINE_LOOP=2,LINES=1,RGBA=0x1908,LINEAR=0x2601,CLAMP=0x2900,TEXTURE_MIN_FILTER=0x2801,TEXTURE_MAG_FILTER=0x2800,TEXTURE_WRAP_S=0x2802,TEXTURE_WRAP_T=0x2803,UNPACK_ALIGNMENT=0x0CF5,PACK_ALIGNMENT=0x0D05,BACK=0x0405;
+        internal const uint CURRENT_BIT=1,ENABLE_BIT=0x2000,LIST_BIT=0x20000;
         [DllImport("opengl32.dll")]internal static extern IntPtr glGetString(uint name);
         [DllImport("opengl32.dll")]internal static extern uint glGetError();
         [DllImport("opengl32.dll")]internal static extern void glClearColor(float r,float g,float b,float a);
@@ -588,6 +608,9 @@ internal sealed class Navigation3DView : Control
         [DllImport("opengl32.dll")]internal static extern void glReadBuffer(uint value);
         [DllImport("opengl32.dll")]internal static extern void glReadPixels(int x,int y,int width,int height,uint format,uint type,IntPtr bytes);
         [DllImport("opengl32.dll")]internal static extern void glRasterPos3d(double x,double y,double z);
+        [DllImport("opengl32.dll")]internal static extern void glBitmap(int width,int height,float xorig,float yorig,float xmove,float ymove,IntPtr bytes);
+        [DllImport("opengl32.dll")]internal static extern void glPushAttrib(uint mask);
+        [DllImport("opengl32.dll")]internal static extern void glPopAttrib();
         [DllImport("opengl32.dll")]internal static extern void glListBase(uint id);
         [DllImport("opengl32.dll")]internal static extern void glCallLists(int count,uint type,byte[] bytes);
     }

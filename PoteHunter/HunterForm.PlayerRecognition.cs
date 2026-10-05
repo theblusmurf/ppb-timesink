@@ -92,7 +92,7 @@ public sealed partial class HunterForm
         var players=RecognizedPlayers();if(players.Length==0)return;
         float span=(float)NavigationViewRadius(),scale=Math.Min(size.Width,size.Height)/(span*2);
         float cx=size.Width/2f,cy=size.Height/2f;Vec center=NavigationViewCenter();
-        using var font=new Font("Segoe UI",8f);using var back=new SolidBrush(Color.FromArgb(225,ImperialTheme.Window));
+        using var font=new Font("Segoe UI",8f);
         var visible=new List<(ObservedPlayer Player,PointF Point)>();
         foreach(var player in players.Where(p=>(p.Entity.Position-center).Length<=span))
         {
@@ -119,8 +119,8 @@ public sealed partial class HunterForm
                 var rectangle=new RectangleF(x-2,y-1,bounds.Width+4,bounds.Height+2);
                 if(rectangle.Left<3||rectangle.Top<3||rectangle.Right>size.Width-3||rectangle.Bottom>size.Height-3||
                     occupied.Any(prior=>prior.IntersectsWith(rectangle)))continue;
-                occupied.Add(rectangle);using var brush=new SolidBrush(PlayerMarkerColor(item.Player.Recognition.Relation));
-                g.FillRectangle(back,rectangle);g.DrawString(label,font,brush,x,y);break;
+                occupied.Add(rectangle);
+                MapOverlayText.Draw(g,label,font,new(x,y),PlayerMarkerColor(item.Player.Recognition.Relation));break;
             }
         }
     }

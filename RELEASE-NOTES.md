@@ -1,3 +1,9 @@
+## Release1.108 — Readable map labels
+
+- Replace blue, gold and orange map text with near-white lettering, dark tags in 2D and dark outlines in 3D. Labels stay legible over light map artwork and busy terrain.
+- Keep route lines, anchor markers, player status colors and chest markers distinct; compact 2D tags retain a colored edge. Apply the label treatment to the overview map, navigation, radar and route overlays.
+- Preserve existing routes, settings and movement behavior. Validate hidden native 2D/3D rendering without sending game input or replacing the running app.
+
 # Release notes
 
 ## Release1.107

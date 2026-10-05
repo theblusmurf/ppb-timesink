@@ -4,6 +4,11 @@ Open **Routes → Navigation**. The native view reads recovered terrain and avai
 
 ## In-game overlays
 
+Map labels use near-white text with an opaque dark tag in 2D and a dark outline in
+3D, so they remain readable over pale map artwork and shaded terrain. Route lines,
+markers and small 2D tag accents retain their original colors. This applies to the
+main map, overview preview, radar and route overlays.
+
 Start/F8 follows the selected target's compatible recorded path to its saved end
 anchor when the character starts within the configured route corridor. Select the
 desired Primary or Alternative slot first. Character and map must match; starts

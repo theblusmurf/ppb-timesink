@@ -21,6 +21,6 @@ public sealed partial class HunterForm
         using var edge=new Pen(Color.FromArgb(150,90,205,255),1.5f);
         g.FillPolygon(fill,polygon);g.DrawPolygon(edge,polygon);
         using var font=new Font("Segoe UI",7.5f,FontStyle.Bold);
-        g.DrawString("Attack cone",font,Brushes.LightSkyBlue,cx+5,cy+5);
+        MapOverlayText.Draw(g,"Attack cone",font,new(cx+5,cy+5),Color.LightSkyBlue);
     }
 }

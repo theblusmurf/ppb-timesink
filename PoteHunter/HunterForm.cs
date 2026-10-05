@@ -892,8 +892,6 @@ public sealed partial class HunterForm : Form
             using var chestOutline=new Pen(Color.FromArgb(140,90,0),1.4f);
             using var claspBrush=new SolidBrush(Color.WhiteSmoke);
             using var font=new Font("Segoe UI",7.5f,FontStyle.Bold);
-            using var textBrush=new SolidBrush(Color.FromArgb(255,238,130));
-            using var tagBgBrush=new SolidBrush(Color.FromArgb(210,16,22,32));
             using var tagBorderPen=new Pen(Color.FromArgb(180,218,165,32),1f);
             using var offscreenBrush=new SolidBrush(Color.FromArgb(255,215,0));
 
@@ -918,9 +916,8 @@ public sealed partial class HunterForm : Form
                     float lx=Math.Clamp(p.X-sz.Width/2f,3,w-sz.Width-3);
                     float ly=by-sz.Height-2;
                     if(ly<2) ly=by+11;
-                    g.FillRectangle(tagBgBrush,lx-2,ly-1,sz.Width+4,sz.Height+2);
+                    MapOverlayText.Draw(g,label,font,new(lx,ly));
                     g.DrawRectangle(tagBorderPen,lx-2,ly-1,sz.Width+4,sz.Height+2);
-                    g.DrawString(label,font,textBrush,lx,ly);
                 }
                 else
                 {
@@ -947,9 +944,8 @@ public sealed partial class HunterForm : Form
                         var tsz=g.MeasureString(tag,font);
                         float tx=Math.Clamp(edgeX-nx*16-tsz.Width/2f,2,w-tsz.Width-2);
                         float ty=Math.Clamp(edgeY-ny*16-tsz.Height/2f,2,h-tsz.Height-2);
-                        g.FillRectangle(tagBgBrush,tx-2,ty-1,tsz.Width+4,tsz.Height+2);
+                        MapOverlayText.Draw(g,tag,font,new(tx,ty));
                         g.DrawRectangle(tagBorderPen,tx-2,ty-1,tsz.Width+4,tsz.Height+2);
-                        g.DrawString(tag,font,textBrush,tx,ty);
                     }
                 }
             }
