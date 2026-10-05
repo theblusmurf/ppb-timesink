@@ -10,7 +10,7 @@ internal static class RunicStripRenderer
     static readonly string[] Resources=["Gold","Silvin","Mithril","Iternium","Fehu","Gems"];
     static readonly Color Ink=ImperialTheme.Text;
     static readonly Color Muted=ImperialTheme.Muted;
-    static readonly Color Brass=ImperialTheme.Gold;
+    static readonly Color Accent=ImperialTheme.Accent;
 
     internal static Size SizeAt(int percent)
     {
@@ -42,19 +42,24 @@ internal static class RunicStripRenderer
             graphics.SmoothingMode=SmoothingMode.AntiAlias;
             graphics.PixelOffsetMode=PixelOffsetMode.HighQuality;
             LootOverlayBackground.Draw(graphics,LogicalSize,backgroundOpacityPercent);
-            Text(graphics,"SPOILS OF THE HUNT","Georgia",16,new(10,7,425,28),Brass);
-            Text(graphics,Duration(snapshot.Elapsed),"Consolas",13,new(525,9,145,24),Muted,true);
+            graphics.DrawImage(ImperialTheme.Logo.Value,new Rectangle(12,8,22,23));
+            Text(graphics,"CARGO MANIFEST","Segoe UI Semibold",15,new(44,7,280,28),Ink);
+            Text(graphics,"Session "+Duration(snapshot.Elapsed),"Consolas",12,new(449,9,219,24),Muted,true);
+            using var rule=new Pen(ImperialTheme.Border,1);
+            using var accent=new Pen(Accent,1.5f);
+            graphics.DrawLine(rule,10,37,670,37);graphics.DrawLine(accent,10,37,120,37);
             for(int i=0;i<Resources.Length;i++)
             {
                 string name=Resources[i];float left=10+i*110;
-                Icon(graphics,name,new(left+43,47,22,22));
-                Text(graphics,snapshot.AmountText(name),"Consolas",24,new(left,77,108,35),name=="Gold"?Brass:Ink,true);
-                Text(graphics,LootTrackerSnapshot.DisplayName(name),"Georgia",14,new(left,111,108,24),Ink,true);
-                Text(graphics,$"{snapshot.RateText(name)} / hr","Consolas",11,new(left,137,108,21),Muted,true);
+                using var socket=new GraphicsPath();
+                socket.AddPolygon(new PointF[]{new(left+35,43),new(left+64,43),new(left+72,51),new(left+72,75),new(left+35,75)});
+                graphics.DrawPath(rule,socket);
+                LootOverlayArtwork.DrawResource(graphics,name,new(left+39,46,29,26));
+                Text(graphics,snapshot.AmountText(name),"Consolas",24,new(left,77,108,35),Ink,true);
+                Text(graphics,LootTrackerSnapshot.DisplayName(name),"Segoe UI",13,new(left,111,108,24),Ink,true);
+                Text(graphics,$"{snapshot.RateText(name)} / hr","Consolas",11,new(left,137,108,21),Accent,true);
             }
-            using var line=new Pen(Color.FromArgb(160,Brass),1);
-            graphics.DrawLine(line,258,173,322,173);graphics.DrawLine(line,354,173,418,173);
-            Icon(graphics,"Gems",new(331,166,14,14));
+            Text(graphics,$"Active {Duration(snapshot.RateElapsed)} · {snapshot.Sources.Sum(source=>source.Kills):N0} kills · {snapshot.Sources.Sum(source=>source.Drops):N0} detected drops","Segoe UI",11,new(151,159,378,24),Muted,true);
             LootOverlayResetButtons.Draw(graphics,3,LogicalSize);
         }
         finally {graphics.Restore(state);}
@@ -72,40 +77,9 @@ internal static class RunicStripRenderer
             size-=.5f;
         }
         using var path=new GraphicsPath();path.AddString(value,fontFamily,(int)FontStyle.Regular,size,bounds,format);
-        using var outline=new Pen(Color.FromArgb(215,18,17,13),2.2f){LineJoin=LineJoin.Round};
+        using var outline=new Pen(Color.FromArgb(215,ImperialTheme.Window),2.2f){LineJoin=LineJoin.Round};
         using var fill=new SolidBrush(color);
         graphics.DrawPath(outline,path);graphics.FillPath(fill,path);
-    }
-
-    static void Icon(Graphics graphics,string resource,RectangleF bounds)
-    {
-        var state=graphics.Save();graphics.TranslateTransform(bounds.X,bounds.Y);graphics.ScaleTransform(bounds.Width/22,bounds.Height/22);
-        try
-        {
-            using var path=new GraphicsPath();
-            switch(resource)
-            {
-                case "Gold":
-                    path.AddEllipse(3,2,14,5);path.StartFigure();path.AddArc(3,3,14,8,0,180);path.StartFigure();path.AddArc(3,7,14,8,0,180);
-                    path.StartFigure();path.AddLine(3,5,3,12);path.StartFigure();path.AddLine(17,5,17,12);break;
-                case "Silvin":
-                    path.AddPolygon([new(11,2),new(21,7),new(11,12),new(1,7)]);
-                    path.StartFigure();path.AddLines([new(1,12),new(11,17),new(21,12)]);path.StartFigure();path.AddLines([new(1,16),new(11,21),new(21,16)]);break;
-                case "Mithril":
-                    path.AddPolygon([new(1,5),new(21,5),new(17,11),new(13,11),new(13,17),new(18,20),new(4,20),new(9,17),new(9,11),new(4,10)]);break;
-                case "Iternium":
-                    path.AddPolygon([new(11,1),new(20,6),new(20,16),new(11,21),new(2,16),new(2,6)]);break;
-                case "Fehu":
-                    path.AddBezier(11,1,13,10,23,10,18,18);path.AddBezier(18,18,10,26,1,17,4,12);path.AddBezier(4,12,4,7,8,5,11,1);path.CloseFigure();break;
-                default:
-                    path.AddPolygon([new(5,2),new(17,2),new(21,8),new(11,21),new(1,8)]);
-                    path.StartFigure();path.AddLine(1,8,21,8);path.StartFigure();path.AddLines([new(5,2),new(8,8),new(11,21),new(14,8),new(17,2)]);break;
-            }
-            using var outline=new Pen(Color.FromArgb(200,18,17,13),3.8f){LineJoin=LineJoin.Round,StartCap=LineCap.Round,EndCap=LineCap.Round};
-            using var pen=new Pen(Brass,1.5f){LineJoin=LineJoin.Round,StartCap=LineCap.Round,EndCap=LineCap.Round};
-            graphics.DrawPath(outline,path);graphics.DrawPath(pen,path);
-        }
-        finally {graphics.Restore(state);}
     }
 
     static string Duration(TimeSpan value)

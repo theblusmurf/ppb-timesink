@@ -4,13 +4,25 @@ public sealed partial class HunterForm
 {
     void CheckLootBackground(LootTrackerSnapshot sample)
     {
+        using(var gold=new Bitmap(104,104))
+        {
+            using(var graphics=Graphics.FromImage(gold))
+            {
+                graphics.Clear(Color.Transparent);
+                graphics.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                LootOverlayArtwork.DrawResource(graphics,"Gold",new(0,0,104,104));
+            }
+            if(gold.GetPixel(52,52).ToArgb()!=Color.FromArgb(218,167,66).ToArgb() ||
+                gold.GetPixel(52,8).ToArgb()!=Color.FromArgb(231,188,112).ToArgb())
+                throw new Exception("Original gold glyph fill or rim was recolored with the UI accent.");
+        }
         int lootResets=0,timerResets=0,moves=0;
         using(var buttons=new LootTrackerOverlay(()=>sample,_=>moves++,()=>lootResets++,()=>timerResets++){Location=new Point(-20000,-20000)})
         {
             _=buttons.Handle;
             var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
             void Mouse(string method,Point point)=>typeof(Control).GetMethod(method,flags)!.Invoke(buttons,[new MouseEventArgs(MouseButtons.Left,1,point.X,point.Y,0)]);
-            foreach(int style in new[]{0,1,2,3})foreach(int percent in new[]{50,100,200})
+            foreach(int style in new[]{0,1,2,3})foreach(int percent in new[]{50,100,135,200})
             {
                 buttons.SetDesign(style);buttons.SetScale(percent);
                 float scale=buttons.IsTransparentDesign?buttons.EffectiveScalePercent/100f:1;
@@ -29,10 +41,47 @@ public sealed partial class HunterForm
                     if(style is 0 or 2)buttons.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size));
                     // The button interior must intercept clicks even with background opacity zero.
                     if(bitmap.GetPixel((int)((bounds.X+4)*scale),(int)((bounds.Y+4)*scale)).A!=255)throw new Exception("Reset button click area is transparent.");
+                    PointF goldCenter=style switch{0=>new(26,117),1=>new(50,96),2=>new(24,99),_=>new(63.5f,59)};
+                    if(bitmap.GetPixel((int)Math.Round(goldCenter.X*scale),(int)Math.Round(goldCenter.Y*scale)).ToArgb()!=Color.FromArgb(218,167,66).ToArgb())
+                        throw new Exception($"Original gold glyph fill did not survive design {style} at scale {percent}.");
                     if(percent==100 && action==2)bitmap.Save(Path.Combine(AppContext.BaseDirectory,$"loot-reset-design-{style}.png"));
                 }
                 if(!buttons.HasNonActivatingStyles)throw new Exception("Reset controls lost non-activating styles.");
             }
+        }
+        var unknown=sample with{Wallet=sample.Wallet with{Known=false}};
+        var changedHiddenGold=unknown with
+        {
+            TrackedLoot=unknown.TrackedLoot.Select(item=>item.Name=="Gold"?item with{Count=long.MaxValue}:item).ToArray(),
+            HourlyLoot=unknown.HourlyLoot.Select(item=>item.Name=="Gold"?item with{PerHour=9.9e18}:item).ToArray()
+        };
+        foreach(int style in new[]{0,1,2,3})
+        {
+            using var first=RenderWallet(unknown,style);
+            using var hidden=RenderWallet(changedHiddenGold,style);
+            using var known=RenderWallet(sample with{Wallet=sample.Wallet with{Known=true}},style);
+            if(unknown.AmountText("Gold")!="—" || unknown.RateText("Gold")!="—" || !SamePixels(first,hidden) || SamePixels(first,known))
+                throw new Exception($"Unknown wallet values leaked into loot overlay design {style}, or the unknown state was not rendered.");
+            first.Save(Path.Combine(AppContext.BaseDirectory,$"loot-overlay-wallet-unknown-design-{style}.png"));
+        }
+
+        static Bitmap RenderWallet(LootTrackerSnapshot snapshot,int style)
+        {
+            if(style==1)return RunicFoldRenderer.Render(snapshot,100);
+            if(style==3)return RunicStripRenderer.Render(snapshot,100);
+            using var overlay=new LootTrackerOverlay(()=>snapshot){Location=new Point(-20000,-20000)};
+            overlay.SetDesign(style);
+            var bitmap=new Bitmap(overlay.Width,overlay.Height);
+            try {overlay.DrawToBitmap(bitmap,new Rectangle(Point.Empty,bitmap.Size));return bitmap;}
+            catch {bitmap.Dispose();throw;}
+        }
+
+        static bool SamePixels(Bitmap first,Bitmap second)
+        {
+            if(first.Size!=second.Size)return false;
+            for(int y=0;y<first.Height;y++)for(int x=0;x<first.Width;x++)
+                if(first.GetPixel(x,y).ToArgb()!=second.GetPixel(x,y).ToArgb())return false;
+            return true;
         }
         lootTrackerDesign.SelectedIndex=1;lootTrackerBackgroundOpacity.Value=65;CurrentOptions().Save();
         if(Options.Read().LootTrackerBackgroundOpacityPercent!=65)throw new Exception("Loot backdrop opacity did not persist.");
@@ -116,7 +165,7 @@ public sealed partial class HunterForm
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"loot-background-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
         {
             Passed=true,NativePresentations=native.LayeredPresentationCount,Renders=renders,
-            Checks=new[]{"0/40/100 percent backdrop alpha","foreground alpha preserved and colors within two-level GDI rounding","transparent rounded margins","50/100/200 percent scale","older settings default and persisted bounds","live edits saved","native design switching and focus preserved"}
+            Checks=new[]{"original gold fill and rim independent of UI accent","original gold fill and reset hit areas in all four designs at 50/100/135/200 percent","unknown wallet total and rate never expose hidden values in all four designs","0/40/100 percent backdrop alpha","foreground alpha preserved and colors within two-level GDI rounding","transparent outer margins","50/100/200 percent backdrop scale","older settings default and persisted bounds","live edits saved","native design switching and focus preserved"}
         },new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
         lootTrackerDesign.SelectedIndex=1;lootTrackerBackgroundOpacity.Value=40;CurrentOptions().Save();
     }

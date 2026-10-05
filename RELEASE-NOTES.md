@@ -1,3 +1,13 @@
+## Release1.109
+
+Orbital Ops interface and new PlayPoteBot branding.
+
+- Implement the selected Orbital Ops design with graphite surfaces, lime accents, clear sans-serif headings and the philosophical Overview title “The Endless Pursuit.” Keep Start/Stop, mode, target filter and expandable configuration in a persistent left rail; retain the bottom Overview, Hunt, Routes, Recovery and Settings navigation.
+- Replace the card-heavy overview with a circular current-zone route scanner, session telemetry, original target portraits and a cargo resource strip. Use the existing saved routes and fresh player readings; show disconnected or unavailable data explicitly. Preserve wallet net gold, detected item totals and existing session rates.
+- Restyle the loot overlays as Orbital HUD, Fold, Ledger and Strip while preserving the original in-game item images and gold colors, saved positions, size/transparency controls, reset actions and passive window behavior.
+- Add an original lime orbital P emblem with a play-shaped cutout for the app, overlay headers and Windows display icon. Include transparent artwork and seven icon sizes from 16 to 256 pixels; retain the former branding in the source backup.
+- Keep existing control bindings, four modes, saved settings, running-state locks, guided recovery setup, public updater and 2D/3D navigation. Stack detailed settings cards in compact windows. Validate native layout, mode/target bindings, unknown readings, overlay scaling/transparency/reset behavior and unchanged game artwork offline without sending game input or replacing the running application.
+
 ## Release1.108 — Readable map labels
 
 - Replace blue, gold and orange map text with near-white lettering, dark tags in 2D and dark outlines in 3D. Labels stay legible over light map artwork and busy terrain.

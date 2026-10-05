@@ -13,8 +13,8 @@ public sealed partial class HunterForm
         card.Margin = new Padding(0, 0, 0, 8);
         CompactAdd(card, new Label
         {
-            Name = "ironboundCardHeading", Text = "◇  " + title, AutoSize = true, ForeColor = UiAccent, UseMnemonic = false,
-            Font = new Font("Georgia", 12f, FontStyle.Regular),
+            Name = "ironboundCardHeading", Text = title, AutoSize = true, ForeColor = UiAccent, UseMnemonic = false,
+            Font = new Font("Segoe UI Semibold", 11f, FontStyle.Regular),
             Margin = new Padding(0, 0, 0, 8)
         });
         card.Paint += (_, e) =>
@@ -31,8 +31,6 @@ public sealed partial class HunterForm
             var state=e.Graphics.Save();e.Graphics.TranslateTransform(3,3);e.Graphics.DrawPath(inner,inset);e.Graphics.Restore(state);
             using var trim=new Pen(UiAccent,2);
             e.Graphics.DrawLine(trim,14,2,Math.Min(card.Width-14,66),2);
-            DrawIronboundCorners(e.Graphics, card.ClientRectangle);
-            FantasyFrame.Draw(e.Graphics,card.ClientRectangle);
         };
         card.SizeChanged += (_, _) =>
         {

@@ -3,17 +3,20 @@ namespace PoteHunter;
 /// <summary>Shared presentation colors; no settings or game state.</summary>
 internal static class ImperialTheme
 {
-    internal static readonly Color Window = Color.FromArgb(9,20,30);
-    internal static readonly Color Surface = Color.FromArgb(19,35,47);
-    internal static readonly Color Raised = Color.FromArgb(27,48,61);
-    internal static readonly Color Border = Color.FromArgb(61,77,82);
+    internal static readonly Color Window = Color.FromArgb(16,22,25);
+    internal static readonly Color Surface = Color.FromArgb(22,30,34);
+    internal static readonly Color Raised = Color.FromArgb(32,43,49);
+    internal static readonly Color Border = Color.FromArgb(52,64,72);
+    internal static readonly Color Accent = Color.FromArgb(214,236,119);
+    internal static readonly Color AccentDark = Color.FromArgb(42,53,31);
+    // Currency artwork retains its original gold; UI selection uses Accent.
     internal static readonly Color Gold = Color.FromArgb(231,188,112);
-    internal static readonly Color Text = Color.FromArgb(238,233,220);
-    internal static readonly Color Muted = Color.FromArgb(184,190,192);
-    internal static readonly Color RouteBlue = Color.FromArgb(137,175,204);
-    internal static readonly Color RouteRose = Color.FromArgb(206,146,146);
+    internal static readonly Color Text = Color.FromArgb(239,242,239);
+    internal static readonly Color Muted = Color.FromArgb(164,177,184);
+    internal static readonly Color RouteBlue = Color.FromArgb(167,154,220);
+    internal static readonly Color RouteRose = Color.FromArgb(230,151,142);
     internal static readonly Lazy<Bitmap> Banner = new(()=>Load("fantasy-stone"));
-    internal static readonly Lazy<Bitmap> Logo = new(()=>Load("playpotebot-compass"));
+    internal static readonly Lazy<Bitmap> Logo = new(()=>Load("playpotebot-orbital"));
     internal static readonly Lazy<Bitmap> Targets = new(()=>Load("fantasy-targets"));
     internal static void DrawTarget(Graphics g,string name,RectangleF bounds)
     {
@@ -39,9 +42,9 @@ internal sealed class ImperialBanner : Panel
     {
         if(Width<=0 || Height<=0)return;
         using var background=new System.Drawing.Drawing2D.LinearGradientBrush(ClientRectangle,
-            Color.FromArgb(19,43,56),Color.FromArgb(11,25,37),0f);
+            ImperialTheme.Surface,ImperialTheme.Window,0f);
         e.Graphics.FillRectangle(background,ClientRectangle);
-        using var trim=new Pen(ImperialTheme.Gold);
+        using var trim=new Pen(ImperialTheme.Border);
         e.Graphics.DrawLine(trim,0,Height-1,Width,Height-1);
     }
 }

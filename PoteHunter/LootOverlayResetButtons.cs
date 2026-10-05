@@ -22,7 +22,8 @@ internal static class LootOverlayResetButtons
     {
         // Always opaque: transparent layered pixels pass mouse clicks through to the game.
         using var fill=new SolidBrush(ImperialTheme.Raised);
-        using var border=new Pen(ImperialTheme.Gold,1);
+        using var border=new Pen(ImperialTheme.Border,1);
+        using var accent=new Pen(ImperialTheme.Accent,2);
         using var text=new SolidBrush(ImperialTheme.Text);
         using var font=new Font("Segoe UI",design==3?11:12,FontStyle.Regular,GraphicsUnit.Pixel);
         using var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center};
@@ -30,6 +31,7 @@ internal static class LootOverlayResetButtons
         {
             graphics.FillRectangle(fill,item.Item1);
             graphics.DrawRectangle(border,item.Item1.X,item.Item1.Y,item.Item1.Width,item.Item1.Height);
+            graphics.DrawLine(accent,item.Item1.X+1,item.Item1.Y+5,item.Item1.X+1,item.Item1.Bottom-5);
             graphics.DrawString(item.Item2,font,text,item.Item1,format);
         }
     }

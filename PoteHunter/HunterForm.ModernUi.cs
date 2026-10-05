@@ -16,8 +16,8 @@ internal sealed class HeaderlessTabControl : TabControl
 
 public sealed partial class HunterForm
 {
-    const int UiCornerRadius = 13;
-    // Wayfinder command: midnight surfaces and warm brass accents.
+    const int UiCornerRadius = 4;
+    // Orbital Ops: graphite instruments and a phosphor-lime operation accent.
     static readonly Color UiWindow = ImperialTheme.Window;
     static readonly Color UiSidebar = ImperialTheme.Surface;
     static readonly Color UiSurface = ImperialTheme.Surface;
@@ -25,8 +25,8 @@ public sealed partial class HunterForm
     static readonly Color UiBorder = ImperialTheme.Border;
     static readonly Color UiText = ImperialTheme.Text;
     static readonly Color UiMuted = ImperialTheme.Muted;
-    static readonly Color UiAccent = ImperialTheme.Gold;
-    static readonly Color UiAccentDark = Color.FromArgb(52, 43, 30);
+    static readonly Color UiAccent = ImperialTheme.Accent;
+    static readonly Color UiAccentDark = ImperialTheme.AccentDark;
     static readonly Color UiDanger = Color.FromArgb(226, 146, 121);
 
     /// <summary>
@@ -37,7 +37,7 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PlayPoteBot · Adventurer’s Compass";
+        Text = "PlayPoteBot · Orbital Ops";
         using(var stream=typeof(HunterForm).Assembly.GetManifestResourceStream("PoteHunter.PlayPoteBotIcon"))
             if(stream!=null)Icon=new Icon(stream);
         FormClosed+=(_,_)=>Icon?.Dispose();
@@ -45,7 +45,7 @@ public sealed partial class HunterForm
         SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
         HandleCreated += (_, _) => ApplyDarkTitleBar();
         MinimumSize = new Size(1120, 760);
-        Size = new Size(1280, 1120);
+        Size = new Size(1480, 1000);
         BackColor = UiWindow;
         ForeColor = UiText;
         Padding = Padding.Empty;
@@ -106,9 +106,9 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Name = "ironboundMasthead", Text = "PlayPoteBot   /   ADVENTURER’S COMPASS", Dock = DockStyle.Fill,
+            Name = "ironboundMasthead", Text = "PlayPoteBot   /   ORBITAL OPS", Dock = DockStyle.Fill,
             Padding = new Padding(64, 0, 0, 0),
-            Font = new Font("Georgia",16f), ForeColor = UiAccent,
+            Font = new Font("Segoe UI Semibold",16f), ForeColor = UiText,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
         },0,0);
         masthead.Controls[0].Paint += (_, e) => {
@@ -148,7 +148,7 @@ public sealed partial class HunterForm
         heading.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent,55));
         heading.RowStyles.Add(new RowStyle(SizeType.Percent,45));
-        var pageTitle = new Label {Dock=DockStyle.Fill,Text="Setup",Font=new Font("Georgia",19f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
+        var pageTitle = new Label {Name="orbitalPageTitle",Dock=DockStyle.Fill,Text="Setup",Font=new Font("Segoe UI Semibold",19f),ForeColor=UiText,TextAlign=ContentAlignment.BottomLeft,Margin=Padding.Empty};
         var pageSubtitle = new Label {Dock=DockStyle.Fill,Font=new Font("Segoe UI",9f),ForeColor=UiMuted,TextAlign=ContentAlignment.TopLeft,Margin=Padding.Empty};
         heading.Controls.Add(pageTitle,0,0);heading.Controls.Add(pageSubtitle,0,1);header.Controls.Add(heading,0,0);
         var pagePickers = new Panel {Dock=DockStyle.Fill,Margin=new Padding(4,12,8,0),BackColor=UiWindow};
@@ -206,7 +206,7 @@ public sealed partial class HunterForm
         tabs.TabPages.Add(overviewPage);
         var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
         var advancedPages = new[]{protectionPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Overview",new[]{overviewPage}),("Hunt",new[]{overviewPage,setupPage,supportPage}),("Routes",new[]{navigationPage}),("Recovery",new[]{setupPage}),("Settings",monitors.Concat(advancedPages).Append(indexPage).ToArray())};
+        var sections=new[]{("Overview",new[]{overviewPage}),("Hunt",new[]{setupPage,supportPage}),("Routes",new[]{navigationPage}),("Recovery",new[]{setupPage}),("Settings",monitors.Concat(advancedPages).Append(indexPage).ToArray())};
         string selectedSection="Overview";
         var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
         foreach(var (name,pages) in sections)
@@ -233,8 +233,8 @@ public sealed partial class HunterForm
         void RefreshNavigation()
         {
             if(tabs.SelectedTab is not TabPage selected)return;
-            pageTitle.Text=selected==setupPage?"Setup":FriendlyPageName(selected.Text);
-            pageSubtitle.Text=selected==overviewPage?"Your hunt, recovery and session at a glance.":selected==setupPage?"Your mode, recovery and skills.":subtitles.GetValueOrDefault(selected.Text,"Live details and configuration.");
+            pageTitle.Text=selected==overviewPage?"The Endless Pursuit":selected==setupPage?"Setup":FriendlyPageName(selected.Text);
+            pageSubtitle.Text=selected==overviewPage?"Current-zone routes, verified player readings and session resources.":selected==setupPage?"Your mode, recovery and skills.":subtitles.GetValueOrDefault(selected.Text,"Live details and configuration.");
             pageSubtitle.AutoEllipsis=true;
             foreach(var (button,pages,picker) in navButtons)
             {

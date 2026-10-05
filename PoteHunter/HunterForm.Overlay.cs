@@ -49,7 +49,7 @@ public sealed partial class HunterForm
     void InitializeNavigationOverlay(FlowLayoutPanel navControls)
     {
         ArgumentNullException.ThrowIfNull(navControls);
-        lootTrackerDesign.Items.AddRange(["Compass Ledger","Runic Fold","Parchment Ledger","Runic Strip"]);
+        lootTrackerDesign.Items.AddRange(["Orbital HUD","Orbital Fold","Orbital Ledger","Orbital Strip"]);
         lootTrackerDesign.SelectedIndex=1;
         navControls.WrapContents=true;navControls.AutoSize=true;navControls.Dock=DockStyle.Top;
         navControls.ParentChanged+=(_,_)=>
@@ -103,9 +103,9 @@ public sealed partial class HunterForm
         void UpdateLootSizeVisibility(){lootTrackerScale.Visible=lootTrackerScaleLabel.Visible=lootTrackerBackgroundOpacity.Visible=lootTrackerBackgroundLabel.Visible=lootTrackerDesign.SelectedIndex is 1 or 3;}
         UpdateLootSizeVisibility();
         priorityHint.SetToolTip(showRouteOverlay,"Independent click-through route map at the bottom right of the game. Shows saved paths for the selected target filter, anchors, facing, your configured route corridor and the farming area around the selected or active anchor; auto-fits the full routes.");
-        priorityHint.SetToolTip(lootTrackerDesign,"Runic Fold and Runic Strip float outlined text and resource icons over the game with an adjustable background. Drag the header to move. Design, size, background opacity and position are saved. Silvin is a low-tier metal.");
+        priorityHint.SetToolTip(lootTrackerDesign,"Orbital Fold and Orbital Strip float outlined text and original resource images over the game with an adjustable background. Drag the header to move. Design, size, background opacity and position are saved. Silvin is a low-tier metal.");
         priorityHint.SetToolTip(lootTrackerScale,"Transparent loot overlay size: 50% to 200% in 5% steps. Text, icons and spacing scale together; your size is saved. Automatically fits smaller screens.");
-        priorityHint.SetToolTip(lootTrackerBackgroundOpacity,"Runic Fold / Runic Strip background only: 0% is fully transparent, 100% is solid. Text and icons stay bright. Saved automatically, including during hunting.");
+        priorityHint.SetToolTip(lootTrackerBackgroundOpacity,"Orbital Fold / Orbital Strip background only: 0% is fully transparent, 100% is solid. Text and icons stay bright. Saved automatically, including during hunting.");
         navControls.Controls.Add(guideTreasureChests);
         navControls.Controls.Add(showTreasureChestMarkers);
         navControls.Controls.Add(sizeLabel);

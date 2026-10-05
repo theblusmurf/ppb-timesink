@@ -13,17 +13,21 @@ public sealed partial class HunterForm
         var previousMode = compactMode.SelectedIndex;
         var previousRange = melee.Value;
         bool previousRepair = autoRepair.Checked;
-        var previousFolds = Controls.Find("fieldOverviewBody", true).Single().Controls.Find("overviewColumns", true).Single()
-            .Controls.Cast<Control>().SelectMany(column => column.Controls.OfType<CollapsibleSection>()).Select(fold => (Fold: fold, Expanded: fold.Expanded)).ToArray();
+        var previousFolds = Controls.Find("orbitalControlBody", true).Single()
+            .Controls.OfType<CollapsibleSection>().Select(fold => (Fold: fold, Expanded: fold.Expanded)).ToArray();
         try
         {
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "Overview");
             refreshOverview?.Invoke(); PerformLayout(); Application.DoEvents();
             CheckCollapsibleOverview();
-            var oldSize=Size;Size=new Size(1280,1120);PerformLayout();Application.DoEvents();
-            using(var full=new Bitmap(Width,Height)){DrawToBitmap(full,new Rectangle(Point.Empty,Size));full.Save(Path.Combine(AppContext.BaseDirectory,"fantasy-overview.png"));}
+            var oldSize=Size;Size=new Size(1480,1000);PerformLayout();Application.DoEvents();
+            using(var full=new Bitmap(Width,Height)){DrawToBitmap(full,new Rectangle(Point.Empty,Size));full.Save(Path.Combine(AppContext.BaseDirectory,"orbital-overview.png"));}
             Size=oldSize;PerformLayout();Application.DoEvents();
             T Find<T>(string name) where T : Control => Controls.Find(name, true).OfType<T>().Single();
+            // Native PerformClick correctly ignores hidden controls. Open the actual
+            // target section first, exactly as a user does from the operation rail.
+            Find<CollapsibleSection>("overviewFoldTargets").Expanded = true;
+            PerformLayout(); Application.DoEvents();
             Find<Button>("overviewTargetMimic").PerformClick();
             if(filter.Text != "Mimic" || CurrentOptions().Target != "Mimic") throw new Exception("Overview target preset did not update the bound filter.");
             Find<TextBox>("overviewTargetFilter").Text = "Custom monster";
@@ -51,7 +55,7 @@ public sealed partial class HunterForm
                 if(!Find<Label>("overviewResource"+name).Text.StartsWith(LootTrackerSnapshot.DisplayName(name)+"\n")) throw new Exception("Overview resource missing: "+name);
             if(Find<Label>("overviewResourceGold").Text!="Gold (net)\n—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
-            if(Text!="PlayPoteBot · Adventurer’s Compass")throw new Exception("PlayPoteBot title branding was lost.");
+            if(Text!="PlayPoteBot · Orbital Ops")throw new Exception("PlayPoteBot title branding was lost.");
             Find<CollapsibleSection>("overviewFoldRecovery").Expanded = true;
             PerformLayout(); Application.DoEvents();
             foreach(string name in new[]{"overviewGamekeeper","overviewRevive","overviewRepair"})
@@ -188,8 +192,8 @@ public sealed partial class HunterForm
 
         var anchor = CompactCard("ANCHOR & ROUTE"); CompactAdd(left, anchor);
         var anchorText = Detail("overviewAnchor"); CompactAdd(anchor, anchorText);
-        var routeMap = new Panel { Name = "overviewRouteMap", Dock = DockStyle.Top, Height = 285, Margin = new Padding(0, 4, 0, 8), BackColor = UiWindow, AccessibleName = "Current zone map, saved routes and anchor" };
-        routeMap.Paint += (_, e) => DrawRouteOverlay(e.Graphics, routeMap.ClientSize);
+        var routeMap = new OrbitalScanner { Height = 285 };
+        updates.Add(() => UpdateOrbitalScanner(routeMap));
         CompactAdd(anchor, routeMap);
         var mapOptions = CompactFlow(Toggle("overviewShowRoutes", "Show route overlay", showRouteOverlay));
         var mapFollow = Link("Follow player", () => followMapPlayer.PerformClick(), "overviewFollowPlayer");
@@ -311,15 +315,17 @@ public sealed partial class HunterForm
             var tile = new Panel { Dock = DockStyle.Fill, Margin = new Padding(5, 0, 5, 0), BackColor = UiRaised };
             tile.Paint += (_, e) =>
             {
-                var icon = new RectangleF((tile.Width - 48) / 2f, 7, 48, 42);
-                if(resource == "Gold") CrownfireControls.Glyph(e.Graphics, "Gold", icon, UiAccent);
+                var icon = new RectangleF(7, (tile.Height - 28) / 2f, 28, 28);
+                if(resource == "Gold") CrownfireControls.Glyph(e.Graphics, "Gold", icon, ImperialTheme.Gold);
                 else GameLootIcons.Draw(e.Graphics, resource, icon);
             };
-            var value = new Label { Name = "overviewResource" + resource, Dock = DockStyle.Bottom, Height = 52, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Georgia", 11f), ForeColor = resource == "Gold" ? UiAccent : UiText, Margin = Padding.Empty };
+            var value = new Label { Name = "overviewResource" + resource, Dock = DockStyle.Bottom, Height = 52, TextAlign = ContentAlignment.MiddleCenter, Font = new Font("Segoe UI Semibold", 10f), ForeColor = UiText, BackColor = Color.Transparent, Margin = Padding.Empty };
             tile.Controls.Add(value); resources.Controls.Add(tile); resourceLabels.Add(resource, value);
         }
         CompactAdd(session, resources);
         priorityHint.SetToolTip(session, "Gold is actual wallet change from the session baseline, including costs and other income. Other resources are detected-drop estimates. Rates use active farming time.");
+        ApplyOrbitalOverview(page, body, columns, left, right, anchor, routeMap, session, sessionHeader, resources,
+            folds, mode, targetFilter, mapOptions, foldToolbar, sessionInfo);
         string NumberText(decimal value) => value.ToString("0.#", CultureInfo.InvariantCulture);
         refreshOverview = () =>
         {
@@ -374,6 +380,7 @@ public sealed partial class HunterForm
                 routes.Summary = selectedTitle + " · " + navigation.RouteTargetLabel + " · " + recorded + " recorded";
                 routeFallback.Text = recorded > 1 ? "Recovery can choose a free compatible alternative using the shared origin." : "Record alternative routes for occupied-spot fallback.";
                 var snapshot = lootTracker.Snapshot();
+                refreshOrbitalTelemetry?.Invoke(snapshot);
                 string duration = $"{(int)snapshot.RateElapsed.TotalHours:00}:{snapshot.RateElapsed.Minutes:00}:{snapshot.RateElapsed.Seconds:00}";
                 sessionInfo.Text = $"Active time  {duration}     ·     Gold / hour  {snapshot.RateText("Gold")}     ·     Net wallet gold";
                 foreach(var (name, label) in resourceLabels) label.Text = LootTrackerSnapshot.DisplayName(name) + "\n" + snapshot.AmountText(name);
@@ -381,7 +388,8 @@ public sealed partial class HunterForm
             }
             finally { syncing = false; }
         };
-        timer.Tick += (_, _) => { if(page.Visible) refreshOverview(); };
+        // The left operation rail remains visible on every page.
+        timer.Tick += (_, _) => refreshOverview();
         page.VisibleChanged += (_, _) => { if(page.Visible) refreshOverview(); };
         refreshOverview();
         return page;

@@ -26,9 +26,9 @@ public sealed partial class HunterForm
         {
             busy = working = clientRecoveryRunning = false;
             compactMode.SelectedIndex = 0; refreshOverview?.Invoke();
-            if(!folds[0].Expanded || !folds[4].Expanded || folds.Where((_, i) => i is not 0 and not 4).Any(fold => fold.Expanded))
+            if(folds.Any(fold => fold.Expanded))
                 throw new Exception("Overview initial fold states differ from the approved command layout.");
-            Size = new Size(1280, 1120); Save("collapsible-overview-default.png");
+            Size = new Size(1480, 1000); Save("collapsible-overview-default.png");
             foreach(var fold in folds)
             {
                 if(!fold.Header.TabStop || fold.Header.AccessibleRole != AccessibleRole.PushButton || string.IsNullOrWhiteSpace(fold.Summary))
@@ -95,14 +95,14 @@ public sealed partial class HunterForm
             var columns = Find<TableLayoutPanel>("overviewColumns");
             var left = Find<TableLayoutPanel>("overviewMapColumn");
             var right = Find<TableLayoutPanel>("overviewHuntColumn");
-            if(left.Right > right.Left || right.Right > columns.ClientSize.Width || left.Width < 430 || right.Width < 390)
+            if(left.Right > right.Left || right.Right > columns.ClientSize.Width || left.Width < 320 || right.Width < 200)
                 throw new Exception("Collapsible Overview columns overlap or overflow at minimum size.");
             foreach(var fold in folds)
-                if(fold.Header.Width < 300 || fold.Header.Height < 55 || !fold.ClientRectangle.Contains(fold.Header.Bounds))
+                if(fold.Header.Width < 270 || fold.Header.Height < 55 || !fold.ClientRectangle.Contains(fold.Header.Bounds))
                     throw new Exception("Fold header clips at minimum size: " + fold.Name);
             var presets = new[] { "Mimic", "Pulkhan", "Tribal", "Tower" }.Select(name => Find<Button>("overviewTarget" + name)).ToArray();
             foreach(var button in presets)
-                if(!button.Parent!.ClientRectangle.Contains(button.Bounds) || button.Width < 70)
+                if(!button.Parent!.ClientRectangle.Contains(button.Bounds) || button.Width < 56)
                     throw new Exception("Target preset clips at minimum size: " + button.Name);
             Save("collapsible-overview-minimum.png");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "collapsible-overview-checks.json"), System.Text.Json.JsonSerializer.Serialize(new

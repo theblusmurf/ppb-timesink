@@ -21,10 +21,10 @@ internal sealed partial class LootTrackerOverlay : Form
     readonly Action? resetLoot;
     readonly Action? resetTimer;
     int pressedReset;
-    readonly Font titleFont=new("Georgia",10f,FontStyle.Regular);
+    readonly Font titleFont=new("Segoe UI Semibold",9.5f,FontStyle.Regular);
     readonly Font rowFont=new("Segoe UI",8.5f);
     readonly Font detailFont=new("Segoe UI",7.5f);
-    readonly Pen framePen=new(ImperialTheme.Gold,1f);
+    readonly Pen framePen=new(ImperialTheme.Border,1f);
     bool dragging;
     Point dragOffset;
     int design=-1;
@@ -46,7 +46,7 @@ internal sealed partial class LootTrackerOverlay : Form
         design=value;
         screenScaleLimit=AreaScaleLimit(availableArea);
         Size=IsTransparentDesign?TransparentSize:value==2?new Size(360,422):new Size(310,550);
-        BackColor=value==2?Color.FromArgb(221,204,164):ImperialTheme.Window;
+        BackColor=ImperialTheme.Window;
         Opacity=IsTransparentDesign?1:.94;
         // SetLayeredWindowAttributes (Form.Opacity) and per-pixel composition
         // must use fresh layered-window state when switching presentations.
@@ -179,33 +179,62 @@ internal sealed partial class LootTrackerOverlay : Form
 
     void DrawParchment(Graphics g,LootTrackerSnapshot snapshot)
     {
-        
-        Color ink=Color.FromArgb(62,46,29);
-        Color muted=Color.FromArgb(112,88,53);
-        Color accent=Color.FromArgb(114,66,26);
-        using var border=new Pen(accent);using var inkBrush=new SolidBrush(ink);using var mutedBrush=new SolidBrush(muted);
-        using var accentBrush=new SolidBrush(accent);using var header=new SolidBrush(Color.FromArgb(199,176,131));
-        g.FillRectangle(header,0,0,Width,HeaderHeight);g.DrawRectangle(border,0,0,Width-1,Height-1);
-        using var heading=new Font("Georgia",11,FontStyle.Bold);
-        g.DrawString("Parchment Ledger",heading,inkBrush,new PointF(10,6));
-        g.DrawString("drag header to move",detailFont,mutedBrush,new PointF(210,9));
-        g.DrawString($"Session {FormatDuration(snapshot.Elapsed)}  Â·  Active {FormatDuration(snapshot.RateElapsed)}  Â·  Zone {snapshot.Zone}",detailFont,mutedBrush,new PointF(10,37));
-        g.DrawString("Collected",detailFont,mutedBrush,new PointF(154,61));g.DrawString("Per hour",detailFont,mutedBrush,new PointF(270,61));
-        float y=82;
-        foreach(var item in snapshot.TrackedLoot)
+        DrawOverlayHeader(g,"ORBITAL / LEDGER");
+        OverlayText(g,"drag header",detailFont,ImperialTheme.Muted,new(252,5,96,22),TextFormatFlags.Right);
+        OverlayText(g,$"Session {FormatDuration(snapshot.Elapsed)} · Active {FormatDuration(snapshot.RateElapsed)}",detailFont,ImperialTheme.Text,new(12,36,Width-24,16));
+        OverlayText(g,"Gold: net wallet · items: detected drops",detailFont,ImperialTheme.Muted,new(12,52,Width-24,15));
+        OverlayText(g,"RESOURCE",detailFont,ImperialTheme.Muted,new(12,68,106,16));
+        OverlayText(g,"TOTAL",detailFont,ImperialTheme.Muted,new(118,68,120,16),TextFormatFlags.Right);
+        OverlayText(g,"/ ACTIVE HOUR",detailFont,ImperialTheme.Muted,new(244,68,102,16),TextFormatFlags.Right);
+        string[] resources=["Gold","Silvin","Mithril","Iternium","Fehu","Gems"];
+        for(int i=0;i<resources.Length;i++)
         {
-            g.DrawString(LootTrackerSnapshot.DisplayName(item.Name),rowFont,inkBrush,new PointF(12,y));
-            TextRenderer.DrawText(g,snapshot.AmountText(item.Name),rowFont,new Rectangle(118,(int)y,120,20),ink,TextFormatFlags.Right|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
-            TextRenderer.DrawText(g,snapshot.RateText(item.Name,"N1"),rowFont,new Rectangle(240,(int)y,104,20),accent,TextFormatFlags.Right|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);
-            y+=24;
+            string name=resources[i];int y=87+i*26;
+            LootOverlayArtwork.DrawResource(g,name,new(12,y,24,24));
+            OverlayText(g,LootTrackerSnapshot.DisplayName(name),rowFont,ImperialTheme.Text,new(44,y,76,24));
+            OverlayText(g,snapshot.AmountText(name),rowFont,ImperialTheme.Text,new(122,y,116,24),TextFormatFlags.Right,true);
+            OverlayText(g,snapshot.RateText(name,"N1"),rowFont,ImperialTheme.Accent,new(244,y,102,24),TextFormatFlags.Right,true);
         }
-        g.DrawLine(border,10,y,Width-10,y);y+=8;
-        foreach(var source in snapshot.Sources)
-        {g.DrawString($"{source.Source}  Â·  {source.Kills:N0} kills  Â·  {source.Drops:N0} drops",detailFont,inkBrush,new PointF(12,y));y+=19;}
-        y+=5;
-        foreach(var drop in snapshot.RecentDrops.Take(2))
-        {TextRenderer.DrawText(g,$"{drop.Source}: {drop.Name}",detailFont,new Rectangle(12,(int)y,Width-24,17),accent,TextFormatFlags.EndEllipsis|TextFormatFlags.NoPadding);y+=17;}
-        g.DrawString($"Gold = net wallet  Â·  Pending kills {snapshot.PendingKills}",detailFont,mutedBrush,new PointF(12,Height-18));
+        g.DrawLine(framePen,12,246,Width-12,246);
+        for(int i=0;i<Math.Min(4,snapshot.Sources.Count);i++)
+        {
+            var source=snapshot.Sources[i];int y=252+i*17;
+            OverlayText(g,source.Source,detailFont,ImperialTheme.Text,new(12,y,110,17));
+            OverlayText(g,$"{source.Kills:N0} kills · {source.Drops:N0} drops",detailFont,ImperialTheme.Muted,new(125,y,Width-137,17),TextFormatFlags.Right);
+        }
+        for(int i=0;i<Math.Min(2,snapshot.RecentDrops.Count);i++)
+        {
+            var drop=snapshot.RecentDrops[i];
+            OverlayText(g,$"{drop.Source}: {drop.Name}",detailFont,ImperialTheme.Muted,new(12,329+i*17,Width-24,17));
+        }
+        OverlayText(g,$"Zone {snapshot.Zone} · Pending kills {snapshot.PendingKills}",detailFont,ImperialTheme.Muted,new(12,Height-19,Width-24,16));
+    }
+
+    void DrawOverlayHeader(Graphics g,string title)
+    {
+        using var header=new SolidBrush(ImperialTheme.Surface);
+        using var accent=new Pen(ImperialTheme.Accent,2);
+        g.FillRectangle(header,0,0,Width,HeaderHeight);
+        g.DrawRectangle(framePen,0,0,Width-1,Height-1);
+        g.DrawLine(framePen,0,HeaderHeight,Width,HeaderHeight);
+        g.DrawLine(accent,1,1,1,HeaderHeight-1);
+        g.DrawImage(ImperialTheme.Logo.Value,new Rectangle(10,3,23,24));
+        OverlayText(g,title,titleFont,ImperialTheme.Text,new(41,3,Width-53,24));
+    }
+
+    static void OverlayText(Graphics graphics,string value,Font font,Color color,Rectangle bounds,TextFormatFlags alignment=TextFormatFlags.Left,bool fit=false)
+    {
+        var flags=alignment|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix|TextFormatFlags.NoPadding|TextFormatFlags.SingleLine;
+        if(!fit){TextRenderer.DrawText(graphics,value,font,bounds,color,flags);return;}
+        float size=font.Size;
+        while(size>5)
+        {
+            using var measured=new Font(font.FontFamily,size,font.Style);
+            if(TextRenderer.MeasureText(graphics,value,measured,Size.Empty,TextFormatFlags.NoPadding|TextFormatFlags.SingleLine).Width<=bounds.Width)break;
+            size-=.25f;
+        }
+        using var fitted=new Font(font.FontFamily,size,font.Style);
+        TextRenderer.DrawText(graphics,value,fitted,bounds,color,flags);
     }
 
     static string FormatDuration(TimeSpan duration)

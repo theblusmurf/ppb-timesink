@@ -14,10 +14,10 @@ internal sealed class CollapsibleSection : TableLayoutPanel
     {
         Name = name; AutoSize = true; AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Dock = DockStyle.Top; ColumnCount = 1; RowCount = 2;
-        Margin = new Padding(0, 0, 0, 9); Padding = new Padding(1);
+        Margin = new Padding(0, 0, 0, 5); Padding = new Padding(1);
         BackColor = ImperialTheme.Surface;
         ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+        RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
         RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Header = new CollapsibleSectionHeader(this, title, icon)
         { Name = name + "Header", Dock = DockStyle.Fill, Margin = Padding.Empty };
@@ -76,8 +76,8 @@ internal sealed class CollapsibleSection : TableLayoutPanel
         base.OnPaint(e);
         if(Width < 4 || Height < 4) return;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var border = new Pen(Expanded ? ImperialTheme.Gold : ImperialTheme.Border);
-        using var frame = CrownfireControls.Frame(new RectangleF(.5f, .5f, Width - 2, Height - 2), 11);
+        using var border = new Pen(Expanded ? ImperialTheme.Accent : ImperialTheme.Border);
+        using var frame = CrownfireControls.Frame(new RectangleF(.5f, .5f, Width - 2, Height - 2), 4);
         e.Graphics.DrawPath(border, frame);
     }
 }
@@ -146,7 +146,7 @@ internal sealed class CollapsibleSectionHeader : Button
         var g = e.Graphics; g.Clear(hovered ? ImperialTheme.Raised : ImperialTheme.Surface);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var ink = Enabled ? ImperialTheme.Text : ImperialTheme.Muted;
-        CrownfireControls.Glyph(g, icon, new RectangleF(13, 15, 20, 20), ImperialTheme.Gold);
+        CrownfireControls.Glyph(g, icon, new RectangleF(13, 15, 20, 20), ImperialTheme.Accent);
         TextRenderer.DrawText(g, Text, Font, new Rectangle(43, 9, Math.Max(1, Width - 75), 24), ink,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         TextRenderer.DrawText(g, Summary, summaryFont, new Rectangle(43, 33, Math.Max(1, Width - 75), 22), ImperialTheme.Muted,

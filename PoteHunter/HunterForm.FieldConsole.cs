@@ -59,8 +59,8 @@ public sealed partial class HunterForm
         if(banner.Height<60 || PointToClient(nav.PointToScreen(Point.Empty)).Y<=PointToClient(tabs.PointToScreen(new Point(0,tabs.Height))).Y ||
             !banner.Parent!.ClientRectangle.Contains(banner.Bounds))
             throw new Exception("Bottom navigation overlaps content or banner is clipped.");
-        if(ImperialTheme.Logo.Value.Width<1 || ImperialTheme.Banner.Value.Width<1)
-            throw new Exception("Imperial embedded reference artwork is unavailable.");
+        if(ImperialTheme.Logo.Value.Width<1)
+            throw new Exception("Embedded application branding is unavailable.");
         foreach(string name in new[]{"Overview","Hunt","Routes","Recovery","Settings"})
         {
             var button=(Button)Controls.Find("fieldNav"+name,true).Single();
@@ -88,7 +88,8 @@ public sealed partial class HunterForm
         tabs.SelectedIndex=0;PerformLayout();Application.DoEvents();
         var left=Controls.Find("fieldCombatColumn",true).Single();
         var right=Controls.Find("fieldRecoveryColumn",true).Single();
-        if(left.Right>right.Left || right.Right>settings.ClientSize.Width || left.Width<350 || right.Width<350)
+        bool stack=settings.ColumnCount==1;
+        if((stack ? left.Bottom>right.Top : left.Right>right.Left) || right.Right>settings.ClientSize.Width || left.Width<350 || right.Width<350)
             throw new Exception("Field Console columns overlap or overflow.");
         foreach(var action in new[]{connect,start,stop})
             if(!action.Visible || !action.Parent!.ClientRectangle.Contains(action.Bounds))
@@ -99,6 +100,7 @@ public sealed partial class HunterForm
         if(FieldVitalMeter.Read("MP","HP unknown · MP 25/50")!=("MP 25/50",.5d) ||
             FieldVitalMeter.Read("HP","").Text!="HP unknown")throw new Exception("Unknown/disconnected vitals were shown as known.");
         CheckFieldOverview(tabs);
+        CheckOrbitalUi(tabs);
         int originalMode=compactMode.SelectedIndex;
         compactMode.SelectedIndex=3;PerformLayout();Application.DoEvents();
         if(!tankPicker.Visible || !healingSkillKeys.Visible || autoRevive.Visible)

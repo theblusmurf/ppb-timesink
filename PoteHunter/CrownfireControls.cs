@@ -5,7 +5,7 @@ namespace PoteHunter;
 /// <summary>Presentation only. Native controls retain their input, bindings and accessibility.</summary>
 internal static class CrownfireControls
 {
-    internal static GraphicsPath Frame(RectangleF r,float radius=13)
+    internal static GraphicsPath Frame(RectangleF r,float radius=4)
     {
         float d=Math.Min(radius*2,Math.Min(r.Width,r.Height));
         var p=new GraphicsPath();
@@ -26,13 +26,13 @@ internal static class CrownfireControls
             if(button.Width<3 || button.Height<3)return;
             var g=e.Graphics;g.SmoothingMode=SmoothingMode.AntiAlias;
             g.Clear(button.Parent?.BackColor??ImperialTheme.Surface);
-            bool selected=button.BackColor==Color.FromArgb(52,43,30) || button.BackColor==ImperialTheme.Gold;
+            bool selected=button.BackColor==ImperialTheme.AccentDark || button.BackColor==ImperialTheme.Accent;
             Color face=button.Enabled?button.BackColor:ImperialTheme.Surface;
             using var shape=Frame(new RectangleF(1,1,button.Width-3,button.Height-3));
-            using var fill=new LinearGradientBrush(button.ClientRectangle,ControlPaint.Light(face,hover?.18f:.08f),
+            using var fill=new LinearGradientBrush(button.ClientRectangle,ControlPaint.Light(face,hover?.12f:.025f),
                 pressed?ControlPaint.Dark(face,.18f):face,90f);
             g.FillPath(fill,shape);
-            using var edge=new Pen(button.Enabled&&(selected||hover)?ImperialTheme.Gold:ImperialTheme.Border,selected?1.7f:1);
+            using var edge=new Pen(button.Enabled&&(selected||hover)?ImperialTheme.Accent:ImperialTheme.Border,selected?1.4f:1);
             g.DrawPath(edge,shape);
             var textBounds=new Rectangle(9,2,Math.Max(1,button.Width-18),Math.Max(1,button.Height-4));
             string icon=button.Name.StartsWith("fieldNav")?button.Text:
@@ -74,11 +74,11 @@ internal static class CrownfireControls
             float y=(check.Height-20)/2f;
             using var track=Frame(new RectangleF(1,y,38,20),10);
             using var fill=new LinearGradientBrush(new RectangleF(1,y,38,20),
-                check.Checked&&check.Enabled?ImperialTheme.Gold:ImperialTheme.Raised,
-                check.Checked&&check.Enabled?Color.FromArgb(144,91,33):ImperialTheme.Surface,90);
-            using var border=new Pen(check.Enabled&&check.Checked?ImperialTheme.Gold:ImperialTheme.Border);
+                check.Checked&&check.Enabled?ImperialTheme.Accent:ImperialTheme.Raised,
+                check.Checked&&check.Enabled?Color.FromArgb(171,191,87):ImperialTheme.Surface,90);
+            using var border=new Pen(check.Enabled&&check.Checked?ImperialTheme.Accent:ImperialTheme.Border);
             g.FillPath(fill,track);g.DrawPath(border,track);
-            using var knob=new SolidBrush(check.Enabled?ImperialTheme.Text:ImperialTheme.Muted);
+            using var knob=new SolidBrush(check.Enabled&&check.Checked?ImperialTheme.Window:ImperialTheme.Muted);
             g.FillEllipse(knob,check.Checked?21:4,y+3,14,14);
             TextRenderer.DrawText(g,check.Text,check.Font,new Rectangle(47,0,Math.Max(1,check.Width-47),check.Height),
                 check.Enabled?check.ForeColor:ImperialTheme.Muted,TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine|TextFormatFlags.NoPadding|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix);
@@ -93,7 +93,11 @@ internal static class CrownfireControls
         using var brush=new SolidBrush(color);
         switch(name)
         {
-            case "Gold":g.DrawEllipse(pen,3,3,15,7);g.DrawArc(pen,3,5,15,8,0,180);g.DrawArc(pen,3,8,15,8,0,180);g.DrawEllipse(pen,13,12,8,10);break;
+            case "Gold":
+                using(var coin=new SolidBrush(Color.FromArgb(218,167,66)))
+                using(var edge=new Pen(Color.FromArgb(231,188,112),1.3f))
+                {g.FillEllipse(coin,2,2,20,20);g.DrawEllipse(edge,2,2,20,20);}
+                break;
             case "Play":g.FillPolygon(brush,new PointF[]{new(6,3),new(21,12),new(6,21)});break;
             case "Stop":g.FillRectangle(brush,5,5,14,14);break;
             case "Overview":g.DrawLines(pen,new PointF[]{new(2,10),new(12,2),new(22,10)});g.DrawRectangle(pen,5,10,14,12);break;

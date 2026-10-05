@@ -4,7 +4,7 @@
     <ApplicationIcon>ThemeAssets/playpotebot.ico</ApplicationIcon>
     <Product>PlayPoteBot</Product>
     <AssemblyTitle>PlayPoteBot</AssemblyTitle>
-    <Description>PlayPoteBot Adventurer's Compass game companion</Description>
+    <Description>PlayPoteBot Orbital Ops game companion</Description>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -26,6 +26,7 @@
   <ItemGroup><None Include="maps\README.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><None Include="../NAVIGATION-3D.md" Link="NAVIGATION-3D.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><None Include="../PLAYER-RECOGNITION.md" Link="PLAYER-RECOGNITION.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><None Include="../ORBITAL-OPS.md" Link="ORBITAL-OPS.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
   <PropertyGroup Condition="'$(Portable)' == 'true'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
