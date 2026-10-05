@@ -95,7 +95,10 @@ inherit combat rules. No complete current official map/ID PvP catalog was found.
 
 ## Display and freshness
 
-The 2D/3D radar and main Navigation use player diamonds with status labels:
+The 2D/3D map overlays, radar and main Navigation label each player with their
+available name, without an Enemy, Same faction or Party prefix. If a name is
+unavailable, the label uses the explicit player-ID fallback described above.
+Faction/relation remains visible through the player diamond and label accent:
 pink Enemy, blue Same faction, teal Party, gold Non-PvP opponent, gray Unknown.
 Party status requires a current validated ID/name match; name avoidance rules
 are not a friend list. Confirmed-dead players, self and NPC guards are omitted.

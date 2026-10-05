@@ -1,3 +1,11 @@
+## Release1.114
+
+Show player names directly on the game map overlays.
+
+- Replace relation-prefixed map captions such as Same faction: PlayerName with the player's available name. Apply the same caption to 2D map/radar overlays and 3D player markers so names have more room and are easier to read.
+- Keep faction and relation colors, accepted player identities, fresh-reading gates and explicit player-ID fallback for unavailable names. Preserve enemy-only automatic Sentinel in Zone 8.
+- Verify same-faction, enemy, party, unavailable and Unicode names in existing offline map rendering checks. This changes labels only; movement, targeting and saved settings are unchanged.
+
 ## Release1.113
 
 Automatically activate enemy-only Sentinel Radar in Zone 8.

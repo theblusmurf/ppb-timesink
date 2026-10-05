@@ -14,7 +14,7 @@ public sealed partial class HunterForm
     {
         var viewed=ZoneCombatRules.For(Navigation3DZone);
         string current=PlayerRecognitionFresh?$"You: {PlayerRecognition.FactionLabel(PlayerRecognition.Faction(recognitionSelf!.Model))} · current Zone {navigationZone} ({ZonePlayerStatus()})":"Player reading unavailable";
-        navigationPlayerRecognitionLabel.Text=$"Selected map: {viewed.Name} · {(viewed.Rule==ZoneCombatRule.Unknown?"PvP rules unknown":PlayerRecognition.RuleLabel(viewed.Rule))}\n{current}\nPlayer diamonds: pink enemy, blue same faction, teal party, gold non-PvP, gray unknown.";
+        navigationPlayerRecognitionLabel.Text=$"Selected map: {viewed.Name} · {(viewed.Rule==ZoneCombatRule.Unknown?"PvP rules unknown":PlayerRecognition.RuleLabel(viewed.Rule))}\n{current}\nPlayer names · diamond colors: pink enemy, blue same faction, teal party, gold non-PvP, gray unknown.";
     }
 
     void UpdatePlayerRecognition(Entity self)
@@ -72,16 +72,7 @@ public sealed partial class HunterForm
         PlayerRelation.OpposingSafe=>ImperialTheme.Gold,
         _=>Color.Silver
     };
-    static string PlayerMarkerName(ObservedPlayer player)
-    {
-        string status=player.Recognition.Relation switch
-        {
-            PlayerRelation.Enemy=>"Enemy",PlayerRelation.Party=>"Party",PlayerRelation.SameFaction=>"Same faction",
-            PlayerRelation.OpposingSafe=>"Non-PvP opponent",_=>"Unknown"
-        };
-        string name=PlayerRecognition.DisplayName(player.Entity.Id,player.Entity.Name);
-        return status+": "+name;
-    }
+    static string PlayerMarkerName(ObservedPlayer player)=>PlayerRecognition.DisplayName(player.Entity.Id,player.Entity.Name);
     MapMarker3D[] Player3DMarkers(double range=double.PositiveInfinity)=>RecognizedPlayers()
         .Where(p=>double.IsFinite(p.Entity.Height)&&(p.Entity.Position-navigationPosition).Length<=range)
         .Select(p=>new MapMarker3D(PlayerMarkerName(p),p.Entity.Position,p.Entity.Height,
