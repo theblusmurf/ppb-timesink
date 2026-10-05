@@ -28,13 +28,13 @@ public sealed partial class HunterForm
             durabilityThreshold.Enabled=durabilityRepair.Checked;durabilityStatus.Visible=durabilityRepair.Checked;
             revivalDelaySeconds.Enabled=farmOnArrival.Enabled=visualRevival.Enabled=autoRevive.Checked;
             reviveKey.Enabled=autoRevive.Checked&&!visualRevival.Checked;
-            repairStatus.Text=durabilityRepair.Checked?"Repairs the lowest equipped-item durability at the threshold, between fights. Uses the same inventory setup; does not move the character. Unknown readings block the trigger.":!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
+            repairStatus.Text=durabilityRepair.Checked?"Repairs at the threshold during combat. Attack pauses for inventory clicks, then resumes after durability is verified. Uses the same setup and preserves the anchor. Unknown readings block repair.":!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
                 :"Saved setup must match the inventory layout and UI scale. If recognition fails, capture Inventory + Hammer and Question + Yes again. Test once before automatic recovery.";
         }
         autoRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};autoRevive.CheckedChanged+=(_,_)=>Refresh();
         durabilityRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
         durabilityThreshold.ValueChanged+=(_,_)=>QueueCompactSave();
-        priorityHint.SetToolTip(durabilityRepair,"Use the lowest current / maximum durability among equipped repairable items. Waits for combat and travel to finish; attempts repair once and requires a verified durability increase before resuming.");
+        priorityHint.SetToolTip(durabilityRepair,"Repair the lowest equipped-item durability during combat, including incoming damage. Briefly pause attack for one inventory repair; require living health, recognized controls and verified durability before resuming. Route travel and revival keep priority.");
         visualRevival.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
         priorityHint.SetToolTip(visualRevival,"Recognize the Revive button before clicking and wait for living HP. Turn off to use the configured revival key instead.");
         configureRepair.Click+=async(_,_)=>await RunRepairTool(true);

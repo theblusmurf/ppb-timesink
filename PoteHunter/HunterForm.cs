@@ -562,7 +562,7 @@ public sealed partial class HunterForm : Form
     {
         status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError) + (HuntingSessionLog.Current?.LastError is string logError ? " · Session log: "+logError : "");
         lootTracker.ObserveActivity(working && connected && activeGuardOptions!=null);
-        if(!connected){latestDurability=new(false,"",[],DateTime.UtcNow,"Client disconnected");durabilityStatus.Text="Durability unavailable: Client disconnected";durabilityHealthContext=null;ClearPlayerRecognition();HuntingSessionLog.Current?.ObservationGap("Client disconnected");lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
+        if(!connected){latestDurability=new(false,"",[],DateTime.UtcNow,"Client disconnected");durabilityStatus.Text="Durability unavailable: Client disconnected";ClearPlayerRecognition();HuntingSessionLog.Current?.ObservationGap("Client disconnected");lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
         if(busy)return;
         try
         {
@@ -2233,6 +2233,7 @@ public sealed partial class HunterForm : Form
                 }
                 if (await TryHeal(drive, o, token)) continue;
                 if (deathRecovery.Pending)continue;
+                if(await TryDurabilityRepair(o,token,lootReturnPending||stationaryAssistReturnPending||gamekeeperReturnPending&&gamekeeperDefeated))continue;
                 if(gamekeeper==null && healingRestPending && !HasActiveFight() && combatPressure.RecentDamage(Environment.TickCount64))
                 {
                     message="Holding position while checking nearby threats; waiting for damage to stop before resting.";
@@ -2306,7 +2307,6 @@ public sealed partial class HunterForm : Form
                 // refreshed world snapshot. This remains before ranged pulls
                 // and engaged-target selection.
                 if(gamekeeper==null && gamekeeperReturnPending && gamekeeperDefeated && await ReturnAfterGamekeeper(token))continue;
-                if(gamekeeper==null && await TryDurabilityRepair(o,token,gamekeeperReturnPending||lootReturnPending||stationaryAssistReturnPending))continue;
                 if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,level,skillDue,token))continue;
                 Entity? target=o.GroupMode?gamekeeper:GamekeeperPriority.ChooseFirst(encounter,gamekeeper,()=>null);
                 if(gamekeeper==null && target!=null && Targeting.IsStationaryHuntTargetId(target.Id))
@@ -2505,6 +2505,16 @@ public sealed partial class HunterForm : Form
                     {
                         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);
                         break;
+                    }
+                    if(await TryDurabilityRepair(o,token,lootReturnPending||gamekeeperReturnPending&&gamekeeperDefeated))
+                    {
+                        // Repair released input. Re-read the target before normal
+                        // combat can resume, and exclude UI time from watchdogs.
+                        approachStarted=Environment.TickCount64;combatStart=0;
+                        stationaryAttackHeldAt=0;stationaryAttackBaselineHp=-1;
+                        bodyProbeHp=null;bodyProbeAt=0;lastCombatHp=null;
+                        drive.ResetTurnResponse();
+                        continue;
                     }
                     var current = world.Find(target.Id);
                     if (current == null)

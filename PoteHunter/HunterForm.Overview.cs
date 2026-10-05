@@ -381,7 +381,7 @@ public sealed partial class HunterForm
                 radii.Summary = "Route: " + NumberText(routeCorridorRadius.Value) + " units · Anchor: " + NumberText(radius.Value) + " units";
                 mapLegend.Text = "Route corridor · " + NumberText(routeCorridorRadius.Value) + " units     Anchor area · " + NumberText(radius.Value) + " units";
                 anchorText.Text = activeHuntAnchor is { } point ? $"Saved anchor  {point.X:0.0}, {point.Y:0.0} · {selectedTitle}" : "Start saves your hunting anchor and facing. · " + selectedTitle;
-                recoveryText.Text = durabilityRepair.Checked ? "Lowest equipped durability: " + (latestDurability.LowestPercent is decimal lowest ? NumberText(lowest)+"%" : "unknown") + " · repair at " + NumberText(durabilityThreshold.Value) + "% or lower, between fights." : healerMode.Checked ? "Death recovery is unavailable in healer mode."
+                recoveryText.Text = durabilityRepair.Checked ? "Lowest equipped durability: " + (latestDurability.LowestPercent is decimal lowest ? NumberText(lowest)+"%" : "unknown") + " · repair at " + NumberText(durabilityThreshold.Value) + "% or lower, including combat." : healerMode.Checked ? "Death recovery is unavailable in healer mode."
                     : "Uses recognized revival and configured repair, then the target’s saved route.";
                 clientText.Text = clientRecoveryStatus.Text;
                 routeTargetText.Text = $"Targets: {navigation.RouteTargetLabel}" + (navigation.UnassignedRouteCount > 0 ? " · Assign existing routes in Navigation" : "");

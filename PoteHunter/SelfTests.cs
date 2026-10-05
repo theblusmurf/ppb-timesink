@@ -99,6 +99,13 @@ static class SelfTests
             Input.CheckFaultWatchSafety();
             AutoRepairChecks.Run().GetAwaiter().GetResult();
             DurabilityRepairPolicy.SelfTest();
+            DurabilityRepairPolicy.CombatSelfTest();
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "combat-durability-repair-checks.json"), JsonSerializer.Serialize(new
+            {
+                Passed = true,
+                HardwareInputEmitted = false,
+                Checks = new[] { "living engaged and damaged characters remain eligible", "unknown or dead HP and unavailable input rejected", "repair, recovery, travel and concurrent input serialized", "inclusive durability threshold retained during combat", "healthy-item wear accepted with proved low-item and group-minimum improvement", "strict noncombat verification unchanged", "fresh complete newer same-equipment observations required", "unimproved minimum and threshold failures rejected", "replacement slot, identity and maximum rejected", "unknown postrepair data and hunt restart cannot repeat a failed paid repair", "fresh verified recovery rearms a later low episode" }
+            }, new JsonSerializerOptions { WriteIndented = true }));
             DurabilityReaderChecks.Run();
             VisualRecoveryChecks.Run().GetAwaiter().GetResult();
             RecoveryTravelChecks.Run().GetAwaiter().GetResult();

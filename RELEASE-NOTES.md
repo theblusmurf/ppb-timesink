@@ -1,3 +1,12 @@
+## Release1.111
+
+Repair low durability during combat and resume the engaged target.
+
+- Allow the equipped-durability threshold to trigger during active engagements, incoming damage and nearby spawns. Remove the quiet-health and finished-fight requirements; keep route/revival ownership, known living health, client/focus and equipment identity checks.
+- Check the threshold inside prolonged target engagements as well as the outer hunt and support loops. Pause held attack for one recognized inventory repair, then refresh the target before resuming; exclude the repair pause from attack and movement watchdogs.
+- Verify fresh recovery above the threshold on the same equipped items while allowing normal combat wear on previously healthy items. Unknown, unchanged, replaced or still-low results stop without repeating Yes.
+- Update the repair descriptions and preserve existing thresholds, setup profiles, routes and after-revival repair. Validate combat admission, wear, health/focus/travel blocks, recovery proof and single-attempt bookkeeping offline. Full updated live combat repair remains to be verified after upgrading.
+
 ## Release1.110
 
 Repair automatically at the lowest equipped-item durability threshold.

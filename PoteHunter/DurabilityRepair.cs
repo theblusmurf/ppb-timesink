@@ -56,6 +56,11 @@ public sealed record DurabilityReading(bool Known, string Context,
     }
 }
 
+// Combat itself is not a blocker. The owning loop still serializes repair with
+// skills, recovery and travel so inventory input cannot overlap another action.
+internal readonly record struct DurabilityActivity(bool InputAllowed, bool KnownLiving,
+    bool RepairInProgress, bool RecoveryPending, bool TravelPending, bool BusyInput);
+
 // Keep this object for the form/client session, not inside one Hunt invocation.
 // A stop/F8 restart and unknown readings intentionally do not clear attempts.
 internal sealed class DurabilityRepairPolicy
@@ -69,6 +74,27 @@ internal sealed class DurabilityRepairPolicy
     }
     readonly Dictionary<string, Episode> episodes = new(StringComparer.Ordinal);
     public string LastStatus { get; private set; } = "Waiting for a complete equipment durability reading.";
+
+    public static bool CanRepairDuringCombat(DurabilityActivity activity) =>
+        CanRepairDuringCombat(activity, out _);
+
+    public static bool CanRepairDuringCombat(DurabilityActivity activity, out string reason)
+    {
+        if (!activity.InputAllowed)
+        { reason = "Repair is waiting for verified game input access."; return false; }
+        if (!activity.KnownLiving)
+        { reason = "Repair requires a known living character."; return false; }
+        if (activity.RepairInProgress)
+        { reason = "An equipment repair is already in progress."; return false; }
+        if (activity.RecoveryPending)
+        { reason = "Repair is waiting for death recovery to finish."; return false; }
+        if (activity.TravelPending)
+        { reason = "Repair is waiting for travel to finish."; return false; }
+        if (activity.BusyInput)
+        { reason = "Repair is waiting for the current input action to finish."; return false; }
+        reason = "";
+        return true;
+    }
 
     static bool ValidThreshold(decimal threshold) => threshold is >= 1 and <= 99;
     static bool Fresh(DurabilityReading? reading, DateTime now, out decimal minimum, out string reason)
@@ -161,10 +187,21 @@ internal sealed class DurabilityRepairPolicy
 
     public static bool VerifyImprovement(DurabilityReading before, DurabilityReading after,
         decimal threshold, DateTime now, out string reason)
+        => VerifyImprovementCore(before, after, threshold, now, false, out reason);
+
+    public static bool VerifyCombatImprovement(DurabilityReading before, DurabilityReading after,
+        decimal threshold, DateTime now) => VerifyCombatImprovement(before, after, threshold, now, out _);
+
+    public static bool VerifyCombatImprovement(DurabilityReading before, DurabilityReading after,
+        decimal threshold, DateTime now, out string reason)
+        => VerifyImprovementCore(before, after, threshold, now, true, out reason);
+
+    static bool VerifyImprovementCore(DurabilityReading before, DurabilityReading after,
+        decimal threshold, DateTime now, bool allowConcurrentWear, out string reason)
     {
         if (!ValidThreshold(threshold))
         { reason = "Choose a durability repair threshold from 1 to 99 percent."; return false; }
-        if (before is null || !before.TryValidate(out _, out reason))
+        if (before is null || !before.TryValidate(out var originalMinimum, out reason))
         { reason = "The original equipment durability reading is incomplete or invalid."; return false; }
         if (!Fresh(after, now, out var minimum, out reason)) return false;
         // The original sample was admitted immediately before the repair. It can
@@ -180,7 +217,10 @@ internal sealed class DurabilityRepairPolicy
             if (!previous.TryGetValue(current.Slot, out var original) ||
                 !string.Equals(original.Identity, current.Identity, StringComparison.Ordinal) || original.Maximum != current.Maximum)
             { reason = "An equipped item, slot or maximum durability changed during repair."; return false; }
-            if (current.Current < original.Current)
+            // An originally healthy item can wear while a different low item is
+            // repaired. Low items themselves still need a nondecreasing reading.
+            if (current.Current < original.Current &&
+                (!allowConcurrentWear || original.Percent <= threshold))
             { reason = "Equipment durability fell during repair; improvement was not confirmed."; return false; }
             improved |= current.Current > original.Current;
         }
@@ -188,8 +228,94 @@ internal sealed class DurabilityRepairPolicy
         { reason = "Equipment durability did not improve after the repair sequence."; return false; }
         if (minimum <= threshold)
         { reason = "Equipment durability remains at or below the repair threshold."; return false; }
+        if (allowConcurrentWear && minimum <= originalMinimum)
+        { reason = "The lowest equipped durability did not improve during combat repair."; return false; }
         reason = $"Equipment durability improved; the lowest equipped item is now {minimum:0.##}%.";
         return true;
+    }
+
+    internal static void CombatSelfTest()
+    {
+        static void Require(bool condition, string message)
+        { if (!condition) throw new Exception("Combat durability repair: " + message); }
+        var ready = new DurabilityActivity(true, true, false, false, false, false);
+        Require(CanRepairDuringCombat(ready, out var allowedReason) && allowedReason == "",
+            "a living engaged character with input access could not repair.");
+        // KnownLiving stays true when incoming combat damage lowers HP. No
+        // quiet period or threat/engagement count should enter this decision.
+        Require(CanRepairDuringCombat(ready with { KnownLiving = true }),
+            "living health dropping during combat prevented repair.");
+        var blocked = new[]
+        {
+            ready with { InputAllowed = false }, // stopped, wrong focus, or unverified client
+            ready with { KnownLiving = false }, // zero or unreadable HP
+            ready with { RepairInProgress = true },
+            ready with { RecoveryPending = true },
+            ready with { TravelPending = true },
+            ready with { BusyInput = true } // casting, ranged tagging, calibration, or pickup input
+        };
+        foreach (var activity in blocked)
+            Require(!CanRepairDuringCombat(activity, out var reason) && !string.IsNullOrWhiteSpace(reason),
+                "unknown/dead/focus/recovery/travel/concurrent input state admitted repair.");
+
+        var startedAt = new DateTime(2026, 10, 5, 14, 0, 0, DateTimeKind.Utc);
+        var completedAt = startedAt.AddSeconds(6);
+        DurableEquipment lowItem = new("Weapon", "weapon-instance", 20, 100);
+        DurableEquipment healthy = new("Head", "head-instance", 90, 100);
+        DurabilityReading Read(DateTime at, params DurableEquipment[] equipped) =>
+            new(true, "verified-client/character", equipped, at, "Verified combat fixture");
+        var before = Read(startedAt, lowItem, healthy);
+        var after = Read(completedAt, healthy with { Current = 88 }, lowItem with { Current = 98 });
+        Require(VerifyCombatImprovement(before, after, 20, completedAt) &&
+            !VerifyImprovement(before, after, 20, completedAt),
+            "healthy-item wear either rejected a proved combat repair or weakened strict verification.");
+        var thresholdPolicy = new DurabilityRepairPolicy();
+        Require(CanRepairDuringCombat(ready) && thresholdPolicy.TryBegin(before, 20, startedAt) &&
+            VerifyCombatImprovement(before, after, 20, completedAt) &&
+            thresholdPolicy.Observe(after, 20, completedAt) &&
+            thresholdPolicy.TryBegin(before with { ObservedUtc = completedAt.AddSeconds(1) }, 20, completedAt.AddSeconds(1)),
+            "a combat repair did not rearm only after fresh proved recovery.");
+        Require(!new DurabilityRepairPolicy().TryBegin(before, 19, startedAt),
+            "combat eligibility bypassed the configured low-durability threshold.");
+
+        var rejected = new[]
+        {
+            after with { Known = false }, after with { Context = "different-character" },
+            after with { ObservedUtc = completedAt - MaximumAge - TimeSpan.FromTicks(1) },
+            after with { ObservedUtc = completedAt + MaximumFutureSkew + TimeSpan.FromTicks(1) },
+            after with { ObservedUtc = startedAt },
+            after with { Items = [lowItem with { Current = 98 }] },
+            Read(completedAt, lowItem, healthy with { Current = 88 }), // wear alone
+            Read(completedAt, lowItem with { Current = 19 }, healthy with { Current = 100 }),
+            Read(completedAt, lowItem with { Current = 98 }, healthy with { Current = 20 }), // threshold not cleared
+            Read(completedAt, lowItem with { Current = 98, Identity = "replacement" }, healthy),
+            Read(completedAt, lowItem with { Current = 98, Slot = "Feet" }, healthy),
+            Read(completedAt, lowItem with { Current = 98, Maximum = 200 }, healthy)
+        };
+        foreach (var reading in rejected)
+            Require(!VerifyCombatImprovement(before, reading, 20, completedAt, out var reason) &&
+                !string.IsNullOrWhiteSpace(reason),
+                "unknown/stale/dead baseline/no improvement/threshold/context/equipment evidence passed verification.");
+        // A higher supplied threshold must not turn healthy-item wear into proof
+        // when the new group minimum is worse than the original group minimum.
+        var healthyBefore = Read(startedAt, lowItem with { Current = 50 }, healthy);
+        Require(!VerifyCombatImprovement(healthyBefore,
+                Read(completedAt, lowItem with { Current = 98 }, healthy with { Current = 40 }), 20, completedAt) &&
+            VerifyCombatImprovement(healthyBefore,
+                Read(completedAt, lowItem with { Current = 98 }, healthy with { Current = 51 }), 20, completedAt),
+            "combat verification lost the strict minimum-improvement boundary.");
+        Require(!VerifyCombatImprovement(before with { Known = false }, after, 20, completedAt) &&
+            !VerifyCombatImprovement(before, after, 0, completedAt) &&
+            !VerifyCombatImprovement(before, after, 100, completedAt),
+            "combat verification invented a baseline or accepted an invalid threshold.");
+        // Stopping/restarting and replayed samples must not authorize a second
+        // paid confirmation if a previous combat repair has not been verified.
+        var failed = new DurabilityRepairPolicy();
+        Require(failed.TryBegin(before, 20, startedAt) &&
+            !failed.TryBegin(before with { ObservedUtc = startedAt.AddSeconds(1) }, 20, startedAt.AddSeconds(1)) &&
+            !failed.Observe(after with { Known = false }, 20, completedAt) &&
+            !failed.TryBegin(before with { ObservedUtc = completedAt }, 20, completedAt),
+            "restarted combat or unreadable postrepair data repeated a failed repair.");
     }
 
     internal static void SelfTest()
