@@ -29,11 +29,12 @@ internal sealed class SentinelRadarSnapshot
         ZoneLabel=string.IsNullOrWhiteSpace(zoneLabel)?"Unknown zone":zoneLabel;
         ZoneRule=zoneRule is ZoneCombatRule.PvP or ZoneCombatRule.Safe?zoneRule:ZoneCombatRule.Unknown;
         Radius=BoundRadius(range);
-        var copied=Fresh?observations.GroupBy(p=>p.Id).Where(group=>group.Key!=0&&group.Count()==1).Select(group=>group.Single())
-            .Where(p=>!p.ConfirmedDead&&p.Position.Finite&&p.Relation!=PlayerRelation.Self&&
+        // Check UID ambiguity before filtering relations: an enemy/friendly
+        // duplicate is not a verified enemy identity. Sentinel shows only
+        // opposing-faction enemies in a zone with verified PvP rules.
+        var copied=Fresh&&ZoneRule==ZoneCombatRule.PvP?observations.GroupBy(p=>p.Id).Where(group=>group.Key!=0&&group.Count()==1).Select(group=>group.Single())
+            .Where(p=>!p.ConfirmedDead&&p.Position.Finite&&p.Relation==PlayerRelation.Enemy&&
                 (p.Position-selfPosition).Length<=Radius)
-            .Select(p=>ZoneRule!=ZoneCombatRule.PvP&&p.Relation==PlayerRelation.Enemy?
-                p with{Relation=ZoneRule==ZoneCombatRule.Safe?PlayerRelation.OpposingSafe:PlayerRelation.Unknown}:p)
             .OrderBy(p=>(p.Position-selfPosition).Length).ThenBy(p=>p.Id).ThenBy(p=>p.Generation).Take(128).ToArray():[];
         var enemyBodies=copied.Where(p=>p.Relation==PlayerRelation.Enemy).OrderBy(p=>p.Id).ThenBy(p=>p.Generation).ToArray();
         // Root supplies numbers stable across polls. Deterministic UID ordering

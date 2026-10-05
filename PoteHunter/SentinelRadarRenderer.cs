@@ -77,11 +77,6 @@ internal static class SentinelRadarRenderer
         {
             using var path=new GraphicsPath();path.AddEllipse(center.X-radius-6,center.Y-radius-6,(radius+6)*2,(radius+6)*2);
             graphics.SetClip(path,CombineMode.Intersect);
-            foreach(var player in snapshot.Players.Where(p=>p.Relation!=PlayerRelation.Enemy))
-            {
-                var point=SentinelRadarPresentation.RadarPoint(player.Position-snapshot.SelfPosition,center,radius,snapshot.Radius);
-                DrawMarker(graphics,point,player.Relation,4f);
-            }
             using var self=new SolidBrush(ImperialTheme.Text);
             using var border=new Pen(ImperialTheme.Text,1.5f);
             graphics.FillEllipse(self,center.X-2,center.Y-2,4,4);graphics.DrawEllipse(border,center.X-6,center.Y-6,12,12);
@@ -149,14 +144,9 @@ internal static class SentinelRadarRenderer
             Text(graphics,name,16,ImperialTheme.Text,new(213,84,230,29),FontStyle.Regular,"Georgia");
             Text(graphics,snapshot.ZoneRule==ZoneCombatRule.Unknown?"Enemy alerts wait for verified rules":snapshot.ZoneRule==ZoneCombatRule.Safe?"Opposing factions stay non-PvP":$"Watching the surrounding {snapshot.Radius:0.#} units",8,
                 ImperialTheme.Muted,new(214,118,231,38));
-            Text(graphics,$"{snapshot.Players.Count} nearby player{(snapshot.Players.Count==1?"":"s")}",8.5f,ImperialTheme.Gold,new(214,158,231,22));
+            Text(graphics,"Opposing factions only",8.5f,ImperialTheme.Gold,new(214,158,231,22));
         }
-        // Status is deliberately never called Friendly: same-race Guild Wars are possible.
-        Legend(graphics,new(12,222),snapshot.ZoneRule==ZoneCombatRule.Safe?PlayerRelation.OpposingSafe:PlayerRelation.Enemy,
-            snapshot.ZoneRule==ZoneCombatRule.Safe?"Opposing":"Enemy");
-        Legend(graphics,new(99,222),PlayerRelation.Party,"Party");
-        Legend(graphics,new(168,222),PlayerRelation.SameFaction,"Same faction");
-        Legend(graphics,new(299,222),PlayerRelation.Unknown,"Unknown");
+        Legend(graphics,new(12,222),PlayerRelation.Enemy,"Opposing faction");
     }
 
     internal readonly record struct EnemyProjection(SentinelPlayerMarker Player,PointF Point);

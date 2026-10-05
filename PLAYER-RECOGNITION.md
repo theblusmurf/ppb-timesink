@@ -5,17 +5,22 @@ movement, send chat, or establish who caused damage.
 
 ## Sentinel Radar
 
-In **Routes → Navigation → Sentinel Radar**, turn the overlay or paired sonar
-sound on/off, adjust **Enemy alert range** from **1 to 100 map units** in one-unit
+In **Routes → Navigation → Sentinel Radar**, **Auto Sentinel in Zone 8** is enabled
+by default. The overlay opens automatically on a fresh connected Zone 8 reading
+and hides when leaving Zone 8, disconnecting or losing fresh player readings.
+Uncheck it to disable automatic activation; existing saved choices are retained.
+Turn paired sonar sound on/off, adjust **Enemy alert range** from **1 to 100 map units** in one-unit
 steps, and set sound volume from 0–100%. The initial range is 25 and volume 45%.
 These choices can change during hunting and are saved independently of combat
 settings. The slider changes both the circular radar and arrival sound range.
 
-The compact north-up radar shows nearby players and the nearest recognized enemy's
+The compact north-up radar shows only recognized opposing-faction enemies and the nearest enemy's
 name, faction, distance and map bearing. Drag its header to reposition it; the
 body passes clicks through to the game. **Reset radar position** restores its
 initial placement. It scales to fit the game window and retains negative monitor
-coordinates. The existing terrain radar and route overlays remain separate.
+coordinates. Same-faction, party and unknown-faction players do not appear in
+Sentinel's markers, names or count. The existing terrain radar and route overlays
+remain separate and retain their general player-status display.
 
 One paired sonar clip announces a new opposing-faction enemy entering the chosen
 range in a verified PvP zone. Current players establish a silent baseline when
@@ -37,7 +42,7 @@ after upgrading; offline verification does not establish live attackability.
 
 Sentinel makes the nearest enemy's available name the main heading and lists
 the five nearest enemies separately, using session numbers that
-remain stable as players cross, move or leave the selected watch radius. Overlap
+remain stable as players cross, move or leave the selected watch radius.
 Individual radar badges show available names alongside their session number.
 Overlap badges show how many observed identities share a small radar area, plus their
 numbers; leader lines retain the actual positions. More distant enemies remain

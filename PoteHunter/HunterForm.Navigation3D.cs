@@ -76,7 +76,7 @@ public sealed partial class HunterForm
         Section("navigationLootPresentation","Loot overlay",false,showLootTrackerOverlay,lootTrackerDesign,lootTrackerScaleLabel,lootTrackerScale,lootTrackerBackgroundLabel,lootTrackerBackgroundOpacity,resetLootTracker,resetLootTimer);
         Section("navigationSentinelRadar","Sentinel Radar",false,showSentinelRadar,sentinelSoundEnabled,
             sentinelRangeLabel,sentinelRange,
-            new Label{AutoSize=true,MaximumSize=new(240,0),Text="Paired sonar · new enemy entries\nOpposing factions in confirmed PvP zones"},
+            new Label{AutoSize=true,MaximumSize=new(240,0),Text="Auto display in Zone 8 · opposing factions only\nPaired sonar on new enemy entries"},
             new Label{AutoSize=true,Text="Sound volume (%)"},sentinelVolume,resetSentinelPosition);
         Section("navigationRoutingOptions","Routing options",false,automaticRouting,guideTreasureChests,clearNavigation);
         side.Controls.Add(navigation3DHint);layout.Controls.Add(side,1,0);

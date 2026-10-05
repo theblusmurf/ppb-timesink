@@ -16,7 +16,11 @@ internal static class SentinelRadarChecks
             new SentinelPlayerMarker(0x1006,1,"Outside",new(25.01,0),PlayerFaction.Kartefant,PlayerRelation.Enemy,true),
             new SentinelPlayerMarker(0x1007,1,"Invalid",new(double.NaN,0),PlayerFaction.Kartefant,PlayerRelation.Enemy,true)};
         var pvp=new SentinelRadarSnapshot(true,true,new(0,0),"Caernarvon · Zone 8",ZoneCombatRule.PvP,markers);
-        Require(pvp.Players.Count==5&&pvp.EnemyCount==2&&pvp.NearestEnemy?.Name=="Ashen Rival","In-range nearest enemy must exclude non-finite/outside markers and include the 25-unit boundary");
+        Require(pvp.Players.Count==2&&pvp.EnemyCount==2&&pvp.NearestEnemy?.Name=="Ashen Rival"&&
+            pvp.Players.All(p=>p.Relation==PlayerRelation.Enemy),
+            "Only in-range opposing-faction enemies may appear; same-faction, party and unknown players must stay off Sentinel, including when closer");
+        Require(pvp.Players.Single(p=>p.Id==0x1005).Name=="At boundary",
+            "The exact 25-unit boundary must remain included while non-finite and outside enemies are excluded");
         markers[0]=markers[0] with{Name="Replaced"};
         Require(pvp.NearestEnemy?.Name=="Ashen Rival","An accepted snapshot must not retain a mutable observations array");
         Require(SentinelRadarRenderer.NearestEnemyName(pvp)=="Ashen Rival",
@@ -27,10 +31,17 @@ internal static class SentinelRadarChecks
                 uncertain with{Id=0x2003,Generation=1},uncertain with{Id=0x2003,Generation=2}]);
         Require(invalidIdentity.Players.Count==1&&invalidIdentity.NearestEnemy?.Id==uncertain.Id,
             "Unknown-HP players may remain visible; confirmed-dead and duplicate/ambiguous UID bodies must be excluded");
+        var mixedIdentity=new SentinelRadarSnapshot(true,true,default,"Zone 8",ZoneCombatRule.PvP,
+            [uncertain,uncertain with{Relation=PlayerRelation.SameFaction,Name="Ambiguous friendly"},
+                uncertain with{Id=0,Name="Invalid UID"},uncertain with{Id=0x2004,Name="Verified rival"}]);
+        Require(mixedIdentity.Players.Count==1&&mixedIdentity.NearestEnemy?.Id==0x2004,
+            "An enemy sharing its UID with a friendly body must be rejected before relation filtering; zero UID remains invalid");
         var safe=new SentinelRadarSnapshot(true,true,default,"Almighty Land · Zone 12",ZoneCombatRule.Safe,pvp.Players);
-        Require(safe.EnemyCount==0&&safe.NearestEnemy==null&&safe.Players.Count(p=>p.Relation==PlayerRelation.OpposingSafe)==2,"Non-PvP must suppress enemy status without losing visible opposing players");
+        Require(safe.EnemyCount==0&&safe.NearestEnemy==null&&safe.Players.Count==0,
+            "A non-PvP snapshot must clear all players rather than retain prior enemies as opposing-faction markers");
         var unknown=new SentinelRadarSnapshot(true,true,default,"Unknown zone",ZoneCombatRule.Unknown,pvp.Players);
-        Require(unknown.EnemyCount==0&&unknown.NearestEnemy==null,"Unverified zone cannot display an enemy based on prior PvP status");
+        Require(unknown.EnemyCount==0&&unknown.NearestEnemy==null&&unknown.Players.Count==0,
+            "An unverified zone cannot retain player markers or names based on prior PvP status");
         var stale=new SentinelRadarSnapshot(false,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,pvp.Players);
         Require(!stale.Fresh&&stale.Players.Count==0&&stale.EnemyCount==0&&stale.NearestEnemy==null,"Stale observations must clear the radar and nearest enemy");
         Require(new[]{safe,unknown,stale}.All(snapshot=>SentinelRadarRenderer.NearestEnemyName(snapshot)==null),
@@ -114,6 +125,24 @@ internal static class SentinelRadarChecks
             new SentinelPlayerMarker(0x3104,1,"Morgana",new(18,-12),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:4),
             new SentinelPlayerMarker(0x3105,1,"Iron Warden",new(0,-24),PlayerFaction.Kartefant,PlayerRelation.Enemy,true,DisplayNumber:5)};
         var fiveNamed=new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,namedMarkers);
+        var mixedFaction=new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,
+            namedMarkers.Concat(new[]{
+                namedMarkers[0] with{Id=0x4101,Name="Friendly name must not render",Position=new(0,.1),Relation=PlayerRelation.SameFaction,Faction=PlayerFaction.Merkhadian},
+                namedMarkers[0] with{Id=0x4102,Name="Party name must not render",Position=new(1,0),Relation=PlayerRelation.Party,Faction=PlayerFaction.Merkhadian},
+                namedMarkers[0] with{Id=0x4103,Name="Unknown name must not render",Position=new(-1,0),Relation=PlayerRelation.Unknown,Faction=PlayerFaction.Unknown},
+                namedMarkers[0] with{Id=0x4104,Name="Non-PvP relation must not render",Position=new(0,-1),Relation=PlayerRelation.OpposingSafe},
+                namedMarkers[0] with{Id=0x4105,Name="Self must not render",Position=default,Relation=PlayerRelation.Self,Faction=PlayerFaction.Merkhadian}}));
+        Require(mixedFaction.Players.SequenceEqual(fiveNamed.Players)&&mixedFaction.Enemies.SequenceEqual(fiveNamed.Enemies)&&
+            SentinelRadarRenderer.NearestEnemyName(mixedFaction)=="Ashen Rival",
+            "Closer same-faction, party, unknown, safe-opposing and self bodies must not affect enemy names, numbering or nearest selection");
+        using(var mixedImage=SentinelRadarRenderer.Render(mixedFaction))
+        using(var enemyImage=SentinelRadarRenderer.Render(fiveNamed))
+        {
+            for(int y=0;y<mixedImage.Height;y++)for(int x=0;x<mixedImage.Width;x++)
+                Require(mixedImage.GetPixel(x,y)==enemyImage.GetPixel(x,y),
+                    "Mixed-faction input must render identically to enemy-only input, with no hidden friendly markers or labels");
+            mixedImage.Save(Path.Combine(outputDirectory,"sentinel-radar-mixed-faction-enemies-only.png"));
+        }
         var namesCrossing=new SentinelRadarSnapshot(true,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,
             namedMarkers.Select(p=>p.Id==0x3103?p with{Position=new(0,.5)}:p));
         Require(SentinelRadarRenderer.NearestEnemyName(fiveNamed)=="Ashen Rival"&&
@@ -142,8 +171,8 @@ internal static class SentinelRadarChecks
             ("clustered-unknown",new SentinelRadarSnapshot(true,true,default,"Unverified map",ZoneCombatRule.Unknown,crowdedMarkers,100)),
             ("clustered-stale",new SentinelRadarSnapshot(false,true,default,"Caernarvon · Zone 8",ZoneCombatRule.PvP,crowdedMarkers,100))})
         {
-            Require(sample.Item2.Enemies.Count==0&&SentinelRadarRenderer.EnemyClusters(sample.Item2,center,76).Count==0,
-                "Non-PvP, unverified and stale states cannot retain previous enemy numbers or cluster groups");
+            Require(sample.Item2.Players.Count==0&&sample.Item2.Enemies.Count==0&&SentinelRadarRenderer.EnemyClusters(sample.Item2,center,76).Count==0,
+                "Non-PvP, unverified and stale states cannot retain previous player markers, names, enemy numbers or cluster groups");
             using var image=SentinelRadarRenderer.Render(sample.Item2);image.Save(Path.Combine(outputDirectory,$"sentinel-radar-{sample.Item1}.png"));
         }
         foreach(var sample in new[]{("pvp",pvp),("non-pvp",safe),("unknown",unknown),("no-data",stale),
@@ -168,6 +197,7 @@ internal static class SentinelRadarChecks
             "Hiding the radar must hide the drag header and preserve foreground");
         File.WriteAllText(Path.Combine(outputDirectory,"sentinel-radar-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,ImmutableSnapshots=true,StalePlayersCleared=true,ZoneStatusGated=true,NorthUp=true,
+            OpposingEnemiesOnly=true,SameFactionNamesHidden=true,MixedFactionRenderUnchanged=true,AmbiguousCrossFactionUidRejected=true,
             StableEnemyNumbers=true,CoincidentIdentityCounts=true,ExactProjectedPositions=true,SelfDoesNotHideEnemy=true,BlankNamesUseIds=true,
             NamesPrimary=true,NamedIndividualBadges=true,NearestNameTracksIdentity=true,LongUnicodeNameBounded=true,
             BodyClickThrough=true,HeaderPassive=true,ForegroundPreserved=true,HardwareInputEmitted=false},new JsonSerializerOptions{WriteIndented=true}));

@@ -1,3 +1,12 @@
+## Release1.113
+
+Automatically activate enemy-only Sentinel Radar in Zone 8.
+
+- Open Sentinel on fresh connected readings in Zone 8 and hide it automatically on leaving the zone, disconnecting or losing fresh readings. Keep the saved on/off choice as Auto Sentinel in Zone 8, enabled by default.
+- Display only recognized opposing-faction enemies. Remove same-faction, party and unknown players from Sentinel markers, names and counts, and remove their unused legend entries. Keep actual enemy names, stable numbers, overlap counts and ID fallback.
+- Preserve the range slider, saved overlay position and sonar controls. Entering Zone 8 establishes a silent baseline; later enemy arrivals retain existing health, focus, freshness and sound guards. General map navigation and combat behavior are unchanged.
+- Validate zone entry/exit/reentry, disconnected/stale/off states, both local factions, mixed-player filtering, duplicate identities and rendering offline without game input or replacing the running app.
+
 ## Release1.112
 
 Show enemy player names prominently in Sentinel Radar.

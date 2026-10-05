@@ -2,7 +2,7 @@ namespace PoteHunter;
 
 public sealed partial class HunterForm
 {
-    readonly CheckBox showSentinelRadar=new(){Name="showSentinelRadar",Text="Show Sentinel Radar",AutoSize=true};
+    readonly CheckBox showSentinelRadar=new(){Name="showSentinelRadar",Text="Auto Sentinel in Zone 8",AutoSize=true};
     readonly CheckBox sentinelSoundEnabled=new(){Name="sentinelSoundEnabled",Text="Sonar on enemy entry",AutoSize=true};
     readonly TrackBar sentinelRange=new(){Name="sentinelRange",Minimum=1,Maximum=100,Value=25,SmallChange=1,LargeChange=5,TickStyle=TickStyle.None,Width=226,AccessibleName="Sentinel detection range in map units"};
     readonly Label sentinelRangeLabel=new(){Name="sentinelRangeLabel",AutoSize=true,Text="Enemy alert range · 25 map units"};
@@ -17,6 +17,7 @@ public sealed partial class HunterForm
     SentinelSonar? sentinelSonar;
     bool sentinelInitialized,sentinelPositionSaved;
     Point sentinelPosition;
+    bool SentinelRadarActive=>showSentinelRadar.Checked&&connected&&PlayerRecognitionFresh&&navigationZone==8;
 
     void InitializeSentinelRadar()
     {
@@ -68,27 +69,31 @@ public sealed partial class HunterForm
         var self=recognitionSelf;
         var players=RecognizedPlayers();
         var rule=ZoneCombatRules.For(navigationZone);
+        bool enabled=showSentinelRadar.Checked&&navigationZone==8;
+        bool active=enabled&&connected&&fresh;
         bool alive=fresh&&recognitionHealth.Known&&!recognitionHealth.Dead;
         if(self!=null)sentinelContext=new(world.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SentinelPlayerIdentity.Of(self),navigationZone);
         sentinelNumbers.Update(connected,fresh,sentinelContext,players.Where(p=>p.Recognition.Enemy).Select(p=>p.Entity),Environment.TickCount64);
-        sentinelSnapshot=new(fresh,alive,self?.Position??default,rule.Name,rule.Rule,
+        sentinelSnapshot=new(active,alive,self?.Position??default,rule.Name,rule.Rule,
             players.Select(p=>new SentinelPlayerMarker(p.Entity.Id,p.Entity.Generation,p.Entity.Name,p.Entity.Position,
                 p.Recognition.OtherFaction,p.Recognition.Relation,p.Health.Known&&!p.Health.Dead,p.Health.Dead,sentinelNumbers.Number(p.Entity))),sentinelRange.Value);
         // Offline fixtures must never reach an audio device or a game operation.
         bool audioAllowed=!offlinePreviewMode&&gameBounds.HasValue&&gameForeground;
-        sentinelFrame=sentinelPolicy.Update(new(showSentinelRadar.Checked,connected,fresh,alive,
+        sentinelFrame=sentinelPolicy.Update(new(enabled,connected,fresh,alive,
             sentinelContext,
             players.Select(p=>new SentinelPlayerObservation(SentinelPlayerIdentity.Of(p.Entity),p.Entity.Name,
                 (p.Entity.Position-(self?.Position??default)).Length,p.Recognition.Relation,p.Health.Dead)).ToArray(),
             sentinelSoundEnabled.Checked,(int)sentinelVolume.Value,audioAllowed,sentinelRange.Value),DateTime.UtcNow);
-        if(!audioAllowed||!alive||!showSentinelRadar.Checked||!sentinelSoundEnabled.Checked||sentinelVolume.Value==0)
+        if(showSentinelRadar.Checked&&connected&&fresh&&navigationZone!=8)
+            sentinelFrame=sentinelFrame with{Status="Automatic Sentinel waits for Zone 8"};
+        if(!audioAllowed||!alive||!active||!sentinelSoundEnabled.Checked||sentinelVolume.Value==0)
             sentinelSonar?.Stop();
         else if(sentinelFrame.PlaySound)
         {
             sentinelSonar??=new SentinelSonar();sentinelSonar.TryPlay(sentinelFrame.Volume);
         }
-        if(!showSentinelRadar.Checked||gameBounds is not Rectangle area||area.Width<280||area.Height<160)
+        if(!active||gameBounds is not Rectangle area||area.Width<280||area.Height<160)
         {HideSentinelRadar();return;}
         sentinelOverlay??=new SentinelRadarOverlay(()=>sentinelSnapshot,CommitSentinelPosition);
         sentinelOverlay.FitToArea(area);
@@ -102,7 +107,8 @@ public sealed partial class HunterForm
     }
     object SentinelRadarState()=>new
     {
-        Enabled=showSentinelRadar.Checked,Visible=sentinelOverlay is {Visible:true},Range=sentinelRange.Value,
+        Enabled=showSentinelRadar.Checked,AutoEnabled=showSentinelRadar.Checked,Active=SentinelRadarActive,ActivationZone=8,EnemyOnly=true,
+        Visible=sentinelOverlay is {Visible:true},Range=sentinelRange.Value,
         SoundEnabled=sentinelSoundEnabled.Checked,Volume=(int)sentinelVolume.Value,Sound="Paired sonar",
         IntendedPlayback=sentinelSonar?.Playing??false,AudioError=sentinelSonar?.LastError,Status=sentinelFrame.Status,
         NearestEnemy=sentinelSnapshot.NearestEnemy is SentinelPlayerMarker nearest?PlayerRecognition.DisplayName(nearest.Id,nearest.Name):null,
