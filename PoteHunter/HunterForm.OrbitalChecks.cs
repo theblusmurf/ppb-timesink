@@ -8,8 +8,30 @@ public sealed partial class HunterForm
         var previousSize=Size; var previousPage=tabs.SelectedTab;
         var folds=orbitalRailBody!.Controls.OfType<CollapsibleSection>().ToArray();
         var expanded=folds.Select(f=>f.Expanded).ToArray();
+        var cargoLayouts=new List<object>();
         T Find<T>(string name) where T:Control => Controls.Find(name,true).OfType<T>().Single();
         void Layout(){PerformLayout();Application.DoEvents();}
+        void CheckCargoReachable(TabPage page,string scenario)
+        {
+            page.AutoScrollPosition=Point.Empty;Layout();
+            foreach(string resource in new[]{"Gold","Silvin","Mithril","Iternium","Fehu","Gems"})
+            {
+                var cargo=Find<Label>("overviewResource"+resource);
+                // A viewport-only check can miss a label that overflows an intermediate
+                // table: the page cannot scroll past its own canvas to reveal that area.
+                for(Control child=cargo;child.Parent is Control parent && parent!=page;child=parent)
+                {
+                    var bounds=parent.RectangleToClient(child.RectangleToScreen(child.ClientRectangle));
+                    if(bounds.IsEmpty || !parent.ClientRectangle.Contains(bounds))
+                        throw new Exception($"Cargo clips inside {parent.Name}/{parent.GetType().Name}: {cargo.Name}; {scenario}; DPI={DeviceDpi}; form={Size}; child={bounds}; parent={parent.ClientRectangle}; page={page.ClientRectangle}; display={page.DisplayRectangle}; scroll={page.AutoScrollPosition}.");
+                }
+                page.ScrollControlIntoView(cargo);Layout();
+                var visibleBounds=page.RectangleToClient(cargo.RectangleToScreen(cargo.ClientRectangle));
+                if(!page.ClientRectangle.Contains(visibleBounds))
+                    throw new Exception($"The cargo manifest is unreachable: {cargo.Name}; {scenario}; DPI={DeviceDpi}; form={Size}; cargo={visibleBounds}; page={page.ClientRectangle}; display={page.DisplayRectangle}; scroll={page.AutoScrollPosition}.");
+                cargoLayouts.Add(new{Scenario=scenario,Resource=resource,DeviceDpi,Window=Size.ToString(),Cargo=visibleBounds.ToString(),Viewport=page.ClientRectangle.ToString(),Canvas=page.DisplayRectangle.ToString(),Scroll=page.AutoScrollPosition.ToString()});
+            }
+        }
         void Capture(string name)
         {
             Layout(); using var bitmap=new Bitmap(Width,Height);
@@ -50,6 +72,12 @@ public sealed partial class HunterForm
                         }
                         if(Find<OrbitalScanner>("overviewRouteMap").Height<320*DeviceDpi/96)
                             throw new Exception("The route scanner collapsed below its readable canvas height.");
+                        foreach(string family in new[]{"Mimic","Pulkhan","Tribal","Tower"})
+                        {
+                            var caption=Find<Label>("orbitalTargetLabel"+family);var portrait=caption.Parent!;
+                            if(!portrait.ClientRectangle.Contains(caption.Bounds) || !portrait.Parent!.ClientRectangle.Contains(portrait.Bounds))
+                                throw new Exception("A target-family caption clips outside its roster row: "+family);
+                        }
                     }
                 }
             }
@@ -79,10 +107,17 @@ public sealed partial class HunterForm
             Find<Button>("fieldNavRoutes").PerformClick();Capture("orbital-ops-routes.png");
             Find<Button>("fieldNavOverview").PerformClick();Size=MinimumSize;
             tabs.SelectedTab!.AutoScrollPosition=Point.Empty;Capture("orbital-ops-minimum.png");
-            var cargo=Find<Label>("overviewResourceGold");tabs.SelectedTab.ScrollControlIntoView(cargo);Layout();
-            if(!tabs.SelectedTab.ClientRectangle.Contains(tabs.SelectedTab.RectangleToClient(cargo.RectangleToScreen(cargo.ClientRectangle))))
-                throw new Exception("The cargo manifest is unreachable in the scrollable minimum Overview.");
-            tabs.SelectedTab.AutoScrollPosition=Point.Empty;
+            var overview=tabs.SelectedTab!;
+            CheckCargoReachable(overview,"user minimum");Capture("orbital-ops-minimum-cargo.png");
+            var userMinimum=MinimumSize;var userMaximum=MaximumSize;
+            try
+            {
+                // Windows can constrain the native window below the requested minimum
+                // on CI's 1024px virtual desktop. Exercise those actual bounds locally too.
+                MaximumSize=new Size(1044,788);Size=new Size(1044,760);Layout();
+                CheckCargoReachable(overview,"constrained 1044x760 desktop");Capture("orbital-ops-constrained-cargo.png");
+            }
+            finally{MaximumSize=userMaximum;MinimumSize=userMinimum;Size=userMinimum;overview.AutoScrollPosition=Point.Empty;Layout();}
             // A synthetic scanner fixture is separate from actual application-state screenshots.
             using var fixture=new OrbitalScanner{Size=new Size(640,520)};
             var primary=new SavedNavigationRoute(8,new Vec(35,60),.8,[new(0,0),new(15,20),new(24,43),new(35,60)],DateTime.UnixEpoch);
@@ -112,7 +147,7 @@ public sealed partial class HunterForm
                 if(gold.GetPixel(14,14).ToArgb()!=Color.FromArgb(218,167,66).ToArgb())throw new Exception("The currency glyph inherited the lime UI accent.");
             }
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"orbital-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
-            {Passed=true,Checks=new[]{"left rail persists across all five destinations at default and minimum size","bottom navigation clear of content","readable minimum canvas with reachable cargo and reset actions","telemetry values do not overlap target roster","unknown wallet and disconnected player remain unknown","current-zone route filtering","accepted-poll position and transition/identity/staleness guards","coincident anchor labels remain distinct","passive scanner excluded from tab order","original gold glyph colors","native offscreen Overview, expanded controls, Routes and minimum screenshots"}}));
+            {Passed=true,Checks=new[]{"left rail persists across all five destinations at default and minimum size","bottom navigation clear of content","all six cargo resources fit their ancestors and scroll fully into view at user minimum and constrained 1044x760 desktop","readable minimum canvas with reachable reset actions","telemetry values and target captions fit their rows","unknown wallet and disconnected player remain unknown","current-zone route filtering","accepted-poll position and transition/identity/staleness guards","coincident anchor labels remain distinct","passive scanner excluded from tab order","original gold glyph colors","native offscreen Overview, expanded controls, Routes, minimum and scrolled cargo screenshots"},CargoLayouts=cargoLayouts}));
         }
         finally
         {

@@ -93,6 +93,9 @@ public sealed partial class HunterForm
         session.Controls.OfType<Label>().Single(l => l.Name == "ironboundCardHeading").Text = "CARGO MANIFEST  /  SESSION RESOURCES";
         session.Padding = new Padding(10, 8, 10, 8); session.Margin = new Padding(0, 5, 0, 0);
         resources.Height = 78;
+        // An implicit AutoSize row can retain each Panel's original 100px preferred
+        // height, overflowing this 78px dock and the Overview's scrollable canvas.
+        resources.RowStyles.Clear(); resources.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         foreach (Panel tile in resources.Controls)
         {
             tile.BackColor = UiWindow; tile.Margin = new Padding(2, 0, 2, 0);
@@ -132,6 +135,7 @@ public sealed partial class HunterForm
         metrics.Controls.Add(elapsed, 0, 1); metrics.Controls.Add(kills, 1, 1); panel.Controls.Add(metrics, 0, 4);
         var targetHeading = TextLabel("orbitalTargetHeading", "TARGET FAMILIES", 8f, UiMuted); panel.Controls.Add(targetHeading, 0, 6);
         var roster = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Margin = Padding.Empty };
+        roster.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         foreach (string family in new[] { "Mimic", "Pulkhan", "Tribal", "Tower" })
         {
             roster.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
