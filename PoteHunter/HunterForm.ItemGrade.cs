@@ -52,7 +52,7 @@ public sealed partial class HunterForm
         Add(row);
         var focusRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true};
         focusRow.Controls.Add(new Label{AutoSize=true,Text="Focus stat",Margin=new Padding(0,6,6,0)});focusRow.Controls.Add(itemGradeFocus);
-        focusRow.Controls.Add(new Label{AutoSize=true,Text="If absent on this item, Auto chooses an available stat.",Margin=new Padding(6,6,6,0)});
+        focusRow.Controls.Add(new Label{AutoSize=true,Text="Auto picks the unfinished stat closest to its target by percentage. Missing saved stats use Auto.",Margin=new Padding(6,6,6,0)});
         Add(focusRow);
         Add(itemGradeStatus);
         Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Gem and +10 projections are estimates from the imported table and upgrade assumptions. Existing sockets beyond the two mapped fields are not confirmed."});

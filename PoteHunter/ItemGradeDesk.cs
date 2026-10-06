@@ -6,13 +6,16 @@ namespace PoteHunter;
 internal static class ItemGradeDesk
 {
     internal sealed record FocusChoice(string Key, string Label) { public override string ToString() => Label; }
-    internal static readonly FocusChoice[] FocusChoices = [new("Auto", "Auto · first upgradeable stat"),
+    internal static readonly FocusChoice[] FocusChoices = [new("Auto", "Auto · closest to target grade"),
         .. ItemGradeTable.StatOrder.Select(key => new FocusChoice(key, ItemGradeTable.DisplayName(key)))];
     internal static string NormalizeFocus(string? key) => FocusChoices.FirstOrDefault(c => c.Key == key)?.Key ?? "Auto";
-    // Saved preferences absent on the next item fall back to an actionable stat, then a graded stat, then raw data.
+    // Compare unfinished targets by percentage, not unlike stat units or gem counts. Stable ties retain tooltip order.
+    // A saved stat absent on this item uses Auto without changing the saved preference.
     internal static ItemStatPlan? Focus(ItemGradePlan plan, string? preference) =>
         plan.Stats.FirstOrDefault(s => s.Stat == NormalizeFocus(preference)) ??
-        plan.Stats.FirstOrDefault(s => s.Graded && s.Needed > 0 && s.Gems is { Count: > 0 }) ??
+        plan.Stats.Where(s => s.Graded && s.Needed > 0 && Ratio(plan, s).HasValue)
+            .OrderByDescending(s => Ratio(plan, s)).FirstOrDefault() ??
+        plan.Stats.FirstOrDefault(s => s.Graded && s.Needed == 0 && Ratio(plan, s).HasValue) ??
         plan.Stats.FirstOrDefault(s => s.Graded) ?? plan.Stats.FirstOrDefault();
     internal static string Number(int value) => value.ToString("N0", CultureInfo.CurrentCulture);
     internal static int? Threshold(ItemGradePlan plan, ItemStatPlan stat) =>

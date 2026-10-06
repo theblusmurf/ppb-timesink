@@ -1,3 +1,11 @@
+## Release1.123
+
+The item Upgrade Desk now defaults to the unfinished stat closest to its target grade.
+
+- Auto compares each stat's current value with its own target threshold and focuses the highest percentage, rather than the first upgradeable stat. This keeps HP, damage and other stat scales comparable and respects fixed grades or each stat's automatic AAA/S target.
+- Manual focus choices still take priority. Reached and unavailable targets do not displace a known unfinished target; ties keep tooltip order. Missing saved stats fall back to Auto, and missing gem estimates stay explicitly unavailable.
+- Update the focus selector and help text. Add offline ranking, target-change, fallback and native rendering checks; preserve existing settings and passive overlay behavior.
+
 ## Release1.122
 
 Return to the farming anchor after Gamekeeper before selecting ordinary engaged enemies, and smooth route steering and short forward corrections.

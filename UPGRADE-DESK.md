@@ -6,8 +6,13 @@ three focus-stat metrics, every readable stat's grade and target progress, a
 regular-gem plan and a separately labelled AAA upgrade/socket estimate.
 
 Choose the target and **Focus stat** in **World & Tools > Item grades**. Auto picks
-the first stat with an actionable gem plan. A saved stat absent on the current
-item falls back to Auto. Existing target, automatic popup and hotkey choices
+the unfinished stat with the highest percentage of its selected grade threshold.
+This compares unlike stat units fairly; equal percentages keep tooltip order.
+Reached targets and unavailable thresholds do not outrank a known unfinished
+target. If all known targets are reached, Auto shows a reached stat. Gem estimate
+availability does not affect proximity. A manually selected stat takes priority;
+a saved stat absent on the current item falls back to Auto. Existing target,
+automatic popup and hotkey choices
 are retained. The last-reading text retains the planner's other gem tiers.
 
 The overlay uses the existing item reader and grade planner. No new item
