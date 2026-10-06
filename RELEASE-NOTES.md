@@ -1,3 +1,13 @@
+## Release1.126
+
+Apply the selected compact Slim Inspector item overlay and add saved tooltip sizing.
+
+- Replace the large two-column Upgrade Desk with a graphite-and-lime vertical panel: item identity and best-stat badge, one focus strip, every readable stat's value/grade/target gap, and separate gem and +10 estimates.
+- Add Tooltip size % under World & Tools > Item grades, from 75% to 200% in five-point steps, default 100%. Save automatically, refresh the hovered item after a change, and scale equipment and message tooltips together with Windows DPI. Fit to the monitor without replacing the saved percentage; keep size local during profile transfers.
+- Preserve all-stat unfinished Auto focus, manual focus/target choices, jewelry suppression, original loot icons and passive/click-through display. Item calculations and gameplay behavior are unchanged.
+
+Validate clean builds, offline calculations/settings migration, profile-local sizing, native tooltip rendering at four sizes with all 13 supported fields, DPI/secondary-monitor bounds and disconnected minimum-window UI checks. Validation sends no game input and leaves the running application and live settings untouched.
+
 ## Release1.125
 
 Remove obsolete source and consolidate repeated helpers while preserving current behavior.

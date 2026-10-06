@@ -18,7 +18,7 @@ internal sealed class SettingsProfileStore
         "Radar3D","RouteOverlay3D","Overlay3DTopView","NavigationOverlaySize","NavigationViewRadius","Navigation3D","Navigation3DMap",
         "Navigation3DTerrain","Navigation3DObjects","Navigation3DRoutes","Navigation3DAnchors","Navigation3DMapOpacity",
         "ShowLootTrackerOverlay","LootTrackerDesign","LootTrackerDesignVersion","LootTrackerScalePercent","LootTrackerBackgroundOpacityPercent",
-        "LootTrackerOverlayX","LootTrackerOverlayY","ShowTreasureChestMarkers","ItemGradeHotkey"];
+        "LootTrackerOverlayX","LootTrackerOverlayY","ShowTreasureChestMarkers","ItemGradeHotkey","ItemGradeScalePercent"];
     public SettingsProfileStore(string? root=null)=>directory=root??Path.Combine(AppContext.BaseDirectory,"settings-profiles");
     static string Name(string name)
     {

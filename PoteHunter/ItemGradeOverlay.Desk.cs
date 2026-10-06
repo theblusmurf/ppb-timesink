@@ -6,20 +6,23 @@ internal sealed partial class ItemGradeOverlay
 {
     static readonly Color DeskText = Color.FromArgb(239, 242, 239), DeskMuted = Color.FromArgb(164, 177, 184);
     static readonly Color Lime = Color.FromArgb(214, 236, 119), Card = Color.FromArgb(32, 48, 41);
-    readonly Font small = new("Segoe UI", 10, FontStyle.Regular, GraphicsUnit.Pixel);
-    readonly Font body = new("Segoe UI", 12, FontStyle.Regular, GraphicsUnit.Pixel);
+    readonly Font small = new("Segoe UI", 11, FontStyle.Regular, GraphicsUnit.Pixel);
+    readonly Font body = new("Segoe UI", 13, FontStyle.Regular, GraphicsUnit.Pixel);
     readonly Font strong = new("Segoe UI", 13, FontStyle.Bold, GraphicsUnit.Pixel);
     readonly Font gradeFont = new("Segoe UI", 11, FontStyle.Bold, GraphicsUnit.Pixel);
-    readonly Font title = new("Segoe UI", 22, FontStyle.Bold, GraphicsUnit.Pixel);
-    readonly Font metric = new("Segoe UI", 25, FontStyle.Bold, GraphicsUnit.Pixel);
+    readonly Font title = new("Segoe UI", 16, FontStyle.Bold, GraphicsUnit.Pixel);
+    readonly Font metric = new("Segoe UI", 23, FontStyle.Bold, GraphicsUnit.Pixel);
     string focusStat = "Auto";
     float paintScale = 1;
+    int scalePercent = 100;
+    [System.ComponentModel.Browsable(false), System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    internal int ScalePercent { get => scalePercent; set => scalePercent = ItemGradeDesk.NormalizeScale(value); }
     internal ItemStatPlan? FocusedStat => Plan is { } plan ? ItemGradeDesk.Focus(plan, focusStat) : null;
     void DisposeDeskFonts() { small.Dispose(); body.Dispose(); strong.Dispose(); gradeFont.Dispose(); title.Dispose(); metric.Dispose(); }
     void SizeFor(Size available, int dpi)
     {
         var logical = new Size(ItemGradeDesk.Width, ItemGradeDesk.Height(Plan));
-        paintScale = ItemGradeDesk.FitScale(logical, available, dpi);
+        paintScale = ItemGradeDesk.FitScale(logical, available, dpi, ScalePercent);
         ClientSize = new(Math.Max(1, (int)(logical.Width * paintScale)), Math.Max(1, (int)(logical.Height * paintScale)));
     }
     void DrawText(Graphics g, string text, Font font, Color color, RectangleF rect, bool wrap = false, bool right = false)
@@ -42,13 +45,8 @@ internal sealed partial class ItemGradeOverlay
     }
     void Chip(Graphics g, string text, ItemGrade? grade, RectangleF rect)
     {
-        var color = GradeColor(grade); Box(g, rect, Color.FromArgb(26, color), color);
-        DrawText(g, text, gradeFont, color, new(rect.X + 7, rect.Y + 4, rect.Width - 14, rect.Height - 5));
-    }
-    void Metric(Graphics g, string value, string label, int x)
-    {
-        Box(g, new(x, 128, 170, 67), Card, Border);
-        DrawText(g, value, metric, Lime, new(x + 12, 136, 146, 32)); DrawText(g, label, small, DeskMuted, new(x + 12, 171, 146, 18));
+        var color = GradeColor(grade); Box(g, rect, Color.FromArgb(26, color), Color.FromArgb(45, color));
+        DrawText(g, text, gradeFont, color, new(rect.X + 3, rect.Y + 2, rect.Width - 6, rect.Height - 2), right: true);
     }
     void PaintDesk(Graphics g)
     {
@@ -56,78 +54,80 @@ internal sealed partial class ItemGradeOverlay
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
         int height = ItemGradeDesk.Height(Plan);
         Box(g, new(1, 1, ItemGradeDesk.Width - 2, height - 2), Background, Border);
-        DrawText(g, "EQUIPMENT / UPGRADE DESK", small, DeskMuted, new(22, 18, 310, 18));
-        DrawText(g, ClickThrough ? "● PASSIVE OVERLAY" : "● READ ONLY", small, Lime, new(380, 18, 168, 18), right: true);
         if (Plan is not { } plan)
         {
-            DrawText(g, "Equipment insight", title, DeskText, new(22, 60, 526, 34));
-            DrawText(g, message ?? "Hover a weapon or armor to see its stats.", body, DeskMuted, new(22, 107, 526, 100), wrap: true);
-            DrawText(g, "No item changes · game focus preserved", small, DeskMuted, new(22, height - 30, 526, 18));
+            DrawText(g, "Equipment insight", title, DeskText, new(14, 17, 296, 26));
+            DrawText(g, message ?? "Hover a weapon or armor to see its stats.", body, DeskMuted, new(14, 53, 296, 105), wrap: true);
+            DrawText(g, "Read only · game focus preserved", small, DeskMuted, new(14, height - 26, 296, 18));
             g.Restore(saved); return;
         }
         var focused = FocusedStat;
         ItemGrade? best = plan.Stats.Where(s => s.Graded).Select(s => s.Grade).OrderByDescending(v => v).FirstOrDefault();
         DrawItemIcon(g, plan.Profile?.GemGroup);
-        DrawText(g, plan.Profile?.Name ?? plan.Name, title, DeskText, new(84, 48, 357, 32));
-        string identity = plan.Profile is { } p ? $"{p.Type} · Requires {p.Requirement} {p.RequirementStat}" : "Grade table unavailable";
-        DrawText(g, identity, body, DeskMuted, new(84, 86, 357, 20));
-        Chip(g, plan.ItemGradeLabel, best, new(456, 54, 92, 30)); DrawText(g, "BEST STAT", small, DeskMuted, new(456, 89, 92, 18), right: true);
-        using var line = new Pen(Color.FromArgb(48, DeskMuted)); g.DrawLine(line, 22, 114, 548, 114);
-        Metric(g, focused is null ? "—" : ItemGradeDesk.Number(focused.Value), (focused?.Label ?? "No stat") + " · current", 22);
-        Metric(g, ItemGradeDesk.Gap(focused), focused?.Target is { } t ? $"Points to {t}" : "No eligible focus", 200);
-        Metric(g, focused?.Target?.ToString() ?? plan.FixedTarget?.ToString() ?? "Auto", "Target grade", 378);
-        DrawText(g, "STAT OVERVIEW · " + (plan.FixedTarget?.ToString() ?? "AUTO"), small, DeskMuted, new(22, 214, 252, 18));
-        DrawText(g, "FOCUS STAT · " + (focused?.Label ?? "NONE"), small, DeskMuted, new(298, 214, 250, 18));
-        int contentBottom = height - 76; g.DrawLine(line, 282, 214, 282, contentBottom - 8);
+        DrawText(g, plan.Profile?.Name ?? plan.Name, title, DeskText, new(52, 13, 182, 38), wrap: true);
+        string identity = plan.Profile is { } p ? $"{p.Type} · {p.Requirement} {p.RequirementStat}" : "Grade table unavailable";
+        DrawText(g, identity, small, DeskMuted, new(52, 53, 182, 29), wrap: true);
+        DrawText(g, "Best stat", small, DeskMuted, new(242, 14, 69, 18), right: true);
+        Chip(g, plan.ItemGradeLabel, best, new(242, 35, 69, 24));
+        Box(g, new(12, 88, 300, 65), Card, Color.FromArgb(48, Lime));
+        using (var accent = new SolidBrush(Lime)) g.FillRectangle(accent, 12, 95, 3, 51);
+        string focusLabel = (focusStat == "Auto" ? "AUTO · " : "FOCUS · ") + (focused?.Label ?? "NONE");
+        DrawText(g, focusLabel, small, Lime, new(24, 94, 210, 18));
+        DrawText(g, focused?.Target is { } t ? t + " target" : plan.TargetLabel, small, DeskMuted, new(234, 94, 66, 18), right: true);
+        if (focused is not null)
+        {
+            DrawText(g, ItemGradeDesk.Number(focused.Value), metric, DeskText, new(24, 117, 106, 31));
+            string threshold = ItemGradeDesk.Threshold(plan, focused) is int value ? "→ " + ItemGradeDesk.Number(value) : "→ —";
+            DrawText(g, threshold, strong, Lime, new(133, 124, 83, 20));
+            DrawText(g, ItemGradeDesk.Gap(focused), small, Lime, new(215, 125, 85, 18), right: true);
+        }
+        else DrawText(g, ItemGradeDesk.EmptyFocusMessage(plan), small, DeskMuted, new(24, 116, 276, 31), wrap: true);
+        DrawText(g, "Stat", small, DeskMuted, new(14, 163, 92, 18));
+        DrawText(g, "Value", small, DeskMuted, new(108, 163, 67, 18), right: true);
+        DrawText(g, "Grade", small, DeskMuted, new(181, 163, 39, 18));
+        DrawText(g, "Target gap", small, DeskMuted, new(225, 163, 85, 18), right: true);
+        using var line = new Pen(Color.FromArgb(43, 55, 61));
         for (int i = 0; i < plan.Stats.Count; i++)
         {
             var stat = plan.Stats[i]; int y = ItemGradeDesk.StatsTop + i * ItemGradeDesk.RowHeight; bool selected = stat == focused;
-            if (selected) Box(g, new(17, y - 3, 258, 57), Color.FromArgb(29, 43, 40), Border);
-            DrawText(g, stat.Label, body, selected ? Lime : DeskText, new(22, y, 132, 18));
-            DrawText(g, ItemGradeDesk.Number(stat.Value), strong, DeskText, new(152, y, 65, 18), right: true);
-            Chip(g, stat.Grade?.ToString() ?? "?", stat.Grade, new(219, y - 1, 52, 23));
-            using var track = new SolidBrush(Color.FromArgb(46, 60, 65)); g.FillRectangle(track, 22, y + 27, 248, 4);
-            if (ItemGradeDesk.Ratio(plan, stat) is double ratio)
-            { using var fill = new SolidBrush(Lime); g.FillRectangle(fill, 22, y + 27, (float)(248 * ratio), 4); }
-            DrawText(g, ItemGradeDesk.ProgressText(plan, stat), small, DeskMuted, new(22, y + 36, 190, 17));
-            DrawText(g, ItemGradeDesk.Gap(stat), small, DeskText, new(215, y + 36, 55, 17), right: true);
+            g.DrawLine(line, 14, y, 310, y);
+            DrawText(g, stat.Label, body, selected ? Lime : DeskText, new(14, y + 5, 93, 20));
+            DrawText(g, ItemGradeDesk.Number(stat.Value), strong, DeskText, new(108, y + 5, 67, 20), right: true);
+            Chip(g, stat.Grade?.ToString() ?? "?", stat.Grade, new(181, y + 4, 34, 20));
+            string gap = stat.Needed == 0 ? "Reached" : (stat.Target?.ToString() ?? "?") + " " + ItemGradeDesk.Gap(stat);
+            DrawText(g, gap, small, selected ? Lime : DeskMuted, new(221, y + 6, 89, 18), right: true);
         }
-        if (plan.Stats.Count == 0) DrawText(g, "No readable stats for this item.", body, DeskMuted, new(22, 240, 250, 70), wrap: true);
-        DrawRecipe(g, focused, plan);
-        g.DrawLine(line, 22, contentBottom + 9, 548, contentBottom + 9);
-        DrawText(g, "Target: " + plan.TargetLabel + " · Focus stat set in World & Tools > Item grades", small, DeskMuted, new(22, contentBottom + 18, 526, 18));
-        DrawText(g, footer.Length > 0 ? footer : "Read only · no item changes", small, DeskMuted, new(22, contentBottom + 40, 526, 27), wrap: true);
+        if (plan.Stats.Count == 0) DrawText(g, "No readable item stats", body, DeskMuted, new(14, ItemGradeDesk.StatsTop + 5, 296, 20));
+        int recipeTop = ItemGradeDesk.StatsTop + Math.Max(1, plan.Stats.Count) * ItemGradeDesk.RowHeight + 7;
+        g.DrawLine(line, 14, recipeTop, 310, recipeTop);
+        DrawRecipe(g, focused, recipeTop + 10);
         g.Restore(saved);
     }
-    void DrawRecipe(Graphics g, ItemStatPlan? stat, ItemGradePlan plan)
+    void DrawRecipe(Graphics g, ItemStatPlan? stat, int top)
     {
-        if (stat is null) { DrawText(g, ItemGradeDesk.EmptyFocusMessage(plan), body, DeskMuted, new(298, 242, 250, 80), wrap: true); return; }
-        DrawText(g, !stat.Graded ? "Grade unavailable" : stat.Needed == 0 ? "Target reached" : stat.Target is null || stat.Needed is null ? "Target unavailable" : $"A path to {stat.Target}", strong, DeskText, new(298, 240, 250, 22));
-        Box(g, new(298, 273, 250, 77), Card, Border);
-        using(var gem = new SolidBrush(GemColor(stat.GemName)))
-            g.FillPolygon(gem, [new PointF(312, 295), new(324, 285), new(336, 295), new(324, 320)]);
-        DrawText(g, ItemGradeDesk.GemSummary(stat), strong, DeskText, new(346, 284, 192, 40), wrap: true);
-        DrawText(g, stat.Graded && stat.Needed is not null ? "Current target · regular gem tier" : "No recommendation", small, DeskMuted, new(346, 327, 192, 18));
-        DrawText(g, stat.Projection is { AtPlusTen: true } ? "AAA socket scenario / estimate" : "+10 scenario / estimate", strong,
-            Color.FromArgb(203, 183, 149), new(298, 371, 250, 22));
-        DrawText(g, ItemGradeDesk.ProjectionText(stat), body, DeskText, new(298, 404, 250, 68), wrap: true);
-        DrawText(g, "Estimates assume available sockets. Upgrade bonuses and sockets beyond the two mapped fields are unconfirmed. This plan applies to the focus stat.",
-            small, DeskMuted, new(298, 482, 250, 66), wrap: true);
+        using (var gem = new SolidBrush(GemColor(stat?.GemName)))
+            g.FillPolygon(gem, [new PointF(15, top + 7), new(21, top + 2), new(27, top + 7), new(21, top + 16)]);
+        DrawText(g, stat is null ? "No focus gem estimate" : ItemGradeDesk.GemSummary(stat), strong, DeskText, new(32, top, 278, 35), wrap: true);
+        DrawText(g, "Current target · estimate", small, DeskMuted, new(14, top + 37, 296, 18));
+        string projection = stat is null ? "No +10 scenario available." : ItemGradeDesk.ProjectionText(stat);
+        DrawText(g, projection + " · estimate", small, DeskText, new(14, top + 57, 296, 34), wrap: true);
+        DrawText(g, footer.Length > 0 ? footer : "Focus stat only. Available sockets and upgrade bonuses unconfirmed.", small, DeskMuted, new(14, top + 93, 296, 29), wrap: true);
     }
     static Color GemColor(string? name) => name switch
     { "BlackMoon" => Color.FromArgb(180, 163, 207), "Sapphire" => Color.FromArgb(138, 169, 223), "Emerald" => Color.FromArgb(149, 195, 138),
         "Diamond" => Color.FromArgb(183, 219, 230), _ => Color.FromArgb(215, 127, 135) };
     static void DrawItemIcon(Graphics g, ItemGemGroup? group)
     {
-        Box(g, new(22, 52, 49, 49), Card, Border); using var pen = new Pen(Color.FromArgb(231, 188, 112), 2);
+        Box(g, new(12, 16, 31, 42), Color.FromArgb(32, 43, 49), Color.FromArgb(32, 43, 49));
+        using var pen = new Pen(Color.FromArgb(231, 188, 112), 1.5f);
         if (group is ItemGemGroup.Armor or ItemGemGroup.Shield)
-            g.DrawPolygon(pen, [new Point(32, 62), new(46, 57), new(61, 62), new(58, 82), new(46, 94), new(35, 82)]);
-        else { g.DrawLine(pen, 35, 88, 58, 63); g.DrawLine(pen, 34, 77, 46, 88); g.DrawLine(pen, 55, 64, 58, 58); }
+            g.DrawPolygon(pen, [new Point(18, 26), new(27, 22), new(37, 26), new(35, 40), new(27, 49), new(20, 40)]);
+        else { g.DrawLine(pen, 21, 48, 35, 28); g.DrawLine(pen, 19, 39, 28, 46); g.DrawLine(pen, 32, 29, 35, 24); }
     }
-    // Real native rendering, without showing a window, connecting a client or registering hotkeys.
+    // Native rendering without showing a window, connecting a client or registering hotkeys.
     internal Bitmap RenderPreview(ItemGradePlan? plan, string focus = "Auto", Size? available = null, int dpi = 96, string? status = null)
     {
-        Plan = plan; message = status; footer = "Gem / +10 estimates · sockets beyond two fields unconfirmed";
+        Plan = plan; message = status;
         focusStat = ItemGradeDesk.NormalizeFocus(focus); SizeFor(available ?? new(1920, 1080), dpi);
         var bitmap = new Bitmap(ClientSize.Width, ClientSize.Height);
         using var graphics = Graphics.FromImage(bitmap); graphics.Clear(Background); PaintDesk(graphics); return bitmap;

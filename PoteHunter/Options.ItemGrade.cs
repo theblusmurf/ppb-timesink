@@ -12,6 +12,9 @@ public sealed partial class Options
     public string ItemGradeHotkey {get;set;}="None";
     /// <summary>Focus stat in Upgrade Desk; Auto compares all supported unfinished stats and excludes reached targets.</summary>
     public string ItemGradeFocusStat {get;set;}="Auto";
+    int itemGradeScalePercent=100;
+    /// <summary>Item tooltip size on this PC; the overlay fits the available screen without changing this preference.</summary>
+    public int ItemGradeScalePercent {get=>itemGradeScalePercent;set=>itemGradeScalePercent=ItemGradeDesk.NormalizeScale(value);}
 }
 
 internal static class ItemGradeHotkeys

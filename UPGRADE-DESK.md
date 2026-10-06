@@ -1,9 +1,16 @@
 # Equipment Upgrade Desk
 
-The weapon and armor grade overlay now uses the selected Upgrade Desk design:
-a dark green panel with item identity, an explicitly labelled best-stat badge,
-three focus-stat metrics, every readable stat's grade and target progress, a
-regular-gem plan and a separately labelled AAA upgrade/socket estimate.
+The weapon and armor grade overlay uses the selected compact Slim Inspector:
+a graphite-and-lime vertical panel with item identity, an explicitly labelled
+best-stat badge, a single focus strip, every readable stat's value, grade and
+target gap, a regular-gem plan and a separately labelled AAA upgrade/socket estimate.
+The panel grows vertically to keep all readable stat rows visible.
+
+Adjust **Tooltip size %** in **World & Tools > Item grades**, from 75% to 200%.
+The default is 100%. The choice saves automatically and applies to both equipment
+and message tooltips. Text, icons and spacing scale together with Windows DPI;
+the displayed panel fits the monitor work area without changing the saved choice.
+Size is a local display preference, preserved when switching character profiles.
 
 Choose the target and **Focus stat** in **World & Tools > Item grades**. Auto picks
 the unfinished stat with the highest percentage of its selected grade threshold,

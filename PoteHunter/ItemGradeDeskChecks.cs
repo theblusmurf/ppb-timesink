@@ -34,9 +34,10 @@ internal static class ItemGradeDeskChecks
         var legacy = JsonSerializer.Deserialize<Options>("{\"Target\":\"Mimic\",\"TurnSpeedDegreesPerSecond\":150}")!;
         Require(legacy.ItemGradeFocusStat=="Auto" && legacy.Target=="Mimic" && legacy.TurnSpeedDegreesPerSecond==150,"Focus migration changed unrelated options.");
         Require(ItemGradeDesk.NormalizeFocus("bad")=="Auto" && ItemGradeDesk.NormalizeFocus(null)=="Auto","Invalid saved focus must fall back.");
-        foreach(int dpi in new[]{96,144,192}) foreach(var area in new[]{new Size(1920,1080),new Size(1366,728),new Size(800,560)})
+        Require(ItemGradeDesk.Width == 324 && ItemGradeDesk.Height(plan) < 570, "Compact inspector dimensions regressed.");
+        foreach(int percent in new[]{75,100,150,200}) foreach(int dpi in new[]{96,144,192}) foreach(var area in new[]{new Size(1920,1080),new Size(1366,728),new Size(800,560)})
         {
-            var logical = new Size(ItemGradeDesk.Width,ItemGradeDesk.Height(plan)); float scale=ItemGradeDesk.FitScale(logical,area,dpi);
+            var logical = new Size(ItemGradeDesk.Width,ItemGradeDesk.Height(plan)); float scale=ItemGradeDesk.FitScale(logical,area,dpi,percent);
             Require(logical.Width*scale<=area.Width+.01 && logical.Height*scale<=area.Height+.01,"DPI-scaled panel escaped its work area.");
             var screen=new Rectangle(-1366,-200,area.Width,area.Height);
             var size=new Size((int)(logical.Width*scale),(int)(logical.Height*scale));
@@ -122,6 +123,22 @@ internal static class ItemGradeDeskChecks
             var weaponPlan=ItemGradePlanner.Plan(sword,sword.Name,sword.Id,new Dictionary<string,int>{["MIN"]=290,["MAX"]=331,["ACC"]=298,["MAX MP"]=1660,["CRI"]=94,["MP REG"]=111},null);
             var armorPlan=ItemGradePlanner.Plan(armor,armor.Name,armor.Id,new Dictionary<string,int>{["DEF"]=135,["EVAS"]=101,["MAX HP"]=1590,["HP REG"]=80,["MR"]=84},null);
             var missing=ItemGradePlanner.Plan(null,"Unknown equipment",77,new Dictionary<string,int>{["DEF"]=4},null);
+            foreach(int percent in new[]{75,100,150,200})
+            {
+                overlay.ScalePercent=percent;
+                using var bitmap=overlay.RenderPreview(weaponPlan);
+                Require(bitmap.Width==(int)(ItemGradeDesk.Width*percent/100f),"Requested tooltip size was not applied.");
+                bitmap.Save(Path.Combine(output,$"upgrade-desk-size-{percent}.png"));
+                using var message=overlay.RenderPreview(null,status:"Connect PlayPoteBot to the game first.");
+                Require(message.Width==bitmap.Width,"Messages did not share the requested tooltip size.");
+            }
+            overlay.ScalePercent=100;
+            var allStats=ItemGradePlanner.Plan(sword,sword.Name,sword.Id,ItemGradeTable.StatOrder.ToDictionary(s=>s,_=>50),null);
+            using(var all=overlay.RenderPreview(allStats))all.Save(Path.Combine(output,"upgrade-desk-all-stats.png"));
+            Require(allStats.Stats.Count==13 && ItemGradeDesk.Height(allStats)>ItemGradeDesk.StatsTop+13*ItemGradeDesk.RowHeight,
+                "All stat rows must fit before the recipe footer.");
+            var ties=weaponPlan with { Stats=weaponPlan.Stats.Select(s=>s with { Grade=ItemGrade.AAA }).ToArray(),ItemGradeLabel="AAA(+5)" };
+            using(var tied=overlay.RenderPreview(ties))tied.Save(Path.Combine(output,"upgrade-desk-tied-grades.png"));
             foreach(var (name,plan,focus) in new[]{("weapon",weaponPlan,"Auto"),("armor",armorPlan,"MAX HP"),("armor-auto",armorPlan,"Auto"),("unknown",missing,"Auto"),
                 ("reached",ItemGradePlanner.Plan(armor,armor.Name,armor.Id,new Dictionary<string,int>{["DEF"]=500},ItemGrade.AAA),"Auto")})
             {
@@ -129,12 +146,13 @@ internal static class ItemGradeDeskChecks
                 Require(overlay.FocusedStat==ItemGradeDesk.Focus(plan,focus),"Rendered focus does not match saved preference.");
             }
             using(var empty=overlay.RenderPreview(null,status:"Hover a weapon or armor to see its stats."))empty.Save(Path.Combine(output,"upgrade-desk-empty.png"));
+            overlay.ScalePercent=200;
             using(var scaled=overlay.RenderPreview(weaponPlan,available:new Size(800,560),dpi:192))
-            {Require(scaled.Width<=800&&scaled.Height<=560,"Small-screen rendering clipped the panel.");scaled.Save(Path.Combine(output,"upgrade-desk-small-screen.png"));}
+            {Require(scaled.Width<=800&&scaled.Height<=560 && overlay.ScalePercent==200,"Screen fitting clipped the panel or replaced its saved size.");scaled.Save(Path.Combine(output,"upgrade-desk-small-screen.png"));}
             overlay.SetClickThrough(false); Require(overlay.HasPassiveWindowStyles&&!overlay.HasClickThroughStyle&&!overlay.Visible,"Manual mode removed no-activate styles or showed a test window.");
             File.WriteAllText(Path.Combine(output,"upgrade-desk-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,LiveClientConnected=false,
                 Checks=new[]{"planner-derived grades/gaps/gems/thresholds","all 13 supported stats compete for Auto focus","reached and above-target stats excluded without fallback","jewelry category suppression preserves ring-named weapons","immediate suppression and repeated-hover cache reset","closest target across unlike scales and AAA/S targets","target changes and stable percentage ties","explicit focus and missing-stat fallback","missing gem estimates preserve proximity","unknown/reached/empty states","legacy settings preserved",
-                    "all stats rendered","96/144/192 DPI and secondary monitor bounds","automatic click-through and manual no-activate styles","offscreen native rendering"}},new JsonSerializerOptions{WriteIndented=true}));
+                    "all 13 stat rows rendered","75/100/150/200 percent tooltip and message rendering","screen fitting preserves requested percentage","96/144/192 DPI and secondary monitor bounds","automatic click-through and manual no-activate styles","offscreen native rendering"}},new JsonSerializerOptions{WriteIndented=true}));
             return 0;
         }
         catch(Exception ex){Directory.CreateDirectory(output);File.WriteAllText(Path.Combine(output,"upgrade-desk-error.txt"),ex.ToString());return 1;}

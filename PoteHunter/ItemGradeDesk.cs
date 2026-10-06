@@ -35,8 +35,11 @@ internal static class ItemGradeDesk
     internal static string ProjectionText(ItemStatPlan stat) => !stat.Graded ? "No upgrade recommendation without grade data."
         : stat.Projection is { } projection ? projection.Describe()
         : stat.Grade >= ItemGrade.AAA ? "Already AAA or better. See the current target above." : "No +10 scenario available for this stat.";
-    internal const int Width = 570, RowHeight = 60, StatsTop = 238;
-    internal static int Height(ItemGradePlan? plan) => plan == null ? 250 : StatsTop + Math.Max(310, plan.Stats.Count * RowHeight) + 76;
-    internal static float FitScale(Size logical, Size available, int dpi) => (float)Math.Max(.01,
-        Math.Min(Math.Max(1, dpi / 96.0), Math.Min((double)available.Width / logical.Width, (double)available.Height / logical.Height)));
+    internal const int Width = 324, RowHeight = 28, StatsTop = 182;
+    internal const int MinimumScalePercent = 75, MaximumScalePercent = 200;
+    internal static int NormalizeScale(int percent) => Math.Clamp(percent, MinimumScalePercent, MaximumScalePercent);
+    internal static int Height(ItemGradePlan? plan) => plan == null ? 196 : StatsTop + Math.Max(1, plan.Stats.Count) * RowHeight + 148;
+    internal static float FitScale(Size logical, Size available, int dpi, int percent = 100) => (float)Math.Max(.01,
+        Math.Min(Math.Max(1, dpi / 96.0) * NormalizeScale(percent) / 100.0,
+            Math.Min((double)available.Width / logical.Width, (double)available.Height / logical.Height)));
 }
