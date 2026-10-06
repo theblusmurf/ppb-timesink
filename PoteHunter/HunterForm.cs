@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 namespace PoteHunter;
 
@@ -2777,7 +2777,7 @@ public sealed partial class HunterForm : Form
                                 try { await drive.Face(world,delta,token,.035); }
                                 catch(TurnUnresponsiveException) { TraceLog.Record("stationary target face unavailable",new {current.Id,current.DisplayName}); }
                                 message=$"Holding saved hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{swingWindow:F1})";
-                                await Input.Delay(100,token);
+                                await CombatFacingWait(drive,current,o,100,token);
                                 continue;
                             }
                         }
@@ -2905,7 +2905,7 @@ public sealed partial class HunterForm : Form
                         encounter.MarkAttack(current,hp);
                         encounterHasAttack=true;
                         message=$"Swinging at {current.DisplayName} from saved hunt point";
-                        await Input.Delay(45,token);
+                        await CombatFacingWait(drive,current,o,45,token);
                         // Stationary farm targets used to continue here before
                         // reaching the skill rotation. That made the bot swing
                         // forever while every configured skill was skipped.
@@ -3000,7 +3000,7 @@ public sealed partial class HunterForm : Form
                         }
                         else
                         {
-                            await Input.Delay(75,token);
+                            await CombatFacingWait(drive,current,o,75,token);
                         }
                         continue;
                     }
@@ -3134,7 +3134,7 @@ public sealed partial class HunterForm : Form
                     {
                         Input.HoldMouse(false, true, token);
                         SetCombatPickup(o.LootDuringSkillCooldowns && CombatPickup.SkillsCooling(o.SkillKeys,bar),existingDrops,o,token);
-                        await Input.Delay(50, token);
+                        await CombatFacingWait(drive,current,o,50,token);
                     }
                 }
                 }

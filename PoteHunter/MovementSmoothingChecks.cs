@@ -50,9 +50,15 @@ internal static class MovementSmoothingChecks
         int second=partial.Next(remaining,-observed,.004,false,80);
         Require(second!=0 && first*.004*.75+second*.004<=remaining*.70,
             "partial feedback allowed pending turns beyond the remaining angular budget");
-        var lost=new SmoothSteering();lost.Next(.04,0,.004,false,0);
-        Require(lost.Next(.04,0,.004,false,80)!=0 && lost.Next(.04,0,.004,false,160)==0 &&
-            lost.Next(.04,0,.004,false,299)==0 && lost.Next(.04,0,.004,false,300)!=0,
+        var lost=new SmoothSteering();long lastLostSend=0;double lostOutstanding=0;
+        for(int at=0;at<=200;at+=20)
+        {
+            int sent=lost.Next(.04,0,.004,false,at);
+            if(sent!=0){lastLostSend=at;lostOutstanding+=sent*.004;}
+            Require(lostOutstanding<=.04*.70+1e-9,"unobserved turns exceeded their reserved angle");
+        }
+        Require(lost.Next(.04,0,.004,false,lastLostSend+219)==0 &&
+            lost.Next(.04,0,.004,false,lastLostSend+220)!=0,
             "a dropped turn did not respect the bounded retry interval after the latest command");
         var reversed=new SmoothSteering();int old=reversed.Next(.08,0,.004,false,0);
         Require(reversed.Next(.02,0,.004,false,40)==0 && reversed.Next(-.08,0,.004,false,80)==0 &&

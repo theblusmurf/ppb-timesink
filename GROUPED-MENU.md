@@ -25,6 +25,16 @@ prevents rapid polling or alternating body/camera calls from bypassing the cap.
 At very low speeds with coarse calibration it waits until one calibrated pixel
 is affordable. Idle time stores at most 50ms or one pixel, preventing large bursts.
 
+Release1.118 tracks body facing during ordinary melee combat waits using short
+cooperative steps in the existing hunting activity. It starts fine tracking
+outside roughly two degrees and settles near one degree while keeping the
+existing attack permission. Small fractional corrections accumulate, normal
+turn steps use at most 32ms, and a delay over 50ms uses at most 20ms of correction
+instead of a catch-up burst. Target identity, range/protection, exclusive
+activities and the existing per-input stop/focus/health guards still apply.
+Ranged camera aim and calibration keep their existing behavior. The saved cap
+is preserved; changing it is optional after upgrading.
+
 Validation uses disconnected native UI fixtures and offline simulated turning.
 Actual game appearance and live movement smoothness require post-update testing.
 No live game input or changes to existing settings, routes or recovery profiles

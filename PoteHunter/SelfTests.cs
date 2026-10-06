@@ -30,6 +30,8 @@ static class SelfTests
             CheckTracking();
             MovementSmoothingChecks.Run().GetAwaiter().GetResult();
             TurnSpeedLimitChecks.Run();
+            CombatTurnTrackingChecks.Run().GetAwaiter().GetResult();
+            Input.CheckCombatTurnInput().GetAwaiter().GetResult();
             ProfileDiscovery.SelfTest();
             DataRecorder.SelfTest();
             Avoidance.SelfTest();

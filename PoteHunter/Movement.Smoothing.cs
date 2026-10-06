@@ -5,12 +5,18 @@ namespace PoteHunter;
 internal sealed class SmoothSteering
 {
     long lastAt, sentAt, lastProgressAt;
-    double velocity, sentHeading, observedHeading, outstandingTurn;
+    double velocity, sentHeading, observedHeading, outstandingTurn, fractionalPixels;
     bool started, awaitingHeading;
-    public void Reset() { started=awaitingHeading=false; velocity=outstandingTurn=0; }
-    public int Next(double error,double heading,double sensitivity,bool walking,long now,TurnRateBudget? rateBudget=null,double maxDegreesPerSecond=360)
+    internal const int FrameMilliseconds=16;
+    public void Reset() { started=awaitingHeading=false; velocity=outstandingTurn=fractionalPixels=0; }
+    public int Next(double error,double heading,double sensitivity,bool walking,long now,TurnRateBudget? rateBudget=null,double maxDegreesPerSecond=360,double deadZone=.035)
     {
         int limit=Math.Abs(Movement.CalculateTurn(error,sensitivity,walking));
+        error=Wrap(error);
+        if(!double.IsFinite(deadZone)||deadZone<=0||deadZone>.035)throw new ArgumentOutOfRangeException(nameof(deadZone));
+        // Fine visual tracking is independent of the looser attack permission.
+        if(limit==0 && Math.Abs(error)>=deadZone)
+            limit=Math.Max(1,(int)Math.Round(Math.Abs(error*.70/sensitivity)));
         if(rateBudget!=null)limit=Math.Min(limit,rateBudget.Available(now,maxDegreesPerSecond,sensitivity));
         if(!double.IsFinite(heading))throw new InvalidOperationException("Player heading is unavailable.");
         if(started)
@@ -29,27 +35,36 @@ internal sealed class SmoothSteering
             // a newer turn or an angle that is still arriving in partial updates.
             if(now-Math.Max(lastProgressAt,sentAt)>=220)outstandingTurn=0;
         }
-        if(limit==0) { velocity=0;return 0; }
-        if(started && now-lastAt<25)return 0;
+        if(Math.Abs(error)<deadZone) { velocity=fractionalPixels=0;return 0; }
+        if(limit==0)return 0;
+        if(started && now-lastAt<FrameMilliseconds)return 0;
         if(awaitingHeading && now-sentAt<80 && Math.Abs(Wrap(heading-sentHeading))<.001)return 0;
-        double dt=started ? Math.Clamp((now-lastAt)/1000.0,.025,.05) : .03;
-        if(!started || now-lastAt>250)velocity=0;
-        error=Wrap(error);
+        // Long combat/reader pauses never turn into a large catch-up packet.
+        double elapsed=started?(now-lastAt)/1000.0:.016;
+        double dt=elapsed>.050?.020:Math.Clamp(elapsed,.016,.032);
+        if(!started || now-lastAt>250)velocity=fractionalPixels=0;
         // Reserve unreported corrections against the remaining angle. Small
         // sensitivity can pipeline turns without blindly stacking near the goal.
         if(outstandingTurn!=0 && Math.Sign(outstandingTurn)!=Math.Sign(error))return 0;
         double available=Math.Max(0,Math.Abs(error)*.70-Math.Abs(outstandingTurn));
         int budgetPixels=(int)Math.Min(limit,Math.Floor(available/Math.Abs(sensitivity)));
         if(budgetPixels<1)return 0;
-        if(Math.Sign(velocity)!=Math.Sign(error))velocity=0;
+        if(Math.Sign(velocity)!=Math.Sign(error))velocity=fractionalPixels=0;
         const double acceleration=32;
         double maximum=walking?4.5:6.0;
         maximum=Math.Min(maximum,maxDegreesPerSecond*Math.PI/180);
-        double desired=Math.Sign(error)*Math.Min(maximum,Math.Sqrt(2*acceleration*Math.Max(0,Math.Abs(error)-.035)));
+        double desired=Math.Sign(error)*Math.Min(maximum,Math.Sqrt(2*acceleration*Math.Max(0,Math.Abs(error)-deadZone)));
         velocity=Math.Clamp(desired,velocity-acceleration*dt,velocity+acceleration*dt);
         double correction=Math.Sign(error)*Math.Min(Math.Abs(error)*.70,Math.Abs(velocity)*dt);
-        int pixels=Math.Clamp((int)Math.Round(correction/sensitivity),-budgetPixels,budgetPixels);
-        if(pixels==0)pixels=Math.Sign(error/sensitivity);
+        double precisePixels=correction/sensitivity+fractionalPixels;
+        int rounded=(int)Math.Round(precisePixels);
+        int pixels=Math.Clamp(rounded,-budgetPixels,budgetPixels);
+        fractionalPixels=rounded==pixels?precisePixels-rounded:0;
+        if(pixels==0)
+        {
+            if(!started){observedHeading=heading;lastProgressAt=now;started=true;}
+            lastAt=now;return 0;
+        }
         if(!started) { observedHeading=heading;lastProgressAt=now; }
         outstandingTurn+=pixels*sensitivity;
         rateBudget?.Consume(pixels,sensitivity);

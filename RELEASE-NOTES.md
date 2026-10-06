@@ -1,3 +1,9 @@
+## Release1.118
+
+Faster, smoother body turns during melee combat: follow the current target during ordinary combat waits in short cooperative steps, retain acceleration through the attack-facing tolerance, and settle visual facing near one degree. Accumulate fractional mouse corrections instead of forcing a pixel per poll; limit normal corrections to two frames and prevent large catch-up packets after longer pauses. Keep the saved 30–360°/s cap, existing attack/range rules, delayed-heading accounting, held attacks, and stop/focus/health/activity guards. Ranged camera aiming, calibration pulses and forward speed retain their existing behavior.
+
+Offline simulations at 150°/s settle a fixed 120° turn in 848 ms with a largest 2.52° correction; simulated 32 ms feedback settles in 864 ms with a largest 4.90° correction. These are controller simulations, not live-game timings. Delayed/partial feedback, turn bounds, cancellation, held attack preservation and disconnected UI checks pass. Existing settings and profiles are preserved; live smoothness still requires checking after updating.
+
 ## Release1.117
 
 Direct feature links under five collapsible sidebar groups; persistent Start/Stop/Connect actions; dedicated Farming and Overlays pages. New original app and desktop logo. Hunt setup now has a saved 30–360°/s horizontal turn cap, default 180°/s, shared by travel, facing and ranged camera yaw. Existing settings, profiles, bindings and stop guards are retained. Offline validation covers native navigation, small-window layouts, profile restoration and rate bounds; live smoothness remains to be checked after updating.

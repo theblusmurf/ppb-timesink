@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace PoteHunter;
 
@@ -203,6 +203,40 @@ public static class Input
     static Packet KeyPacket(Keys key, bool up) => new() { Type = 1, Value = new Union { Keyboard = new Keyboard { Scan = (ushort)MapVirtualKey((uint)key, 0), Flags = 8u | (up ? 2u : 0u) } } };
     static Packet UnicodePacket(char character, bool up) => new() { Type = 1, Value = new Union { Keyboard = new Keyboard { Scan = character, Flags = 4u | (up ? 2u : 0u) } } };
     static Packet MousePacket(bool right, bool up) => new() { Value = new Union { Mouse = new Mouse { Flags = right ? (up ? 16u : 8u) : (up ? 4u : 2u) } } };
+    internal static async Task CheckCombatTurnInput()
+    {
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
+        var savedSink=selfTestSink;var savedDown=selfTestDown;var packets=new List<Packet>();
+        try
+        {
+            selfTestSink=packets.Add;selfTestDown=_=>false;Allowed=()=>true;Preflight=null;PickupHoldProvider=null;
+            Release();packets.Clear();HoldMouse(false,true,default);long clock=0;
+            await CombatTurnTracking.WaitAsync(75,()=>clock,()=>{Turn(1,default);return true;},
+                async (ms,ct)=>{await Delay(0,ct);clock+=ms;},default);
+            if(!BasicAttackHeld||packets.Count(p=>p.Value.Mouse.Flags==2)!=1||packets.Any(p=>p.Value.Mouse.Flags==4)||
+                packets.Count(p=>p.Value.Mouse.Flags==1)!=5)
+                throw new Exception("Combat turn tracking interrupted held basic attack or skipped corrections.");
+            Release();
+            foreach(string guard in new[]{"focus","F9","Escape","Enter","health"})
+            {
+                Allowed=()=>true;selfTestDown=_=>false;Preflight=null;HoldMouse(false,true,default);packets.Clear();clock=0;
+                if(guard=="focus")Allowed=()=>false;
+                else if(guard=="health")Preflight=()=>throw new OperationCanceledException("health changed");
+                else selfTestDown=key=>key.ToString()==guard;
+                bool stopped=false;
+                try{await CombatTurnTracking.WaitAsync(75,()=>clock,()=>{Turn(1,default);return true;},
+                    async(ms,ct)=>{await Delay(0,ct);clock+=ms;},default);}
+                catch(OperationCanceledException){stopped=true;}
+                if(!stopped||BasicAttackHeld||packets.Any(p=>p.Value.Mouse.Flags==1))
+                    throw new Exception("Combat turn tracking bypassed "+guard+" or retained attack after interruption.");
+            }
+        }
+        finally
+        {
+            Preflight=null;PickupHoldProvider=null;Release();Allowed=savedAllowed;Preflight=savedPreflight;
+            PickupHoldProvider=savedPickup;selfTestSink=savedSink;selfTestDown=savedDown;
+        }
+    }
     public static async Task Delay(int ms, CancellationToken token)
     {
         long deadline = Environment.TickCount64 + ms;
@@ -650,7 +684,7 @@ public sealed partial class Movement
     Vec progressPosition;
     long progressAt, lastMotionTrace;
     readonly TurnResponse turnResponse = new();
-    public void ResetTurnResponse() { turnResponse.Reset();smoothSteering.Reset(); }
+    public void ResetTurnResponse() { turnResponse.Reset();smoothSteering.Reset();fineFacing=false; }
     public static double Angle(Vec a, Vec b) => Math.Atan2(a.X * b.Y - a.Y * b.X, a.X * b.X + a.Y * b.Y);
     public static Vec Rotate(Vec a, double angle) => new(a.X * Math.Cos(angle) - a.Y * Math.Sin(angle), a.X * Math.Sin(angle) + a.Y * Math.Cos(angle));
     // The client advances X/Z with cos(-heading-pi/2), sin(-heading-pi/2).
@@ -712,7 +746,12 @@ public sealed partial class Movement
         Forward = FromClientHeading(heading);
         if (delta.Length < .01) {turnResponse.Reset();return true;}
         double angle = Angle(Forward, delta);
-        if(Math.Abs(angle)<=tolerance) { smoothSteering.Reset();turnResponse.Reset();return true; }
+        if(Math.Abs(angle)<=tolerance)
+        {
+            // A wide attack tolerance must not restart the fine tracking ramp.
+            if(Math.Abs(angle)<=.035&&!fineFacing){smoothSteering.Reset();turnResponse.Reset();}
+            return true;
+        }
         int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64,turnRateBudget,TurnSpeedDegreesPerSecond);
         Vec position=world.PlayerPosition();
         if (pixels != 0) Input.Turn(pixels, token);
