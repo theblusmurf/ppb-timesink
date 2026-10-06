@@ -5,7 +5,7 @@ public readonly record struct TravelKeys(bool Forward,bool Back,bool Left,bool R
 public sealed partial class Movement
 {
     bool traveling;
-    Vec travelGoal,travelDirection,travelProgressPosition;
+    Vec travelGoal,travelProgressPosition;
     bool travelForward,travelBack,travelLeft,travelRight;
     long travelProgressAt;
     public bool IsTraveling => traveling;
@@ -16,20 +16,11 @@ public sealed partial class Movement
             throw new ArgumentOutOfRangeException(nameof(waypoint));
         Vec delta=waypoint-position;
         if(delta.Length<.001)return new(false,false,false,false,default);
-        Vec desired=delta/delta.Length;
         Vec forward=FromClientHeading(playerHeading);
-        Vec right=new(forward.Y,-forward.X);
-        double forwardAmount=desired.X*forward.X+desired.Y*forward.Y;
-        double rightAmount=desired.X*right.X+desired.Y*right.Y;
-        // A modest dead band keeps nearly axial travel from chattering an
-        // unnecessary second key while still allowing smooth diagonals.
         // Ranged travel never backs away or strafes. It keeps W held while the
         // mouse turns toward the waypoint, rather than pressing S, A, or D.
-        bool useForward=true,useBack=false;
-        bool useRight=false,useLeft=false;
-        Vec actual=forward*(useForward?1:useBack?-1:0)+right*(useRight?1:useLeft?-1:0);
-        if(actual.Length>0)actual/=actual.Length;
-        return new(useForward,useBack,useLeft,useRight,actual);
+        if(forward.Length>0)forward/=forward.Length;
+        return new(true,false,false,false,forward);
     }
 
     public bool StopTravel()
@@ -37,7 +28,7 @@ public sealed partial class Movement
         bool wasTraveling=traveling;
         Input.Hold(Keys.W,false,default);Input.Hold(Keys.S,false,default);
         Input.Hold(Keys.A,false,default);Input.Hold(Keys.D,false,default);
-        traveling=false;travelDirection=default;
+        traveling=false;
         travelForward=travelBack=travelLeft=travelRight=false;
         return wasTraveling;
     }
@@ -60,7 +51,6 @@ public sealed partial class Movement
         {
             StopTravel();return false;
         }
-        travelDirection=currentDirection;
         return true;
     }
 
@@ -85,7 +75,7 @@ public sealed partial class Movement
         {
             travelProgressPosition=position;travelProgressAt=now;
         }
-        travelGoal=waypoint;travelDirection=keys.Direction;
+        travelGoal=waypoint;
         travelForward=keys.Forward;travelBack=keys.Back;travelLeft=keys.Left;travelRight=keys.Right;traveling=true;
         // Input rechecks admission after ProtectionPreflight. If that preflight
         // stopped travel, a stale caller cannot press a movement key again.

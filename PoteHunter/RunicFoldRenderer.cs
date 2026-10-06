@@ -1,5 +1,4 @@
 using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 
 namespace PoteHunter;
 
@@ -12,25 +11,10 @@ internal static class RunicFoldRenderer
     static readonly Color Ivory=ImperialTheme.Text;
     static readonly Color Shadow=Color.FromArgb(220,ImperialTheme.Window);
 
-    internal static Size SizeAt(int percent)
-    {
-        double scale=Math.Clamp(percent,50,200)/100d;
-        return new((int)Math.Round(LogicalSize.Width*scale),(int)Math.Round(LogicalSize.Height*scale));
-    }
+    internal static Size SizeAt(int percent)=>LootOverlayBitmap.SizeAt(LogicalSize,percent);
 
     internal static Bitmap Render(LootTrackerSnapshot snapshot,int percent,int backgroundOpacityPercent=0)
-    {
-        Size size=SizeAt(percent);
-        var bitmap=new Bitmap(size.Width,size.Height,PixelFormat.Format32bppPArgb);
-        try
-        {
-            using var graphics=Graphics.FromImage(bitmap);
-            graphics.Clear(Color.Transparent);
-            Draw(graphics,snapshot,percent,backgroundOpacityPercent);
-            return bitmap;
-        }
-        catch {bitmap.Dispose();throw;}
-    }
+        =>LootOverlayBitmap.Render(LogicalSize,percent,graphics=>Draw(graphics,snapshot,percent,backgroundOpacityPercent));
 
     internal static void Draw(Graphics g,LootTrackerSnapshot snapshot,int percent,int backgroundOpacityPercent=0)
     {

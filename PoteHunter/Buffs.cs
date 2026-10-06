@@ -120,12 +120,6 @@ public sealed class BuffUpkeepPolicy
         else tracker.RetryAt = null;
     }
 
-    public void ResetAssignment(string characterIdentity, string zone, int pageBase, string slotKey)
-    {
-        foreach (var key in _trackers.Keys.Where(x => x.CharacterIdentity == characterIdentity && x.Zone == zone && x.PageBase == pageBase && x.SlotKey == slotKey).ToArray()) _trackers.Remove(key);
-        _assignments.Remove(($"{characterIdentity}\u001f{zone}\u001f{pageBase}", slotKey));
-    }
-
     public static UpkeepBuff Recognize(string? name)
     {
         var normalized = string.Join(' ', (name ?? string.Empty).Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

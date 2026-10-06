@@ -28,11 +28,6 @@ public sealed class HuntExcursion
         MovementBoundary=boundary;OutsideTrip=true;ReturnPending=true;
     }
 
-    public void RequestReturn()
-    {
-        if(OutsideTrip)ReturnPending=true;
-    }
-
     // The caller also waits for its locked target and pending pickup to finish.
     public bool CanReturn(bool hasEngaged)=>OutsideTrip && ReturnPending && !hasEngaged;
 

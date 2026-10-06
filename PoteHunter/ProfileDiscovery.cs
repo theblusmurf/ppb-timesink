@@ -23,11 +23,6 @@ public static partial class ProfileDiscovery
     static InvalidOperationException Failure(string reason) => new("Automatic client detection stopped: " + reason + ". Controls remain disabled.");
     static void Require(bool condition,string reason) { if(!condition) throw Failure(reason); }
 
-    public static ProfileDetection ResolveFile(string path)
-    {
-        return Resolve(File.ReadAllBytes(path));
-    }
-
     internal static ProfileDetection ResolveForConnection(byte[] bytes)
     {
         var result=Resolve(bytes);

@@ -45,13 +45,6 @@ internal static class ItemGradeLadder
         return Enum.TryParse(text.Trim(), ignoreCase: true, out grade) && Enum.IsDefined(grade);
     }
 
-    internal static Color ChipColor(ItemGrade? grade) => grade switch
-    {
-        ItemGrade.C => Color.FromArgb(0x62, 0xd0, 0x62), ItemGrade.B => Color.FromArgb(0x3c, 0xcf, 0xd8),
-        ItemGrade.A => Color.FromArgb(0xf2, 0xea, 0x96), ItemGrade.AA => Color.FromArgb(0xf3, 0x9a, 0x2c),
-        ItemGrade.AAA => Color.FromArgb(0xf6, 0xc4, 0x19), ItemGrade.S => Color.FromArgb(0xee, 0xe1, 0x3a),
-        _ => Color.FromArgb(0x8d, 0x99, 0xa6)
-    };
 }
 
 /// <summary>The bundled per-item grade table (Resources/ItemGrades/grade_breakpoints.csv.gz), loaded once on first use.</summary>

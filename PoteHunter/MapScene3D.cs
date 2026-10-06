@@ -15,7 +15,6 @@ internal sealed record MapMarker3D(string Name,Vec Position,double Height,Color 
 internal static class MapSceneGeometry
 {
     internal const int Grid=17;
-    internal const double TilePitch=315.07;
     internal const double CellStep=4.923075866699219;
     internal static double? Height(MapScene3D? scene,Vec point)
     {

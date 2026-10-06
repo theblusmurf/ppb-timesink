@@ -12,11 +12,7 @@ public sealed partial class World
     const string ManaPattern = "F3 0F 7E ?? 30 66 0F D6 42 44 8B ?? 38 89 42 4C 66 8B ?? 3C 66 89 42 50";
     // Current client packet-copy routine: copies CurrHP/CurrMP as one qword to +44/+48,
     // then MaxHP to +4c and MaxMP to +50. Wildcards cover the source base register.
-    static readonly byte?[] ManaLayoutCodeSignature =
-    [
-        0xF3,0x0F,0x7E,null,0x30, 0x66,0x0F,0xD6,0x42,0x44,
-        0x8B,null,0x38, 0x89,0x42,0x4C, 0x66,0x8B,null,0x3C, 0x66,0x89,0x42,0x50
-    ];
+    static readonly int ManaCodeLength = ManaPattern.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
     int manaCurrentOffset = -1;
     int manaMaximumOffset = -1;
     public string ManaStatus { get; private set; } = "Mana layout has not been checked";
@@ -29,7 +25,7 @@ public sealed partial class World
         {
             var evidence = ProfileDiscovery.OptionalEvidence(PoteMemoryProbe.Program.ClientPath, "Current/maximum mana fields", ManaPattern);
             if (evidence is null) { ManaStatus = "Mana code signature was missing or ambiguous"; return; }
-            var live = Native.Read(handle!, (nint)(moduleBase + evidence.CodeRva), ManaLayoutCodeSignature.Length);
+            var live = Native.Read(handle!, (nint)(moduleBase + evidence.CodeRva), ManaCodeLength);
             if (!ProfileDiscovery.Matches(live, evidence.Pattern)) { ManaStatus = "Loaded mana code does not match the client file"; return; }
             ConfigureMana(0x48, 0x50);
             ManaStatus = $"Mana layout validated at code RVA 0x{evidence.CodeRva:X}";
@@ -63,19 +59,6 @@ public sealed partial class World
     }
 
     public bool ManaSupported => manaCurrentOffset >= 0 && manaMaximumOffset >= 0;
-
-    public static bool SupportsManaLayout(ReadOnlySpan<byte> clientImage)
-    {
-        int matches = 0;
-        for (int offset = 0; offset <= clientImage.Length - ManaLayoutCodeSignature.Length; offset++)
-        {
-            int i = 0;
-            for (; i < ManaLayoutCodeSignature.Length; i++)
-                if (ManaLayoutCodeSignature[i] is byte expected && clientImage[offset + i] != expected) break;
-            if (i == ManaLayoutCodeSignature.Length && ++matches > 1) return false;
-        }
-        return matches == 1;
-    }
 
     public ManaReading ReadMana()
     {

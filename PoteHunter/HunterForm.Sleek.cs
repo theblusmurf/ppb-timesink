@@ -59,13 +59,7 @@ public sealed partial class HunterForm
         void UpdateRegion()
         {
             if (control.Width < 2 || control.Height < 2) return;
-            int diameter = Math.Min(radius * 2, Math.Min(control.Width, control.Height));
-            using var path = new GraphicsPath();
-            path.AddArc(0, 0, diameter, diameter, 180, 90);
-            path.AddArc(control.Width - diameter, 0, diameter, diameter, 270, 90);
-            path.AddArc(control.Width - diameter, control.Height - diameter, diameter, diameter, 0, 90);
-            path.AddArc(0, control.Height - diameter, diameter, diameter, 90, 90);
-            path.CloseFigure();
+            using var path = RoundedPath(control.Width, control.Height, radius);
             var previous = control.Region;
             control.Region = new Region(path);
             previous?.Dispose();

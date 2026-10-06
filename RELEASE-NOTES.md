@@ -1,3 +1,13 @@
+## Release1.125
+
+Remove obsolete source and consolidate repeated helpers while preserving current behavior.
+
+- Remove uncalled legacy combat, navigation, item-reading and UI helpers, unused fields and abandoned Ironbound decoration code. Keep active recovery, targeting, route safeguards and diagnostic tools.
+- Share the identical transparent loot-overlay bitmap creation and scaling logic, rounded-control geometry and installer user-data preservation checks. Keep the current layout, in-game item images, reset controls and saved options.
+- Remove three unused artwork files from embedded resources (3.2 MB of source assets), stop packaging superseded UI guides and correct current branding, hotkeys and public download instructions.
+
+Run clean builds, existing offline calculation/recovery/movement checks, native main/loot/item-overlay rendering and installer preservation checks. Validation sends no game input and does not replace the running installation or change user settings, routes, profiles or logs.
+
 ## Release1.124
 
 Keep Auto focus on every supported unfinished stat and prevent jewelry popups.

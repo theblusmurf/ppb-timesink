@@ -123,24 +123,6 @@ public sealed partial class Movement
         return false;
     }
 
-    public async Task<bool> AimVertical3D(World world,Entity target,CancellationToken token,double tolerance=.01)
-    {
-        RequireCameraCalibration();
-        if(!double.IsFinite(tolerance)||tolerance<=0||tolerance>.25)throw new ArgumentOutOfRangeException(nameof(tolerance));
-        var owner=world.LocalPlayer();
-        CameraFrame camera=FreshCamera(world,owner);
-        Vector3 aim=TargetPoint(target);
-        CameraError error=Error(camera,aim);
-        if(error.Depth<=0||Math.Abs(error.Pitch)<=tolerance)return error.Depth>0;
-        CameraError stabilizedError=StabilizeAim(target,error);
-        CameraError controlError=ControlError(camera,owner,aim,stabilizedError,out bool pivotValidated,out double pivotRayMiss,out double parallaxMultiplier);
-        int y=Pixels(controlError.Pitch,cameraPitchRadiansPerPixel,96,VerticalControlGain(controlError.Pitch));
-        Input.Aim(0,y,token);
-        TraceCamera("vertical target 3D",camera,target,error,controlError,pivotValidated,pivotRayMiss,parallaxMultiplier,0,y);
-        await Input.Delay(TurnFeedbackDelay(Math.Abs(y)),token);
-        return false;
-    }
-
     static CameraFrame FreshCamera(World world,Entity owner)
     {
         CameraFrame frame=world.ReadCamera();

@@ -21,29 +21,28 @@ $test=Join-Path $staging 'install-test'
 New-Item -ItemType Directory -Path $test | Out-Null
 $sentinel='preserve-user-settings'
 New-Item -ItemType Directory -Path (Join-Path $test 'hunting-logs/test-session') -Force | Out-Null
-Set-Content -LiteralPath (Join-Path $test 'settings.json') -Value $sentinel
-Set-Content -LiteralPath (Join-Path $test 'navigation-routes.json') -Value $sentinel
-foreach($name in 'repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv') {
+$preservedFiles=@('settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv')
+function Assert-PreservedUserData {
+    param([string]$Stage)
+    foreach($name in $preservedFiles){
+        if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "$Stage changed $name"}
+    }
+}
+foreach($name in $preservedFiles) {
     Set-Content -LiteralPath (Join-Path $test $name) -Value $sentinel
 }
 $process=Start-Process -FilePath $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/NOICONS',('/DIR="'+$test+'"') -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0){throw "Installer smoke test failed: $($process.ExitCode)"}
-foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv'){
-    if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Installer changed $name"}
-}
+Assert-PreservedUserData -Stage 'Installer'
 if(!(Test-Path -LiteralPath (Join-Path $test 'PoteHunter.exe')) -or
     (Get-Content -LiteralPath (Join-Path $test 'release-version.txt') -Raw).Trim() -ne $Version){throw 'Installer payload/version missing.'}
 # Run the actual patcher install routine from the package copy, outside the target.
 $patchTestHost=Join-Path $staging 'PoteHunter/PoteHunter.exe'
 $process=Start-Process -FilePath $patchTestHost -ArgumentList '--patch-install-check',('"'+$installer+'"'),('"'+$test+'"'),$Version,$hash -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $staging 'patch-install-check.json'))){throw "Auto patcher install smoke test failed: $($process.ExitCode)"}
-foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv'){
-    if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Auto patcher changed $name"}
-}
+Assert-PreservedUserData -Stage 'Auto patcher'
 $process=Start-Process -FilePath (Join-Path $test 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $test 'settings.json')) -or !(Test-Path (Join-Path $test 'navigation-routes.json'))){throw 'Uninstall did not preserve user data.'}
-foreach($name in 'settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv'){
-    if((Get-Content -LiteralPath (Join-Path $test $name) -Raw).Trim() -ne $sentinel){throw "Uninstall changed $name"}
-}
+Assert-PreservedUserData -Stage 'Uninstall'
 @{Passed=$true;Version=$Version;Install=$true;Upgrade=$true;AutoPatcherInstall=$true;StartupBlockedDuringPatch=$true;StartupAllowedAfterPatch=$true;ProfilesAndLogsPreserved=$true;HuntingSessionLogsPreserved=$true;UninstallPreservesUserData=$true;SHA256=$hash} | ConvertTo-Json | Set-Content (Join-Path $output 'installer-checks.json')
 

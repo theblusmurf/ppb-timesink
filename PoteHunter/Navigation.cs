@@ -131,9 +131,6 @@ public sealed partial class Navigation
         return true;
     }
 
-    public bool LoadSavedRoute(int zone,string? path=null) =>
-        LoadSavedRoutes(path) && savedRoutes.Any(route=>route?.Zone==zone);
-
     public bool ClearSavedRoute(int slot,string? path=null)
     {
         if(slot is < 0 or >= SavedRouteSlotCount || !ReloadRoutesForWrite(path))return false;

@@ -587,12 +587,6 @@ public static class Input
         }
         finally {Preflight=null;PickupHoldProvider=null;Release();selfTestSink=null;Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;}
     }
-    public static async Task ChargeClick(int milliseconds, CancellationToken token)
-    {
-        if(milliseconds<50||milliseconds>10000)throw new ArgumentOutOfRangeException(nameof(milliseconds));
-        try { HoldMouse(true,true,token); await Delay(milliseconds,token); }
-        finally { HoldMouse(true,false,token); }
-    }
     public static async Task CastSkill(SkillUseKind use,int chargeMilliseconds,CancellationToken token,Action? onInputStarted=null)
     {
         // Older clients do not expose a use-kind for ordinary active skills.

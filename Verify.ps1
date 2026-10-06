@@ -35,4 +35,4 @@ $uiProcess = Start-Process -FilePath $application -ArgumentList '--ranged-ui-che
 if ($uiProcess.ExitCode -ne 0) {
     throw "Ranged settings/layout checks failed. See $(Join-Path $output 'ranged-ui-check.json')."
 }
-Write-Output 'Verification passed: all three projects build, offline self-tests pass, and ranged settings/layout checks pass.'
+Write-Output 'Verification passed: both projects build, offline self-tests pass, Upgrade Desk checks pass, and ranged settings/layout checks pass.'

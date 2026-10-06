@@ -8,7 +8,6 @@ namespace PoteHunter;
 public sealed partial class World
 {
     DurabilityCodeLayout? durabilityLayout;
-    public bool DurabilitySupported => durabilityLayout != null;
     public string DurabilityStatus { get; private set; } = "Equipment durability has not been checked";
 
     public void ConfigureDurability()

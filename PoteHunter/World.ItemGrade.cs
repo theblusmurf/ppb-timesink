@@ -134,10 +134,9 @@ internal static class ItemStatKinds
 
 public sealed partial class World
 {
-    internal const int ItemWrapperDumpLength = 0x1D0, ItemBaseDumpLength = 0x110, ItemInfoDumpLength = 0x60, ItemDefinitionLength = 0x26c;
+    internal const int ItemBaseDumpLength = 0x110, ItemInfoDumpLength = 0x60, ItemDefinitionLength = 0x26c;
     ItemGradeLayout? itemGradeLayout;
     string itemGradeStatus = "Item tooltip state has not been discovered.";
-    internal string ItemGradeStatus => itemGradeStatus;
 
     void ConfigureItemGradeFromClient()
     {
@@ -305,27 +304,6 @@ public sealed partial class World
             return text.Any(c => char.IsControl(c) || c == '�') ? null : text;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { return null; }
-    }
-
-    /// <summary>
-    /// The game's string table entries the item tooltip builder uses (docs/atlas/items.md), read for the --item-grade-probe diagnostic so
-    /// the meaning of each tooltip line can be confirmed from the live client. Read-only; indices are table slots of 0x400 bytes each.
-    /// </summary>
-    internal IReadOnlyDictionary<string, string> TooltipLabels(IReadOnlyDictionary<string, int> indices)
-    {
-        var result = new Dictionary<string, string>();
-        if (handle is null || itemGradeLayout is not { } layout) return result;
-        foreach (var (name, index) in indices)
-        {
-            try
-            {
-                byte[] bytes = Native.Read(handle, (nint)(moduleBase + layout.StatLabelsRva + index * 0x400L), 128);
-                int end = Array.IndexOf(bytes, (byte)0); if (end < 0) end = bytes.Length;
-                result[name] = System.Text.Encoding.UTF8.GetString(bytes, 0, end);
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException and not AccessViolationException) { result[name] = "<unreadable: " + ex.Message + ">"; }
-        }
-        return result;
     }
 
 }

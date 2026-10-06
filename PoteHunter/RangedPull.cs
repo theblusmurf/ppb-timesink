@@ -235,7 +235,6 @@ public sealed class RangedPull
         lastUpdateAt=now;
     }
 
-    static bool Elapsed(long now,long since,int seconds)=>now-since>=seconds*1000L;
     static bool Within(Vec a,Vec b,double radius)
     {
         double x=Math.Abs(a.X-b.X),y=Math.Abs(a.Y-b.Y);

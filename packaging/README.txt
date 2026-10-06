@@ -1,6 +1,6 @@
-PlayPoteBot - Wayfinder
+PlayPoteBot - Orbital Ops
 
-Navy-and-brass theme, bottom navigation, expandable command sections and
+Graphite surfaces, lime accents, a left control rail, expandable settings and
 HP/MP status bars. Routes opens Navigation with native 3D and the original 2D view.
 Hover HP/MP for details. Route and loot options remain independently adjustable.
 
@@ -14,16 +14,16 @@ a fixed north-up tilted/top camera. Radar radius controls player-centered zoom;
 the route overlay fits paths and displays corridor/anchor areas. Both remain
 click-through and always use the current game zone. Map layers/opacity apply
 to the 3D overlays too. Display controls do not change movement or recovery.
-No game models or artwork are included. Terrain is for viewing and does not alter
+No game map models or map artwork are included. Terrain is for viewing and does not alter
 movement, collision or recovery. See NAVIGATION-3D.md for supported maps and limits.
 
-PPB keeps the existing PoteHunter.exe and package names for upgrade compatibility.
+PlayPoteBot keeps the existing PoteHunter.exe and package names for upgrade compatibility.
 Extract the entire folder and run PoteHunter.exe or Start-Fixed-Detection.cmd.
 Normal executable and packaged launcher starts enable verified native read/input.
 Client connection and Windows export validation are still required before input.
 Or download PoteHunter-Release1.x-Setup.exe for an installed copy with shortcuts
 and an uninstaller. Setup preserves existing settings and saved route/profile files.
-Setup > Updates connects to the public theblusmurf/PoteHunter-Releases feed.
+Settings > Updates connects to the public theblusmurf/PoteHunter-Releases feed.
 No GitHub account or token is required; development source remains private.
 Automatic patching checks at startup/every 30 minutes and applies newer releases
 only when hunting, setup/tests, dialogs and route recording are stopped.
@@ -41,8 +41,8 @@ Also preserve navigation-routes.json, repair-profile.json, and revival-profile.j
 Choose Solo, Group combat, Healer or Group healer in Setup.
 For Group healer, choose a tank and set follow distance, healing skills and range.
 Support contains skill buffs and attack/defense potion switches.
-Settings save automatically. F8 starts; F9 stops.
-See COMPACT-UI.md for details and validation limits.
+Settings save automatically. F6 calibrates, F8 starts/stops hunting, and F9 stops.
+See ORBITAL-OPS.md for the current layout; recovery instructions follow below.
 
 Death recovery (Setup, combat modes):
 - Confirmed 0 HP is death. Auto recovery also interrupts resting when HP hits 0.

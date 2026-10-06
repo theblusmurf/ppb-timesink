@@ -283,14 +283,6 @@ public sealed partial class HunterForm
 
     static TabPage monstersPageFor(TabControl tabs)=>tabs.TabPages.Cast<TabPage>().Single(p=>p.Text=="Targets");
 
-    static string FriendlyPageName(string text) => text switch
-    {
-        "Healer / Buffs" => "Support",
-        "Ground loot" => "Loot",
-        "Ranged Pull" => "Ranged pull",
-        _ => text
-    };
-
     void ThemeTree(Control root)
     {
         foreach (Control control in root.Controls)

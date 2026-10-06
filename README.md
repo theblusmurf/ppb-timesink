@@ -1,4 +1,4 @@
-# PPB
+# PlayPoteBot
 
 **Advanced > Navigation** has a separate **Show route overlay** toggle for
 an automatically fitted map of Primary and both Alternative paths, saved
@@ -40,19 +40,19 @@ route. Escape, manual Enter/chat, and game focus loss stop automated input.
 Route shortcuts require connection and stopped hunting, with the game or
 PoteHunter in front. F6/F8 require the game in front.
 
-Latest appearance update: [sleek desktop UI](SLEEK-UI.md), with slate surfaces, teal accents, rounded settings cards, and clearer typography.
+Current interface: [Orbital Ops](ORBITAL-OPS.md), with graphite surfaces, lime accents, a left control rail and expandable settings.
 
-Windows x64 hunter with a compact desktop UI, combined group healer mode, HP/MP recovery, attack/defense potions, ranged pack farming, and automated ZIP packaging. See [the compact UI guide](COMPACT-UI.md), [group healer notes](HEALBOT-UPDATE.md), and [potion notes](POTION-UPDATE.md).
+Windows x64 hunter with combined group healer mode, HP/MP recovery, attack/defense potions, ranged pack farming, an installer and a public auto-updater. See [the interface guide](ORBITAL-OPS.md), [group healer notes](HEALBOT-UPDATE.md), and [potion notes](POTION-UPDATE.md).
 
 ## Download and run
 
-Download the `PoteHunter-<version>-win-x64.zip` asset from a release, extract the whole ZIP, and run `PoteHunter/Start-Fixed-Detection.cmd`. Keep the application executable and runtime files, and runtime files together. The ZIP includes .NET; users do not need the SDK.
+Download the installer from [official public releases](https://github.com/theblusmurf/PoteHunter-Releases/releases) for installation and upgrades. For a portable copy, download `PoteHunter-<version>-win-x64.zip`, extract the whole ZIP, and run `PoteHunter/PoteHunter.exe`. Both include .NET; users do not need the SDK. Keep the application executable and runtime files together. Ordinary startup enables verified native read/input; the CMD and PowerShell shortcuts remain available.
 
-The game client is installed separately. The current reader expects `C:\Program Files (x86)\AAT-Games\Client.exe`. Start the client and log in before starting the hunter. F8 calibrates and starts; F9 stops. Configuration changes are saved to the extracted application's `settings.json`.
+The game client is installed separately. The current reader expects `C:\Program Files (x86)\AAT-Games\Client.exe`. Start the client and log in before starting the hunter. F6 calibrates, F8 starts/stops hunting, and F9 stops. Configuration changes are saved to the extracted application's `settings.json`.
 
 Routine game patches are accepted automatically when their required signatures and live layout still validate. A new executable fingerprint alone does not block input. The bot verifies the connected process/window and input backend before reporting a successful connection; genuinely incompatible layouts still stop with a specific error. After updating the game, restart it and reconnect the hunter.
 
-The repository is intended to remain private. GitHub release and Actions downloads require access to the private repository. You can separately share a downloaded application ZIP with users without sharing the source repository.
+Development source and Actions remain in the private repository. Installers, portable ZIPs and updater downloads are published separately to [PoteHunter-Releases](https://github.com/theblusmurf/PoteHunter-Releases/releases), without requiring a GitHub account or token.
 
 ## Ranged packs
 
