@@ -74,8 +74,8 @@ internal sealed partial class ItemGradeOverlay
         Chip(g, plan.ItemGradeLabel, best, new(456, 54, 92, 30)); DrawText(g, "BEST STAT", small, DeskMuted, new(456, 89, 92, 18), right: true);
         using var line = new Pen(Color.FromArgb(48, DeskMuted)); g.DrawLine(line, 22, 114, 548, 114);
         Metric(g, focused is null ? "—" : ItemGradeDesk.Number(focused.Value), (focused?.Label ?? "No stat") + " · current", 22);
-        Metric(g, ItemGradeDesk.Gap(focused), focused?.Target is { } t ? $"Points to {t}" : "Grade unavailable", 200);
-        Metric(g, focused?.Target?.ToString() ?? "—", "Target grade", 378);
+        Metric(g, ItemGradeDesk.Gap(focused), focused?.Target is { } t ? $"Points to {t}" : "No eligible focus", 200);
+        Metric(g, focused?.Target?.ToString() ?? plan.FixedTarget?.ToString() ?? "Auto", "Target grade", 378);
         DrawText(g, "STAT OVERVIEW · " + (plan.FixedTarget?.ToString() ?? "AUTO"), small, DeskMuted, new(22, 214, 252, 18));
         DrawText(g, "FOCUS STAT · " + (focused?.Label ?? "NONE"), small, DeskMuted, new(298, 214, 250, 18));
         int contentBottom = height - 76; g.DrawLine(line, 282, 214, 282, contentBottom - 8);
@@ -93,15 +93,15 @@ internal sealed partial class ItemGradeOverlay
             DrawText(g, ItemGradeDesk.Gap(stat), small, DeskText, new(215, y + 36, 55, 17), right: true);
         }
         if (plan.Stats.Count == 0) DrawText(g, "No readable stats for this item.", body, DeskMuted, new(22, 240, 250, 70), wrap: true);
-        DrawRecipe(g, focused);
+        DrawRecipe(g, focused, plan);
         g.DrawLine(line, 22, contentBottom + 9, 548, contentBottom + 9);
         DrawText(g, "Target: " + plan.TargetLabel + " · Focus stat set in World & Tools > Item grades", small, DeskMuted, new(22, contentBottom + 18, 526, 18));
         DrawText(g, footer.Length > 0 ? footer : "Read only · no item changes", small, DeskMuted, new(22, contentBottom + 40, 526, 27), wrap: true);
         g.Restore(saved);
     }
-    void DrawRecipe(Graphics g, ItemStatPlan? stat)
+    void DrawRecipe(Graphics g, ItemStatPlan? stat, ItemGradePlan plan)
     {
-        if (stat is null) { DrawText(g, "Waiting for readable item stats.", body, DeskMuted, new(298, 242, 250, 80), wrap: true); return; }
+        if (stat is null) { DrawText(g, ItemGradeDesk.EmptyFocusMessage(plan), body, DeskMuted, new(298, 242, 250, 80), wrap: true); return; }
         DrawText(g, !stat.Graded ? "Grade unavailable" : stat.Needed == 0 ? "Target reached" : stat.Target is null || stat.Needed is null ? "Target unavailable" : $"A path to {stat.Target}", strong, DeskText, new(298, 240, 250, 22));
         Box(g, new(298, 273, 250, 77), Card, Border);
         using(var gem = new SolidBrush(GemColor(stat.GemName)))

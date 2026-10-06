@@ -1,3 +1,13 @@
+## Release1.124
+
+Keep Auto focus on every supported unfinished stat and prevent jewelry popups.
+
+- Compare all 13 supported stat fields with their own selected grade threshold. Exclude values at or above the target; if every supported target is reached, show completion instead of falling back to a reached stat. Manual focus preferences and the full stat overview remain available.
+- Exclude jewelry using item category metadata rather than item names. Rings, necklaces, amulets, earrings and bracelets do not open automatic hover or manual-hotkey overlays. Dismiss a previous equipment overlay immediately when jewelry is recognized; keep ring-named weapons eligible.
+- Add every-stat ranking, exact/above-target exclusion, unavailable-threshold, jewelry-category and hidden-window suppression checks. Preserve target/focus choices, passive display, settings and all gameplay behavior.
+
+Offline calculation and UI checks run without game input. Exact live jewelry-category coverage and hover behavior still require confirmation after upgrading; the running installation is not replaced during validation.
+
 ## Release1.123
 
 The item Upgrade Desk now defaults to the unfinished stat closest to its target grade.

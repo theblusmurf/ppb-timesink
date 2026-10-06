@@ -8,7 +8,8 @@ internal sealed record InventoryEntry(ulong ItemUid,ushort PrototypeId,ushort Pa
 /// <summary>The item whose tooltip the game is showing, read from client memory, with its tooltip stat values keyed by the grade table's labels.</summary>
 /// <summary>Retry is set when the read failed transiently (tooltip changed mid-read, proof mismatch) rather than because the tooltip is not a gradeable item.</summary>
 internal sealed record HoveredItemReading(bool Found, string Status, InventoryEntry? Entry, string Name,
-    IReadOnlyDictionary<string, int> Stats, HoveredItemDetails? Details = null, bool Retry = false, int UpgradeLevel = 0);
+    IReadOnlyDictionary<string, int> Stats, HoveredItemDetails? Details = null, bool Retry = false, int UpgradeLevel = 0,
+    bool SuppressOverlay = false);
 
 /// <summary>Raw facts behind a reading, for the probe and the trace log.</summary>
 internal sealed record HoveredItemDetails(uint Helper, uint Wrapper, uint Base, uint Info, int GradeIndex, string GradeName,
@@ -248,6 +249,9 @@ public sealed partial class World
             var details = DescribeItem(prototype);
             string name = string.IsNullOrWhiteSpace(details.Name) ? "item " + prototype : details.Name;
             var entry = new InventoryEntry(uid, prototype, position, (flags & 8) != 0, count, wrapper, itemBase);
+            var gradeProfile = ItemGradeTable.Find(prototype);
+            if (ItemGradeEligibility.IsJewelry(details.Category, gradeProfile?.Type, gradeProfile?.Category))
+                return new(false, "Jewelry is excluded from item grade calculations.", entry, name, empty, SuppressOverlay: true);
             if ((flags & 1) == 0)
                 return new(false, name + " is not equipment, so it has no stat grades.", entry, name, empty);
             var sockets = new List<int>();

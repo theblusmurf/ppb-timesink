@@ -42,7 +42,7 @@ public sealed partial class HunterForm
         stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         void Add(Control control){control.Margin=new Padding(3,6,3,6);stack.Controls.Add(control,0,stack.RowCount++);}
         Add(new Label{AutoSize=true,Font=new Font("Segoe UI Semibold",12),Text="Item grades"});
-        Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Connect, then hover a weapon or armor until its tooltip appears. Upgrade Desk opens beside the item with stat progress, a focus-stat gem plan and upgrade estimates. Automatic mode lets mouse clicks pass through and keeps the game in focus."});
+        Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Connect, then hover a weapon or armor until its tooltip appears. Upgrade Desk opens beside the item with stat progress, a focus-stat gem plan and upgrade estimates. Jewelry does not open the overlay. Automatic mode lets mouse clicks pass through and keeps the game in focus."});
         Add(itemGradeEnabled);
         Add(itemGradeAutoShow);
         var row=new FlowLayoutPanel{AutoSize=true,WrapContents=true};
@@ -52,7 +52,7 @@ public sealed partial class HunterForm
         Add(row);
         var focusRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true};
         focusRow.Controls.Add(new Label{AutoSize=true,Text="Focus stat",Margin=new Padding(0,6,6,0)});focusRow.Controls.Add(itemGradeFocus);
-        focusRow.Controls.Add(new Label{AutoSize=true,Text="Auto picks the unfinished stat closest to its target by percentage. Missing saved stats use Auto.",Margin=new Padding(6,6,6,0)});
+        focusRow.Controls.Add(new Label{AutoSize=true,Text="Auto compares all supported stats below the selected target. Reached targets are skipped. Missing saved stats use Auto.",Margin=new Padding(6,6,6,0)});
         Add(focusRow);
         Add(itemGradeStatus);
         Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Gem and +10 projections are estimates from the imported table and upgrade assumptions. Existing sockets beyond the two mapped fields are not confirmed."});
@@ -158,6 +158,15 @@ public sealed partial class HunterForm
         itemGradeShownHelper=0;itemGradeSkippedHelper=0;itemGradeAwayPolls=0;
     }
 
+    bool SuppressItemGradeReading(HoveredItemReading reading,uint helper=0)
+    {
+        if(!reading.SuppressOverlay)return false;
+        HideItemGradeOverlay();
+        itemGradeSkippedHelper=helper;
+        itemGradeLastResult.Text=reading.Status;
+        return true;
+    }
+
     /// <summary>Polls the game's own hovered-tooltip pointer (one 4-byte read) and shows or hides the box as the tooltip comes and goes.</summary>
     void ItemGradeHoverTick()
     {
@@ -170,6 +179,7 @@ public sealed partial class HunterForm
         try
         {
             var reading=world.ItemUnderCursor(Input.Cursor());
+            if(SuppressItemGradeReading(reading,helper))return;
             if(!reading.Found)
             {
                 if(reading.Retry)return;
@@ -186,6 +196,7 @@ public sealed partial class HunterForm
 
     void ShowItemGradePlan(HoveredItemReading reading,bool auto)
     {
+        if(SuppressItemGradeReading(reading))return;
         var cursor=Input.Cursor();
         var target=SelectedItemGradeTarget;
         itemGradeOverlay??=new ItemGradeOverlay();
@@ -202,19 +213,24 @@ public sealed partial class HunterForm
     internal void ShowItemGradeUnderCursor()
     {
         var cursor=Input.Cursor();
-        itemGradeOverlay??=new ItemGradeOverlay();
         string key=ItemGradeHotkeys.Name(SelectedItemGradeKey);
+        void ShowMessage(string text)
+        {
+            itemGradeOverlay??=new ItemGradeOverlay();
+            itemGradeOverlay.SetClickThrough(false);itemGradeOverlay.AutoHide=true;
+            itemGradeOverlay.ShowMessage(text,cursor);
+        }
         try
         {
-            itemGradeOverlay.SetClickThrough(false);itemGradeOverlay.AutoHide=true;
             if(!connected||!world.ConnectionVerified)
-            {itemGradeOverlay.ShowMessage("Connect PoteHunter to the game first.",cursor);return;}
+            {ShowMessage("Connect PoteHunter to the game first.");return;}
             var reading=world.ItemUnderCursor(cursor);
+            if(SuppressItemGradeReading(reading))return;
             if(!reading.Found)
             {
                 TraceLog.Record("item grade read",new{reading.Found,reading.Status,reading.Entry?.PrototypeId,reading.Name,Automatic=false});
                 itemGradeLastResult.Text=reading.Status;
-                itemGradeOverlay.ShowMessage(reading.Status,cursor);
+                ShowMessage(reading.Status);
                 return;
             }
             ShowItemGradePlan(reading,auto:false);
@@ -224,7 +240,27 @@ public sealed partial class HunterForm
         {
             TraceLog.Record("item grade read failed",new{Error=ex.ToString()});
             itemGradeLastResult.Text="Read failed: "+ex.Message;
-            itemGradeOverlay.ShowMessage("Couldn't read that item ("+ex.Message+"). Press "+key+" to try again.",cursor);
+            ShowMessage("Couldn't read that item ("+ex.Message+"). Press "+key+" to try again.");
         }
+    }
+
+    // Exercise the production suppression path on a hidden disconnected form, without opening a game or overlay window.
+    internal void CheckItemGradeSuppression()
+    {
+        if(!offlinePreviewMode)throw new InvalidOperationException("Suppression checks require a disconnected preview.");
+        var jewelry=new HoveredItemReading(false,"Jewelry excluded",null,"Ring",new Dictionary<string,int>(),SuppressOverlay:true);
+        itemGradeShownHelper=10;itemGradeAwayPolls=5;
+        if(!SuppressItemGradeReading(jewelry,20)||itemGradeShownHelper!=0||itemGradeSkippedHelper!=20||itemGradeAwayPolls!=0)
+            throw new Exception("Jewelry did not immediately clear the previous item and retain its skipped helper.");
+        if(!SuppressItemGradeReading(jewelry,20)||itemGradeSkippedHelper!=20)
+            throw new Exception("Repeated jewelry suppression changed its skipped helper.");
+        ShowItemGradePlan(jewelry,auto:true);
+        if(itemGradeOverlay is not null||itemGradeShownHelper!=0)
+            throw new Exception("Suppressed jewelry constructed or showed an overlay.");
+        var equipment=new HoveredItemReading(true,"Weapon",null,"Mount Ring",new Dictionary<string,int>());
+        if(SuppressItemGradeReading(equipment))throw new Exception("Ordinary equipment was suppressed.");
+        HideItemGradeOverlay();
+        if(itemGradeShownHelper!=0||itemGradeSkippedHelper!=0)
+            throw new Exception("Clearing the jewelry hover did not permit subsequent equipment reads.");
     }
 }

@@ -9,14 +9,17 @@ internal static class ItemGradeDesk
     internal static readonly FocusChoice[] FocusChoices = [new("Auto", "Auto · closest target"),
         .. ItemGradeTable.StatOrder.Select(key => new FocusChoice(key, ItemGradeTable.DisplayName(key)))];
     internal static string NormalizeFocus(string? key) => FocusChoices.FirstOrDefault(c => c.Key == key)?.Key ?? "Auto";
-    // Compare unfinished targets by percentage, not unlike stat units or gem counts. Stable ties retain tooltip order.
+    // Compare all supported unfinished targets by percentage. Reached targets never become Auto focus.
     // A saved stat absent on this item uses Auto without changing the saved preference.
     internal static ItemStatPlan? Focus(ItemGradePlan plan, string? preference) =>
         plan.Stats.FirstOrDefault(s => s.Stat == NormalizeFocus(preference)) ??
         plan.Stats.Where(s => s.Graded && s.Needed > 0 && Ratio(plan, s).HasValue)
-            .OrderByDescending(s => Ratio(plan, s)).FirstOrDefault() ??
-        plan.Stats.FirstOrDefault(s => s.Graded && s.Needed == 0 && Ratio(plan, s).HasValue) ??
-        plan.Stats.FirstOrDefault(s => s.Graded) ?? plan.Stats.FirstOrDefault();
+            .OrderByDescending(s => Ratio(plan, s)).FirstOrDefault();
+    internal static string EmptyFocusMessage(ItemGradePlan plan) => plan.Stats.Count == 0 ? "No readable stats for this item."
+        : plan.Stats.Any(s => s.Graded && Ratio(plan, s).HasValue) &&
+          plan.Stats.Where(s => s.Graded && Ratio(plan, s).HasValue).All(s => s.Needed == 0)
+            ? "All supported stats have reached the selected target."
+            : "No supported stat below the target is available.";
     internal static string Number(int value) => value.ToString("N0", CultureInfo.CurrentCulture);
     internal static int? Threshold(ItemGradePlan plan, ItemStatPlan stat) =>
         stat.Target is { } target ? plan.Profile?.Stats.GetValueOrDefault(stat.Stat)?.Minimum(target) : null;
