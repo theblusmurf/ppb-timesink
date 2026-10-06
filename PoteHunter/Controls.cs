@@ -46,12 +46,12 @@ public static class Input
         validate();
         return Near(read(),destination);
     }
-    internal static bool AlignPointer(Point screen,CancellationToken token)
+    internal static bool AlignPointer(Point screen,CancellationToken token,string traceStage="revival pointer alignment")
     {
         if(!SystemInformation.VirtualScreen.Contains(screen))throw new InvalidOperationException("Revival pointer destination is outside the desktop.");
         Point before=Cursor();
         bool aligned=AlignPointer(screen,Cursor,point=>SetCursorPos(point.X,point.Y),()=>Check(token));
-        TraceLog.Record("revival pointer alignment",new{Expected=screen,Before=before,Actual=Cursor(),Aligned=aligned,Method="Windows screen coordinates"});
+        TraceLog.Record(traceStage,new{Expected=screen,Before=before,Actual=Cursor(),Aligned=aligned,Method="Windows screen coordinates"});
         return aligned;
     }
     // Opening the death dialog is a click on the central background, not on a

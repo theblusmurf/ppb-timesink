@@ -5,6 +5,9 @@ internal sealed class DeathRecoveryState
 {
     public bool Pending { get; private set; }
     public long ObservedAt { get; private set; }
+    public long Episode { get; private set; }
+    public bool PostRevivalPrepared { get; private set; }
+    public bool RepairCompleted { get; private set; }
     bool dead;
 
     public bool Observe(Health health,long now)
@@ -13,8 +16,23 @@ internal sealed class DeathRecoveryState
         if(!health.Dead){dead=false;return false;}
         Pending=true;
         if(dead)return false;
-        dead=true;ObservedAt=now;
+        dead=true;ObservedAt=now;Episode++;
+        PostRevivalPrepared=false;RepairCompleted=false;
         return true;
+    }
+
+    // Arrival can fail after revival and repair succeeded. Keep those completed
+    // phases with the pending return rather than repeating inventory actions.
+    // An asynchronous completion from an older death must not complete a newer one.
+    public bool MarkPostRevivalPrepared(long episode)
+    {
+        if(!Pending || dead || Episode!=episode)return false;
+        PostRevivalPrepared=true;return true;
+    }
+    public bool MarkRepairCompleted(long episode)
+    {
+        if(!Pending || dead || !PostRevivalPrepared || Episode!=episode)return false;
+        RepairCompleted=true;return true;
     }
 
     public long ReadyAt(int delaySeconds,bool visual=false)=>ObservedAt+
@@ -25,7 +43,11 @@ internal sealed class DeathRecoveryState
         observeDeath(health);
         throw new DeathRecoveryRequiredException();
     }
-    public void Reset(){Pending=false;dead=false;ObservedAt=0;}
+    public void Reset()
+    {
+        Pending=false;dead=false;ObservedAt=0;Episode++;
+        PostRevivalPrepared=false;RepairCompleted=false;
+    }
 }
 
 internal sealed class DeathRecoveryRequiredException : Exception;

@@ -1,3 +1,13 @@
+## Release1.120
+
+Keep completed revival and repair steps attached to each death until the character reaches its saved anchor. A route or final-facing retry now resumes the return instead of treating a living character as newly revived and opening repair again at the combat spot. A real new death starts a fresh recovery episode; unknown health and stale asynchronous completions cannot finish it.
+
+Give saved-facing restoration a bounded allowance based on the configured turn speed, with settling time, instead of a fixed two seconds. Preserve the separate no-response watchdog, exact anchor/facing arrival, stop/focus/identity/health checks and saved routes. Logs distinguish a facing deadline from missing turn response and show which recovery steps are already complete.
+
+Precisely verify and correct the repair pointer before the one recognized button click, using the same guarded alignment as revival. Record requested and actual click positions for diagnosis. An unrecognized or stuck confirmation still stops without repeating Yes.
+
+The inspected Release1.119 run revived and repaired successfully, reached the anchor, then a facing fault caused an unnecessary second repair. A subsequent real death revived successfully but the repair confirmation remained recognized after one click. The later passive screenshot had no popup; the exact cause of that missed confirmation is unproved. Offline recovery, slow-turn, deadline, cancellation and input regressions pass. Live full-cycle validation remains necessary after upgrading. Settings, routes and calibration profiles are preserved.
+
 ## Release1.119
 
 Replace the weapon/armor grade tooltip with the selected Upgrade Desk design: dark green cards, an explicit best-stat badge, focus-stat metrics, progress bars for every readable stat, regular-gem suggestions and separately labelled upgrade/socket estimates. Choose a focus stat in World & Tools > Item grades; Auto and missing-stat fallback use the first actionable plan. Preserve existing grade targets, automatic popup/hotkeys, hover dismissal and passive click-through behavior. Fit the panel to monitor edges and available space at different display scales. Unknown stats receive no invented grade or gem plan.

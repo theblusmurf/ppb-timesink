@@ -119,12 +119,18 @@ internal sealed class LiveRepairSurface(World world,RepairProfile? profile,Actio
                      RepairInventoryLocation.Shift(profile.Inventory,view.InventoryOffset??Point.Empty).MatchesControl(image))&&!profile.Prompt.MatchesText(image)),token);
         }
         validate();token.ThrowIfCancellationRequested();
-        var cursor=Input.Cursor();
-        if(RepairScreen.Bounds(world)!=bounds || Math.Abs(cursor.X-screen.X)>2 || Math.Abs(cursor.Y-screen.Y)>2 ||
-            !marker)
+        if(RepairScreen.Bounds(world)!=bounds || !marker)
             throw new InvalidOperationException("Repair focus, dialog, or pointer position changed. No click was sent.");
+        // Use the same precise, verified correction as revival confirmation.
+        // Never loosen the Yes hit area or repeat a click after an uncertain result.
+        bool aligned=Input.AlignPointer(screen,token,"repair pointer alignment");
+        validate();token.ThrowIfCancellationRequested();
+        if(!aligned || RepairScreen.Bounds(world)!=bounds)
+            throw new InvalidOperationException("Repair pointer could not align with the recognized control. No click was sent.");
+        var beforeClick=Input.Cursor();
         await Input.Click(false,token);
-        TraceLog.Record("repair control clicked",new{Control=action.ToString()});
+        TraceLog.Record("repair control clicked",new{Control=action.ToString(),Expected=screen,
+            Before=beforeClick,After=Input.Cursor(),GameResponseVerified=false});
     }
     public Task Delay(CancellationToken token)=>Input.Delay(120,token);
 }

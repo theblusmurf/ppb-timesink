@@ -45,6 +45,7 @@ internal static class DeathRecoveryChecks
             throw new Exception("Death on the return route did not restart recovery.");
         recovery.Reset();
         if(recovery.Pending || !recovery.Observe(new(0,100),3000))throw new Exception("A later death was not detected after arrival.");
+        CompletedRecoveryPhases();
 
         var anchor=new Vec(0,0);
         var path=new RecoveryPath([new(8,0),new(4,0)],anchor);
@@ -139,8 +140,76 @@ internal static class DeathRecoveryChecks
         finally {if(File.Exists(file))File.Delete(file);if(File.Exists(file+".tmp"))File.Delete(file+".tmp");}
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,HardwareInputEmitted=false,Checks=new[]{"bounded movement-fault death watch","explicit stop/unknown failure/group/disabled revival never enables fault recovery","watch cannot refresh its deadline","zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
+                "successful repair survives living pending-return retries without repeated preparation or repair","new death clears completed recovery phases","unreadable HP preserves completed phases without creating a death","stale episode completions cannot complete a newer death or stopped recovery","failed repair remains incomplete",
                 "waypoints require actual arrival","final anchor tolerance","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
                 "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static void CompletedRecoveryPhases()
+    {
+        var state=new DeathRecoveryState();
+        if(state.MarkPostRevivalPrepared(state.Episode) || state.MarkRepairCompleted(state.Episode))
+            throw new Exception("A nonpending recovery accepted completed revival or repair.");
+        state.Observe(new(0,100),1000);long firstEpisode=state.Episode;
+        if(state.PostRevivalPrepared || state.RepairCompleted || state.MarkPostRevivalPrepared(firstEpisode) ||
+            state.MarkRepairCompleted(firstEpisode))
+            throw new Exception("Known dead HP completed a revival or repair phase.");
+        state.Observe(new(100,100),2000);
+        if(state.MarkRepairCompleted(firstEpisode))throw new Exception("Repair completed before the revived character was prepared.");
+
+        int preparations=0,repairs=0;
+        void ResumeLivingReturn()
+        {
+            if(!state.PostRevivalPrepared)
+            {
+                preparations++;
+                if(!state.MarkPostRevivalPrepared(state.Episode))throw new Exception("Living revival preparation was rejected.");
+            }
+            if(!state.RepairCompleted)
+            {
+                repairs++;
+                if(!state.MarkRepairCompleted(state.Episode))throw new Exception("Successful repair was not retained.");
+            }
+        }
+        ResumeLivingReturn();
+        // Reproduce the failure: final-facing stalls after a successful repair,
+        // while the same living death episode is still awaiting anchor arrival.
+        for(int retry=0;retry<3;retry++)
+        {
+            state.Observe(new(57,100),3000+retry*100);
+            ResumeLivingReturn();
+        }
+        if(preparations!=1 || repairs!=1 || !state.Pending || state.Episode!=firstEpisode ||
+            !state.PostRevivalPrepared || !state.RepairCompleted)
+            throw new Exception("A living pending-return retry repeated successful recovery phases.");
+        state.Observe(default,4000);
+        if(!state.Pending || state.Episode!=firstEpisode || !state.PostRevivalPrepared || !state.RepairCompleted)
+            throw new Exception("Unreadable HP discarded completed phases or started another recovery episode.");
+        if(!state.Observe(new(0,100),5000) || state.Episode==firstEpisode || state.PostRevivalPrepared || state.RepairCompleted)
+            throw new Exception("Death on the return route retained an earlier repair.");
+        long nextEpisode=state.Episode;
+        state.Observe(new(0,100),5001);
+        if(state.Episode!=nextEpisode || state.ReadyAt(3,true)!=8000)
+            throw new Exception("Repeated dead HP restarted the episode or death delay.");
+        state.Observe(new(100,100),6000);
+        if(state.MarkPostRevivalPrepared(firstEpisode) || state.MarkRepairCompleted(firstEpisode))
+            throw new Exception("An old asynchronous completion advanced a newer death episode.");
+        ResumeLivingReturn();
+        if(preparations!=2 || repairs!=2 || !state.PostRevivalPrepared || !state.RepairCompleted)
+            throw new Exception("A second real death did not get exactly one new repair cycle.");
+
+        state.Reset();long stoppedEpisode=state.Episode;
+        if(state.Pending || state.PostRevivalPrepared || state.RepairCompleted ||
+            state.MarkPostRevivalPrepared(nextEpisode) || state.MarkRepairCompleted(nextEpisode))
+            throw new Exception("Explicit stop retained or accepted completed recovery phases.");
+        state.Observe(new(0,100),7000);state.Observe(new(100,100),8000);
+        if(state.Episode==stoppedEpisode || state.MarkPostRevivalPrepared(nextEpisode))
+            throw new Exception("A new run reused a stale death episode.");
+        if(!state.MarkPostRevivalPrepared(state.Episode) || state.RepairCompleted)
+            throw new Exception("Preparation falsely declared an unperformed or failed repair successful.");
+        state.Observe(default,8100);state.Observe(new(100,100),8200);
+        if(!state.Pending || !state.PostRevivalPrepared || state.RepairCompleted)
+            throw new Exception("An uncompleted repair became successful while waiting for readable health.");
     }
 }

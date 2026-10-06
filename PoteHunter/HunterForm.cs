@@ -708,6 +708,7 @@ public sealed partial class HunterForm : Form
     object ProtectionState() => new { AntiKillSteal=activeGuardOptions?.AntiKillSteal ?? antiKillSteal.Checked,
         OtherPlayerRadius=activeGuardOptions?.OtherPlayerRadius ?? playerBuffer.Value, AvoidNames=avoidRules, ActiveAvoidZones=avoidZones,
         DeathRecovery=new {Enabled=activeGuardOptions?.AutoReviveAfterDeath ?? autoRevive.Checked,deathRecovery.Pending,
+            deathRecovery.Episode,deathRecovery.PostRevivalPrepared,deathRecovery.RepairCompleted,
             AutoRepair=activeGuardOptions?.AutoRepairAfterDeath ?? autoRepair.Checked,
             VisualRevival=activeGuardOptions?.VisualRevivalDetection ?? visualRevival.Checked,
             Phase=repairInProgress?"Repairing":deathReturnInProgress?savedReturnPhase:deathRecoveryActive?"Reviving":deathRecovery.Pending?"Waiting":faultDeathWatch.Active?"Fault death watch":"Inactive",
@@ -1826,7 +1827,13 @@ public sealed partial class HunterForm : Form
                 int observations=await FacingRestore.RunAsync(ct=>drive.Face(world,desiredForward,ct),drive.ResetTurnResponse,
                     ()=>drive.StopApproach(),Input.Delay,()=>Environment.TickCount64,
                     ()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward),restoreToken,attempts,
-                    attempt=>TraceLog.Record("post-loot facing retry",new{Attempt=attempt,Position=world.PlayerPosition(),Heading=gamekeeperReturnHeading}));
+                    attempt=>TraceLog.Record("saved facing retry",new{Attempt=attempt,Position=world.PlayerPosition(),Heading=gamekeeperReturnHeading}),
+                    timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(drive.TurnSpeedDegreesPerSecond),
+                    failureObserved:failure=>TraceLog.Record("saved facing failed",new{failure.Reason,failure.Attempt,
+                        failure.ElapsedMilliseconds,failure.TimeoutMilliseconds,Position=world.PlayerPosition(),
+                        ActualHeading=world.PlayerHeading(),SavedHeading=gamekeeperReturnHeading,drive.TurnSpeedDegreesPerSecond}),
+                    deadlineFailure:()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward,
+                        "Saved facing did not settle within its turn-speed allowance."));
                 TraceLog.Record("restored saved hunt facing",new {Heading=gamekeeperReturnHeading,Position=world.PlayerPosition(),Attempts=observations,Zone=runZone});
             }
             var fallbackCycle=new RecoveryFallbackCycle(activeSavedRouteSlot);
@@ -2159,15 +2166,26 @@ public sealed partial class HunterForm : Form
                     navigation.Observe(world.NavigationContext(self),self.Position,self.Height);
         RefreshImportedCollisionObstacles();
                     deathRecovery.Observe(hp,Environment.TickCount64);deathRecoveryActive=false;
+                    long recoveryEpisode=deathRecovery.Episode;
+                    if(!deathRecovery.PostRevivalPrepared)
+                    {
                     encounter.Reset();courtesy.Reset();deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;encounterQuietSince=0;encounterUnknownSince=0;
                     pendingPriorityGamekeeper=null;gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;completionReturnPending=false;stationaryAssistReturnPending=false;
                     gamekeeperReturnLocation=anchor;gamekeeperReturnHeading=savedHuntHeading;
                     rangedPull.Reset();rangedTagging=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;healingRestPending=false;healingWarning=null;
                     retreatRecovery=null;retreatDrive=null;lootGuardPosition=null;buffInProgress=false;gamekeeperTransition=false;priorityInterruptibleActivity=false;
                     runHotbarPage=world.Hotbar().PageBase;
-                    TraceLog.Record("character revived",new{Position=self.Position,Anchor=anchor,Zone=runZone,HP=hp});
-                    if(o.AutoRepairAfterDeath)await RunRepairAsync(recoveryToken);
+                    TraceLog.Record("character revived",new{Position=self.Position,Anchor=anchor,Zone=runZone,HP=hp,Episode=recoveryEpisode});
+                    if(!deathRecovery.MarkPostRevivalPrepared(recoveryEpisode))throw new DeathRecoveryRequiredException();
+                    }
+                    if(!deathRecovery.RepairCompleted)
+                    {
+                        if(o.AutoRepairAfterDeath)await RunRepairAsync(recoveryToken);
+                        if(!deathRecovery.MarkRepairCompleted(recoveryEpisode))throw new DeathRecoveryRequiredException();
+                    }
+                    else TraceLog.Record("saved-route recovery resumed",new{Episode=recoveryEpisode,RepairAlreadyCompleted=true,Position=self.Position,Anchor=anchor});
                     await MoveToSavedHuntAnchor(recoveryToken,true);
+                    if(deathRecovery.Episode!=recoveryEpisode)throw new DeathRecoveryRequiredException();
                     deathRecovery.Reset();
                     stopAfterDeathReturn=!activeFarmOnArrival;
                     if(stopAfterDeathReturn)message="Saved anchor reached; Resume farming is disabled.";

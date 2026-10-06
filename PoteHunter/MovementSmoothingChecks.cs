@@ -112,6 +112,90 @@ internal static class MovementSmoothingChecks
             Require(interrupted,"facing retry swallowed a deliberate cancellation");
         }
 
+        Require(FacingRestore.TimeoutMilliseconds(30)==8000 && FacingRestore.TimeoutMilliseconds(165)==3091 &&
+            FacingRestore.TimeoutMilliseconds(360)==2500,"saved-facing deadline conflicts with the configured turn cap");
+        foreach(double invalidCap in new[]{double.NaN,double.PositiveInfinity,29d,361d})
+        {
+            bool rejected=false;try{FacingRestore.TimeoutMilliseconds(invalidCap);}catch(ArgumentOutOfRangeException){rejected=true;}
+            Require(rejected,"invalid turn cap produced a saved-facing deadline");
+        }
+        // A measured, responsive half-turn at a deliberately slow cap must be
+        // allowed to finish. Simulate reader latency and 500ms delayed motion;
+        // the real no-progress detector still watches each measured heading.
+        foreach(double cap in new[]{30d,60d,165d})
+        {
+            facingClock=0;var progressiveResponse=new TurnResponse();int timeout=FacingRestore.TimeoutMilliseconds(cap);
+            var failures=new List<FacingRestoreFailure>();
+            bool prepared=false;
+            await FacingRestore.RunAsync(_=>
+            {
+                Require(prepared,"saved-facing emitted correction before its movement reset");
+                facingClock+=100;
+                double observed=Math.Min(Math.PI,Math.Max(0,facingClock-500)*cap*Math.PI/180/1000);
+                if(Math.PI-observed<=.035)return Task.FromResult(true);
+                if(progressiveResponse.Observe(default,observed,1,facingClock,true))
+                    throw new TurnUnresponsiveException(default,default);
+                return Task.FromResult(false);
+            },()=>{prepared=true;progressiveResponse.Reset();},()=>{},FacingDelay,()=>facingClock,
+                ()=>new TurnUnresponsiveException(default,default),default,
+                timeoutMilliseconds:timeout,failureObserved:failures.Add);
+            Require(failures.Count==0 && facingClock<=timeout && (cap!=30 || facingClock>6000),
+                "responsive low-cap saved facing was treated as an unresponsive two-second turn");
+        }
+        // A healthy but never-completed goal and a real no-progress fault have
+        // distinct diagnostics. The longer goal allowance never extends the
+        // 1500ms no-response watchdog or consumes cancellation/focus failures.
+        facingClock=0;var facingFailures=new List<FacingRestoreFailure>();
+        var deadlineException=new TurnUnresponsiveException(default,default,"Saved-facing deadline exceeded.");
+        Exception? observedFailure=null;
+        try
+        {
+            await FacingRestore.RunAsync(_=>{facingClock+=100;return Task.FromResult(false);},()=>{},()=>{},
+                FacingDelay,()=>facingClock,()=>new TurnUnresponsiveException(default,default),default,
+                timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(30),failureObserved:facingFailures.Add,
+                deadlineFailure:()=>deadlineException);
+        }
+        catch(TurnUnresponsiveException ex){observedFailure=ex;}
+        Require(ReferenceEquals(observedFailure,deadlineException) && facingFailures.Count==1 &&
+            facingFailures[0] is {Reason:"Deadline",Attempt:1,TimeoutMilliseconds:8000} &&
+            facingClock>=8000 && facingClock<=8120,"saved-facing deadline did not preserve its reason or hard bound");
+        facingClock=0;facingFailures.Clear();var noProgressResponse=new TurnResponse();
+        var noProgressException=new TurnUnresponsiveException(default,default);int deadlineFactories=0;
+        try
+        {
+            await FacingRestore.RunAsync(_=>
+            {
+                if(noProgressResponse.Observe(default,0,1,facingClock,true))throw noProgressException;
+                return Task.FromResult(false);
+            },noProgressResponse.Reset,()=>{},FacingDelay,()=>facingClock,
+                ()=>new TurnUnresponsiveException(default,default),default,
+                timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(30),failureObserved:facingFailures.Add,
+                deadlineFailure:()=>{deadlineFactories++;return deadlineException;});
+        }
+        catch(TurnUnresponsiveException ex){observedFailure=ex;}
+        Require(ReferenceEquals(observedFailure,noProgressException) && deadlineFactories==0 &&
+            observedFailure.Message=="The game did not respond to sustained turning input." &&
+            facingFailures.Count==1 && facingFailures[0] is {Reason:"NoProgress",ElapsedMilliseconds:1500},
+            "speed-derived deadline hid or relabelled a real unresponsive turn");
+        foreach(bool focusFailure in new[]{false,true})
+        {
+            facingClock=0;facingFailures.Clear();int stopCalls=0;bool interrupted=false;
+            using var interruptedFacing=new CancellationTokenSource();
+            try
+            {
+                await FacingRestore.RunAsync(ct=>
+                {
+                    if(focusFailure)throw new OperationCanceledException("Game lost focus.");
+                    interruptedFacing.Cancel();ct.ThrowIfCancellationRequested();return Task.FromResult(false);
+                },()=>{},()=>stopCalls++,FacingDelay,()=>facingClock,
+                    ()=>new TurnUnresponsiveException(default,default),interruptedFacing.Token,3,
+                    timeoutMilliseconds:8000,failureObserved:facingFailures.Add);
+            }
+            catch(OperationCanceledException){interrupted=true;}
+            Require(interrupted && facingFailures.Count==0 && stopCalls==0,
+                "extended saved-facing retries swallowed cancellation or a lost-focus guard");
+        }
+
         // Reproduce a fast approach that would cross a .15-unit anchor during
         // one held-W tick; braking followed by observed, settled corrections
         // converges without enlarging the acceptance radius.
@@ -184,6 +268,8 @@ internal static class MovementSmoothingChecks
                 "deadzone/reversal retains pending feedback",
                 "bounded lost-command retry","time-bounded turn size","unresponsive turn deadline",
                 "unsent turns cannot start stall timing","new facing goal clears idle timer","bounded post-loot facing retry and cancellation",
+                "slow-cap progressive saved facing and delayed feedback","speed-derived bounded facing deadline",
+                "saved-facing deadline distinguished from real no-progress watchdog","extended facing cancellation and focus guards",
                 "recorded sub-frame steps excluded from speed training","frame-sized pulse and filtered speed gain",
                 "frame-quantized precise arrival","recorded post-facing drift rejected","settle then face then recheck",
                 "blocked/cancelled/focus-lost return releases movement","persistent damage quiet period","stationary defense family/range/protection gates"}

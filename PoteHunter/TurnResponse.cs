@@ -1,7 +1,7 @@
 namespace PoteHunter;
 
-public sealed class TurnUnresponsiveException(Vec position,Vec forward)
-    : Exception("The game did not respond to sustained turning input.")
+public sealed class TurnUnresponsiveException(Vec position,Vec forward,string message="The game did not respond to sustained turning input.")
+    : Exception(message)
 {
     public Vec Position { get; }=position;
     public Vec Forward { get; }=forward;
