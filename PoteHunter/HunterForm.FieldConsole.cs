@@ -76,6 +76,8 @@ public sealed partial class HunterForm
             if(group.Expanded==expanded || group.Items.Visible==expanded || tabs.SelectedTab!=page ||
                 (group.Header.AccessibilityObject.State&AccessibleStates.Collapsed)==0)
                 throw new Exception("Collapsing a menu group changed the page or lost accessibility.");
+            if(group.Header.Width<140 || group.Width!=menu.Controls.OfType<SidebarButton>().Single().Width)
+                throw new Exception("Collapsed menu heading shrank or clips its label: "+group.Name);
             group.Header.PerformClick();Application.DoEvents();
             if(!group.Expanded || (group.Header.AccessibilityObject.State&AccessibleStates.Expanded)==0)
                 throw new Exception("Menu group cannot be reopened.");
@@ -95,6 +97,7 @@ public sealed partial class HunterForm
         var retained=tabs.SelectedTab;
         foreach(var group in menu.Controls.OfType<SidebarGroup>())group.Expanded=false;
         PerformLayout();Application.DoEvents();
+        if(menu.Controls.OfType<SidebarGroup>().Any(g=>g.Header.Width<140))throw new Exception("Collapsed group headings are clipped.");
         if(tabs.SelectedTab!=retained)throw new Exception("Collapsing all menu groups changed the selected page.");
         using(var collapsed=new Bitmap(Width,Height)){DrawToBitmap(collapsed,new Rectangle(Point.Empty,Size));collapsed.Save(Path.Combine(AppContext.BaseDirectory,"grouped-menu-collapsed-minimum.png"));}
         foreach(var group in menu.Controls.OfType<SidebarGroup>())group.Expanded=true;

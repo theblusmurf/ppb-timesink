@@ -57,7 +57,7 @@ internal sealed class SidebarGroup : TableLayoutPanel
             Dock=DockStyle.Top,Margin=Padding.Empty,Padding=Padding.Empty};
         Controls.Add(Header,0,0);Controls.Add(Items,0,1);Header.Click+=(_,_)=>Expanded=!Expanded;
     }
-    internal void Fit(int width){Width=width;foreach(Control entry in Items.Controls)entry.Width=width;}
+    internal void Fit(int width){MinimumSize=new Size(width,0);MaximumSize=new Size(width,0);Width=width;foreach(Control entry in Items.Controls)entry.Width=width;}
 }
 
 public sealed partial class HunterForm
@@ -104,4 +104,5 @@ public sealed partial class HunterForm
         return Refresh;
     }
 }
+
 
