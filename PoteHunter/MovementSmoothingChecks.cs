@@ -116,8 +116,8 @@ internal static class MovementSmoothingChecks
             FacingRestore.TimeoutMilliseconds(360)==2500,"saved-facing deadline conflicts with the configured turn cap");
         foreach(double invalidCap in new[]{double.NaN,double.PositiveInfinity,29d,361d})
         {
-            bool rejected=false;try{FacingRestore.TimeoutMilliseconds(invalidCap);}catch(ArgumentOutOfRangeException){rejected=true;}
-            Require(rejected,"invalid turn cap produced a saved-facing deadline");
+            bool invalidCapRejected=false;try{FacingRestore.TimeoutMilliseconds(invalidCap);}catch(ArgumentOutOfRangeException){invalidCapRejected=true;}
+            Require(invalidCapRejected,"invalid turn cap produced a saved-facing deadline");
         }
         // A measured, responsive half-turn at a deliberately slow cap must be
         // allowed to finish. Simulate reader latency and 500ms delayed motion;
