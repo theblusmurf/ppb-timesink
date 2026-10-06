@@ -136,10 +136,11 @@ internal static class AnchorArrival
     public static async Task<bool> ReturnAsync(Func<Vec> position,Vec anchor,double tolerance,
         Func<CancellationToken,Task> approach,Action stop,Func<CancellationToken,Task> face,
         Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token,
-        Func<CancellationToken,Task<bool>>? defend=null)
+        Func<CancellationToken,Task<bool>>? defend=null,bool extendOnProgress=false)
     {
         if(!anchor.Finite || !double.IsFinite(tolerance) || tolerance<=0)throw new ArgumentOutOfRangeException(nameof(anchor));
         long startedAt=clock(),deadline=startedAt+15000,hardDeadline=startedAt+120000;
+        double bestDistance=double.PositiveInfinity;
         try
         {
             while(clock()<deadline && clock()<hardDeadline)
@@ -159,6 +160,11 @@ internal static class AnchorArrival
                 }
                 Vec before=position();
                 if(!before.Finite)throw new InvalidOperationException("Anchor return position is unavailable.");
+                double distance=(before-anchor).Length;
+                if(extendOnProgress && distance<bestDistance-.15)
+                {
+                    bestDistance=distance;deadline=Math.Min(hardDeadline,clock()+15000);
+                }
                 if((before-anchor).Length>tolerance)
                 {
                     await approach(token);await delay(20,token);continue;
@@ -166,7 +172,12 @@ internal static class AnchorArrival
                 stop();await delay(120,token);
                 Vec settled=position();
                 if(!Settled(before,settled,anchor,tolerance))continue;
+                long facingAt=clock();
                 await face(token);
+                // Saved-facing restoration has its own bounded progress and
+                // no-response checks. Do not reject a successful slow turn
+                // using the distant-travel no-progress allowance.
+                if(extendOnProgress)deadline=Math.Min(hardDeadline,deadline+Math.Max(0,clock()-facingAt));
                 stop();before=position();await delay(120,token);
                 if(clock()<=deadline && clock()<=hardDeadline && Settled(before,position(),anchor,tolerance))return true;
             }

@@ -2,54 +2,28 @@
 
 namespace PoteHunter;
 
-internal sealed class HeldInputs<T>(Action<T, bool> emit) where T : notnull
+internal sealed class HeldInputs<T>(Action<T, bool> emit,object? synchronization=null) where T : notnull
 {
     readonly HashSet<T> held = new();
-    public bool IsHeld(T key) => held.Contains(key);
+    readonly object gate=synchronization ?? new object();
+    public bool IsHeld(T key) {lock(gate)return held.Contains(key);}
     public void Set(T key, bool down)
     {
-        if (down)
+        lock(gate)
         {
-            if (held.Contains(key)) return;
-            emit(key, true);
-            held.Add(key);
+            if (down)
+            {
+                if (held.Contains(key)) return;
+                emit(key, true);
+                held.Add(key);
+            }
+            else if (held.Contains(key)) { emit(key, false); held.Remove(key); }
         }
-        else if (held.Contains(key)) { emit(key, false); held.Remove(key); }
     }
     public void ReleaseAll(Func<T,bool>? preserve = null)
     {
-        foreach (var key in held.ToArray()) { if(preserve?.Invoke(key)==true)continue;try { Set(key, false); } catch { /* Retry a failed key-up on the next release. */ } }
-    }
-}
-
-// One awaited input owner retains the game-thread context. Slow scene/health
-// reads run before key-down and after key-up, never while timing a short step.
-internal static class MovementPulseTiming
-{
-    internal static async Task<long> RunAsync(int milliseconds,Action begin,Action end,Action safety,
-        Action postflight,Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token)
-    {
-        if(milliseconds is <16 or >60)throw new ArgumentOutOfRangeException(nameof(milliseconds));
-        token.ThrowIfCancellationRequested();
-        long startedAt=0,heldMilliseconds=0;bool started=false;
-        try
-        {
-            begin();started=true;startedAt=clock();long deadline=startedAt+milliseconds;
-            while(clock()<deadline)
-            {
-                token.ThrowIfCancellationRequested();safety();
-                int remaining=(int)Math.Clamp(deadline-clock(),0,milliseconds);
-                if(remaining>0)await delay(Math.Min(16,remaining),token);
-            }
-            safety();
-        }
-        finally
-        {
-            end();
-            if(started)heldMilliseconds=Math.Max(0,clock()-startedAt);
-        }
-        postflight();
-        return heldMilliseconds;
+        lock(gate)
+            foreach (var key in held.ToArray()) { if(preserve?.Invoke(key)==true)continue;try { Set(key, false); } catch { /* Retry a failed key-up on the next release. */ } }
     }
 }
 
@@ -136,8 +110,20 @@ public static class Input
     [DllImport("user32.dll", SetLastError = true)] static extern nint SendMessageW(IntPtr hwnd, uint message, nuint wparam, nint lparam);
     [DllImport("user32.dll", SetLastError = true)] public static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint vk);
     [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr window, int id);
-    static readonly HeldInputs<Keys> keys = new((key, down) => { Send(KeyPacket(key, !down)); RecordHeldInput(down ? "key down" : "key up", new { Key = key.ToString() }); });
-    static readonly HeldInputs<bool> buttons = new((right, down) => { Send(MousePacket(right, !down)); RecordHeldInput(down ? "mouse down" : "mouse up", new { Button = right ? "right" : "left" }); });
+    // The pulse worker and owner-context cleanup share one state/packet lock.
+    // A release invalidates its lease before releasing keys, so a worker which
+    // has not yet pressed W cannot press it after Stop/Release returned.
+    static readonly object inputGate=new();
+    static long releaseGeneration;
+    static bool forwardPulseRunning;
+    static Action<bool>? forwardPulseTransition;
+    static readonly HeldInputs<Keys> keys = new((key, down) =>
+    {
+        Send(KeyPacket(key,!down));
+        if(key==Keys.W)forwardPulseTransition?.Invoke(down);
+        RecordHeldInput(down ? "key down" : "key up",new{Key=key.ToString()});
+    },inputGate);
+    static readonly HeldInputs<bool> buttons = new((right, down) => { Send(MousePacket(right, !down)); RecordHeldInput(down ? "mouse down" : "mouse up", new { Button = right ? "right" : "left" }); },inputGate);
     public static bool BasicAttackHeld => buttons.IsHeld(false);
     public static bool RightButtonHeld => buttons.IsHeld(true);
 
@@ -145,11 +131,15 @@ public static class Input
     static void RecordHeldInput(string stage, object details)
     {
         // Logging after successful input must not prevent its held state from being committed.
-        try { TraceLog.Record(stage, details); }
+        try { if(!PulseInputTrace.TryRecord(stage,details))TraceLog.Record(stage, details); }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
     }
     public static Func<bool> Allowed = () => false;
+    // Called on the owning context after full preflight. Its returned callback
+    // must contain only captured immutable identity and cheap Win32 checks.
+    // No scene reads, WinForms controls or UI-bound delegates run on the worker.
+    public static Func<Func<bool>>? CapturePulseSafety;
     public static Action? Preflight;
     public static Func<bool>? PickupHoldProvider;
     public static bool PickupHeld => keys.IsHeld(Keys.E);
@@ -207,6 +197,16 @@ public static class Input
         finally{Release();Allowed=savedAllowed;Preflight=savedPreflight;selfTestDown=savedDown;selfTestSink=savedSink;PickupHoldProvider=savedPickup;}
     }
     static void Send(Packet p)
+    {
+        lock(inputGate)
+        {
+            bool release=p.Type==1 ? p.Value.Keyboard.Flags==10 : p.Type==0 && p.Value.Mouse.Flags is 4 or 16;
+            if(forwardPulseRunning && !PulseInputTrace.IsActive && !release)
+                throw new InvalidOperationException("A short forward pulse already owns input.");
+            SendSerialized(p);
+        }
+    }
+    static void SendSerialized(Packet p)
     {
         if(selfTestSink!=null) {selfTestSink(p);return;}
         int size = Marshal.SizeOf<Packet>();
@@ -274,9 +274,197 @@ public static class Input
         while (Environment.TickCount64 < deadline) { Check(token); int step = (int)Math.Min(20, deadline - Environment.TickCount64); if (step > 0) await Task.Delay(step, token); }
         Check(token);
     }
-    internal static Task<long> PulseForward(int milliseconds,CancellationToken token)=>
-        MovementPulseTiming.RunAsync(milliseconds,()=>Hold(Keys.W,true,token),()=>Hold(Keys.W,false,default),
-            ()=>CheckSafety(token),()=>Check(token),Task.Delay,()=>Environment.TickCount64,token);
+    internal static async Task<long> PulseForward(int milliseconds,CancellationToken token)
+    {
+        var trace=new PulseInputTrace();Func<bool>? windowAllowed=null;long generation=0;
+        long origin=System.Diagnostics.Stopwatch.GetTimestamp(),pressedAt=0,releasedAt=0;
+        DateTime? downUtc=null,upUtc=null;bool reserved=false,leaseCaptured=false,completed=false;
+        void CheapSafety(bool requireHeld)
+        {
+            token.ThrowIfCancellationRequested();
+            if(Down(Keys.F9))throw new OperationCanceledException("F9 stop key pressed.");
+            if(Down(Keys.Escape))throw new OperationCanceledException("Escape stop key pressed.");
+            if(Down(Keys.Enter) && !keys.IsHeld(Keys.Enter))throw new OperationCanceledException("Enter/chat key pressed.");
+            if(windowAllowed?.Invoke()!=true)throw new OperationCanceledException("Game window lost focus or identity during a short forward pulse.");
+            lock(inputGate)
+            {
+                if(generation!=releaseGeneration || requireHeld && !keys.IsHeld(Keys.W))
+                    throw new OperationCanceledException("Short forward pulse stopped by input release.");
+            }
+        }
+        try
+        {
+            await MovementPulseTiming.RunOwnedAsync(milliseconds,()=>
+            {
+                // All UI/scene work and native-export initialization precede W.
+                Check(token);
+                if(selfTestSink==null)WindowsClientInput.ValidateReady();
+                windowAllowed=CapturePulseSafety?.Invoke() ?? throw new InvalidOperationException("Short forward pulse window safety is unavailable.");
+                lock(inputGate)
+                {
+                    if(forwardPulseRunning || keys.IsHeld(Keys.W))throw new InvalidOperationException("Forward input is already held by another owner.");
+                    generation=releaseGeneration;forwardPulseRunning=reserved=leaseCaptured=true;
+                    forwardPulseTransition=down=>
+                    {
+                        if(down){pressedAt=System.Diagnostics.Stopwatch.GetTimestamp();downUtc=DateTime.UtcNow;}
+                        else {releasedAt=System.Diagnostics.Stopwatch.GetTimestamp();upUtc=DateTime.UtcNow;}
+                    };
+                }
+            },()=>
+            {
+                lock(inputGate)
+                {
+                    CheapSafety(false);keys.Set(Keys.W,true);
+                }
+            },()=>
+            {
+                lock(inputGate)
+                {
+                    try {keys.Set(Keys.W,false);}
+                    finally
+                    {
+                        forwardPulseRunning=false;reserved=false;
+                        if(!keys.IsHeld(Keys.W))forwardPulseTransition=null;
+                    }
+                }
+            },()=>CheapSafety(true),()=>Check(token),Task.Delay,
+                ()=> (long)System.Diagnostics.Stopwatch.GetElapsedTime(origin).TotalMilliseconds,token,
+                work=>Task.Run(async()=>
+                {
+                    using var scope=trace.Enter();
+                    return await work().ConfigureAwait(false);
+                }));
+            completed=true;
+            return (long)Math.Ceiling(System.Diagnostics.Stopwatch.GetElapsedTime(pressedAt,releasedAt).TotalMilliseconds);
+        }
+        catch
+        {
+            // The worker has joined before owner cleanup releases attack/E or
+            // any other held input. The worker itself only releases its W.
+            if(leaseCaptured)Release();throw;
+        }
+        finally
+        {
+            lock(inputGate)
+            {
+                if(reserved)
+                {
+                    try {keys.Set(Keys.W,false);}
+                    finally {forwardPulseRunning=false;}
+                }
+                if(leaseCaptured)forwardPulseTransition=null;
+            }
+            try
+            {
+                trace.Flush();
+                if(pressedAt!=0 && releasedAt!=0)
+                {
+                    double held=System.Diagnostics.Stopwatch.GetElapsedTime(pressedAt,releasedAt).TotalMilliseconds;
+                    TraceLog.Record("forward pulse timing",new{RequestedMilliseconds=milliseconds,HeldMilliseconds=held,
+                        ReleaseLatenessMilliseconds=Math.Max(0,held-milliseconds),KeyDownUtc=downUtc,KeyUpUtc=upUtc,
+                        Completed=completed,Clock="Stopwatch",Owner="serialized pulse worker"});
+                }
+            }
+            catch(IOException) { }
+            catch(UnauthorizedAccessException) { }
+        }
+    }
+    internal static async Task CheckForwardPulseInput()
+    {
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
+        var savedCapture=CapturePulseSafety;var savedSink=selfTestSink;var savedDown=selfTestDown;
+        var packets=new System.Collections.Concurrent.ConcurrentQueue<Packet>();
+        void Require(bool passed,string message)
+        {if(!passed)throw new InvalidOperationException("Forward pulse input: "+message);}
+        int DownPackets()=>packets.Count(p=>p.Type==1 && p.Value.Keyboard.Flags==8);
+        int UpPackets()=>packets.Count(p=>p.Type==1 && p.Value.Keyboard.Flags==10);
+        void Arm()
+        {
+            Preflight=null;PickupHoldProvider=null;selfTestSink=packets.Enqueue;selfTestDown=_=>false;
+            Allowed=()=>true;CapturePulseSafety=()=>()=>true;Release();packets.Clear();
+        }
+        try
+        {
+            Arm();int fullChecks=0;
+            Preflight=()=>{Require(!keys.IsHeld(Keys.W),"full scene check ran while W was held");fullChecks++;};
+            long held=await PulseForward(16,default);
+            Require(held>=16 && fullChecks==2 && DownPackets()==1 && UpPackets()==1 && !keys.IsHeld(Keys.W),
+                "healthy pulse did not preflight/postflight around one paired input");
+
+            foreach(string scenario in new[]{"focus","F9","Escape","Enter","token","guard throw"})
+            {
+                Arm();int interruptedState=0;fullChecks=0;
+                using var cancellation=new CancellationTokenSource();
+                Preflight=()=>fullChecks++;
+                selfTestSink=packet=>
+                {
+                    packets.Enqueue(packet);
+                    if(packet.Type==1 && packet.Value.Keyboard.Flags==8)
+                    {Volatile.Write(ref interruptedState,1);if(scenario=="token")cancellation.Cancel();}
+                };
+                selfTestDown=key=>Volatile.Read(ref interruptedState)!=0 && key.ToString()==scenario;
+                CapturePulseSafety=()=>()=>
+                {
+                    if(Volatile.Read(ref interruptedState)!=0 && scenario=="guard throw")throw new InvalidOperationException("Synthetic window read failed.");
+                    return scenario!="focus" || Volatile.Read(ref interruptedState)==0;
+                };
+                bool interrupted=false;
+                try {await PulseForward(60,cancellation.Token);}
+                catch(Exception e) when(e is OperationCanceledException or InvalidOperationException){interrupted=true;}
+                Require(interrupted && fullChecks==1 && DownPackets()==1 && UpPackets()==1 && !keys.IsHeld(Keys.W),
+                    scenario+" bypassed a guard, ran postflight or retained input");
+            }
+
+            Arm();CapturePulseSafety=null;bool missingGuard=false;
+            try {await PulseForward(16,default);}catch(InvalidOperationException){missingGuard=true;}
+            Require(missingGuard && packets.IsEmpty,"missing captured window safety admitted input");
+
+            Arm();bool nested=false;
+            Preflight=()=>
+            {
+                try {PulseForward(16,default).GetAwaiter().GetResult();}
+                catch(InvalidOperationException){nested=true;}
+            };
+            await PulseForward(16,default);
+            Require(nested && DownPackets()==1 && UpPackets()==1,"nested pulse disturbed the owning input");
+
+            Arm();using var safetyReached=new ManualResetEventSlim();using var continueSafety=new ManualResetEventSlim();
+            int safetyPaused=0;
+            CapturePulseSafety=()=>()=>
+            {
+                if(keys.IsHeld(Keys.W) && Interlocked.Exchange(ref safetyPaused,1)==0)
+                {safetyReached.Set();Require(continueSafety.Wait(TimeSpan.FromSeconds(2)),"release test did not unblock its worker");}
+                return true;
+            };
+            var stoppedPulse=PulseForward(60,default);
+            Require(safetyReached.Wait(TimeSpan.FromSeconds(2)),"pulse worker did not start its safety checks");
+            bool overlap=false;
+            try {await PulseForward(16,default);}catch(InvalidOperationException){overlap=true;}
+            Require(overlap && keys.IsHeld(Keys.W) && DownPackets()==1 && UpPackets()==0,
+                "overlap rejection released the first pulse");
+            Release();continueSafety.Set();bool stopped=false;
+            try {await stoppedPulse;}catch(OperationCanceledException){stopped=true;}
+            Require(stopped && DownPackets()==1 && UpPackets()==1 && !keys.IsHeld(Keys.W),
+                "Release raced startup/cleanup or duplicated the key-up");
+
+            Arm();int rejectedUps=0;
+            selfTestSink=packet=>
+            {
+                if(packet.Type==1 && packet.Value.Keyboard.Flags==10 && Interlocked.Increment(ref rejectedUps)==1)
+                    throw new InvalidOperationException("Synthetic rejected key-up");
+                packets.Enqueue(packet);
+            };
+            bool upFailed=false;try {await PulseForward(16,default);}catch(InvalidOperationException){upFailed=true;}
+            Require(upFailed && DownPackets()==1 && UpPackets()==1 && rejectedUps==2 && !keys.IsHeld(Keys.W),
+                "failed key-up lost held state or was not retried safely by owner cleanup");
+        }
+        finally
+        {
+            Preflight=null;PickupHoldProvider=null;selfTestSink=packets.Enqueue;selfTestDown=_=>false;Release();
+            Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;
+            CapturePulseSafety=savedCapture;selfTestSink=savedSink;selfTestDown=savedDown;
+        }
+    }
     public static void Chat(string text)
     {
         if (string.IsNullOrWhiteSpace(text) || !Allowed()) throw new InvalidOperationException("Chat input requires the game in the foreground.");
@@ -325,7 +513,11 @@ public static class Input
         // Existing pickup pulses cannot release a nearby-loot hold or extend
         // one after the provider has observed that the radius is empty.
         if(key==Keys.E && PickupHoldProvider!=null)return;
-        keys.Set(key, down);
+        lock(inputGate)
+        {
+            if(!down && key==Keys.W && forwardPulseRunning)releaseGeneration++;
+            keys.Set(key, down);
+        }
     }
     public static async Task Click(bool right, CancellationToken token)
     {
@@ -467,8 +659,15 @@ public static class Input
     {
         // Activity transitions may retain an already-held E, but never create
         // new input or consult a provider during cleanup.
-        keys.ReleaseAll(preserveNearbyPickup && PickupHoldProvider!=null ? key=>key==Keys.E : null);
-        buttons.ReleaseAll(preserveBasicAttack ? right=>!right : null);
+        lock(inputGate)
+        {
+            releaseGeneration++;
+            // Release pulse-owned W before any ordinary release logging, which
+            // may write to disk for other keys held by the owning context.
+            if(forwardPulseRunning)try {keys.Set(Keys.W,false);}catch { }
+            keys.ReleaseAll(preserveNearbyPickup && PickupHoldProvider!=null ? key=>key==Keys.E : null);
+            buttons.ReleaseAll(preserveBasicAttack ? right=>!right : null);
+        }
     }
 
     internal static async Task CheckHeldRangedFire()
@@ -801,7 +1000,7 @@ public sealed partial class Movement
         advancing = false;
         return wasAdvancing || wasTraveling;
     }
-    public async Task Approach(World world, Vec position, Vec delta, CancellationToken token,bool watchTurns=false,double arrivalTolerance=0)
+    public async Task Approach(World world, Vec position, Vec delta, CancellationToken token,bool watchTurns=false,double arrivalTolerance=0,Vec? steeringDelta=null)
     {
         long now = Environment.TickCount64;
         arrivalMotion.Observe(position,now,advancing);
@@ -811,7 +1010,10 @@ public sealed partial class Movement
         }
         double heading=world.PlayerHeading();
         Forward = FromClientHeading(heading);
-        double angle = Angle(Forward, delta);
+        // Route lookahead changes heading only. Checkpoint distance still
+        // controls braking, precise arrival and the route progress watchdog.
+        Vec aim=steeringDelta is Vec candidate && candidate.Finite && candidate.Length>.01 ? candidate : delta;
+        double angle = Angle(Forward, aim);
         // Hysteresis avoids repeatedly releasing/repressing W around the turn threshold.
         bool shouldAdvance = Math.Abs(angle) < (advancing ? .95 : .60);
         // If the current heading would clip an avoid zone, turn in place toward the clear route.
@@ -834,7 +1036,7 @@ public sealed partial class Movement
         if (now - lastMotionTrace > 300)
         {
             lastMotionTrace = now;
-            TraceLog.Record("approach feedback", new { Position = position, TargetDelta = delta, Forward, ErrorDegrees = angle * 180 / Math.PI, HoldingW = advancing, TurnPixels = pixels });
+            TraceLog.Record("approach feedback", new { Position = position, TargetDelta = delta, SteeringDelta=aim, Forward, ActualHeading=heading, ErrorDegrees = angle * 180 / Math.PI, HoldingW = advancing, TurnPixels = pixels });
         }
         await Input.Delay(TurnFeedbackDelay(pixels), token);
     }

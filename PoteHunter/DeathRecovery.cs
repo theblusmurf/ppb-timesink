@@ -84,6 +84,11 @@ internal static class RecoveryRouting
 
 internal sealed class RecoveryPath
 {
+    internal const double SteeringLookaheadUnits=3.5;
+    internal const double SteeringCorridorUnits=.35;
+    const double CurveHorizonUnits=4;
+    const double CurveBrakingDegrees=35;
+    const int MaximumLookaheadSegments=4;
     readonly Vec[] points;
     int index;
     public int Index=>index;
@@ -103,7 +108,32 @@ internal sealed class RecoveryPath
     // distance, rather than overshoot and turn back while enemies hit us.
     public double ArrivalTolerance=>Final?.5:index<points.Length &&
         (index>0 && !Straight(index-1) || !Straight(index) ||
+         CumulativeCurve(index) ||
          index==points.Length-2 && (points[index+1]-points[index]).Length<=2.5) ? .6 : 0;
+    // Several small bends can form a substantial curve even when no single
+    // recorded sample exceeds the sharp-corner threshold. Brake before that
+    // short curve, rather than steering at successive near-side samples while
+    // still carrying a full-speed turn toward the preceding one.
+    public double UpcomingCurvatureDegrees=>index<points.Length?Curvature(index):0;
+    bool CumulativeCurve(int at)=>Curvature(at)>=CurveBrakingDegrees;
+    double Curvature(int at)
+    {
+        double turn=Bend(at),distance=0;
+        for(int next=at+1;next<points.Length-1 && next<=at+MaximumLookaheadSegments;next++)
+        {
+            distance+=(points[next]-points[next-1]).Length;
+            if(distance>CurveHorizonUnits)break;
+            turn+=Bend(next);
+        }
+        return turn;
+    }
+    double Bend(int at)
+    {
+        if(at<=0 || at>=points.Length-1)return 0;
+        Vec incoming=points[at]-points[at-1],outgoing=points[at+1]-points[at];
+        if(incoming.Length*outgoing.Length<=.0001)return 0;
+        return Math.Abs(Movement.Angle(incoming,outgoing))*180/Math.PI;
+    }
     bool Straight(int at)
     {
         if(at+2>=points.Length)return true;
@@ -123,7 +153,58 @@ internal sealed class RecoveryPath
         if(clear!=null)
             while(index<points.Length-1 && (points[index]-current).Length<=1.25 &&
                 (points[index+1]-current).Length<=4 &&
-                (index==0 || Straight(index-1)) && Straight(index) && clear(current,points[index+1]))index++;
+                (index==0 || Straight(index-1)) && Straight(index) && !CumulativeCurve(index) && clear(current,points[index+1]))index++;
         return index<points.Length?points[index]:null;
+    }
+
+    // Steering is separate from checkpoint progression. Call Next first and
+    // keep its checkpoint for arrival, progress and blocked-route checks. This
+    // aim point is only for turning during continuous approach; precise arrival
+    // must still use the checkpoint and ArrivalTolerance.
+    public Vec SteeringGoal(Vec current,Func<Vec,Vec,bool>? clear=null)
+    {
+        if(!current.Finite || index>=points.Length)
+            throw new RouteUnavailableException("A live route checkpoint is required for steering.");
+        Vec checkpoint=points[index];
+        double distance=(checkpoint-current).Length;
+        if(clear==null || ArrivalTolerance>0 || distance>=SteeringLookaheadUnits ||
+            !clear(current,checkpoint))return checkpoint;
+        double remaining=SteeringLookaheadUnits-distance;
+        Vec accepted=checkpoint,previous=checkpoint;
+        var corridor=new List<Vec>{current,checkpoint};
+        for(int next=index+1;next<points.Length-1 && next<=index+MaximumLookaheadSegments && remaining>.01;next++)
+        {
+            // Do not look through a required corner, a U-turn, or the final
+            // anchor. The controller must capture those checkpoints exactly.
+            if(!Straight(next-1) || !Straight(next) || CumulativeCurve(next))break;
+            Vec delta=points[next]-previous;double length=delta.Length;
+            if(length<=.0001){previous=points[next];continue;}
+            double step=Math.Min(remaining,length);
+            Vec candidate=previous+delta*(step/length);
+            if(!clear(previous,candidate) || !InsideSteeringCorridor(current,candidate,corridor) ||
+                !clear(current,candidate))break;
+            accepted=candidate;remaining-=step;
+            if(step<length)break;
+            previous=points[next];corridor.Add(previous);
+        }
+        return accepted;
+    }
+    static bool InsideSteeringCorridor(Vec from,Vec to,IEnumerable<Vec> vertices)
+    {
+        Vec segment=to-from;double square=segment.X*segment.X+segment.Y*segment.Y;
+        if(square<=.0001)return false;
+        double previousProjection=0;
+        foreach(Vec vertex in vertices)
+        {
+            Vec delta=vertex-from;
+            double projection=(delta.X*segment.X+delta.Y*segment.Y)/square;
+            // Monotonic projection prevents a locally nearby loop/backtrack
+            // from being treated as a straight shortcut. Checking every vertex
+            // bounds the complete local polyline against the candidate chord.
+            if(projection<previousProjection-.0001 || projection>1.0001 ||
+                (vertex-(from+segment*Math.Clamp(projection,0,1))).Length>SteeringCorridorUnits)return false;
+            previousProjection=projection;
+        }
+        return true;
     }
 }

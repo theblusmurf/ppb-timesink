@@ -76,6 +76,7 @@ internal static class DeathRecoveryChecks
         if(remotePoint.Next(new(5,0),(_,_)=>true)!=new Vec(0,0))
             throw new Exception("Lookahead skipped a distant required connector.");
         RecoveryArrivalBraking();
+        RecoverySteering();
 
         var self=new Entity(100,1,"Farmer",new(80,0),10,Model:"PC_MAN.GCMDS");
         var other=new Entity(200,2,"Neighbor",anchor,10,Model:"PC_MAN.GCMDS");
@@ -142,7 +143,9 @@ internal static class DeathRecoveryChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,HardwareInputEmitted=false,Checks=new[]{"bounded movement-fault death watch","explicit stop/unknown failure/group/disabled revival never enables fault recovery","watch cannot refresh its deadline","zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
                 "successful repair survives living pending-return retries without repeated preparation or repair","new death clears completed recovery phases","unreadable HP preserves completed phases without creating a death","stale episode completions cannot complete a newer death or stopped recovery","failed repair remains incomplete",
-                "waypoints require actual arrival","final anchor tolerance","duplicate plan destinations retain final braking","straight route samples keep continuous movement","sharp corners and short final anchor adjustments brake before capture","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
+                "waypoints require actual arrival","final anchor tolerance","duplicate plan destinations retain final braking","straight route samples keep continuous movement","sharp corners and short final anchor adjustments brake before capture",
+                "translated dense recorded curve brakes on cumulative curvature","bounded independent steering goal without checkpoint advancement","blocked or unverified steering remains at the checkpoint","steering corridor rejects a connector shortcut","sharp bends, U-turns and nearby loop endpoints cannot be shortcut","rotation/translation invariant steering","exact final anchor retained by steering",
+                "body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
                 "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
@@ -239,5 +242,67 @@ internal static class DeathRecoveryChecks
         state.Observe(default,8100);state.Observe(new(100,100),8200);
         if(!state.Pending || !state.PostRevivalPrepared || state.RepairCompleted)
             throw new Exception("An uncompleted repair became successful while waiting for readable health.");
+    }
+
+    static void RecoverySteering()
+    {
+        // Translate the recorded multi-bend geometry to a neutral origin. The
+        // individually mild bends after the first sharp corner still accumulate
+        // enough curvature to produce the observed alternating body turns.
+        Vec[] curve=[new(-1.0440625,.29078125),new(0,0),new(1.8171875,.61921875),
+            new(3.485,1.29046875),new(5.0521875,2.41421875),new(6.111875,3.95703125),
+            new(6.784375,5.53390625),new(7.080625,7.6403125),new(7.1078125,9.161875)];
+        var curved=new RecoveryPath(curve,new(7.1,13));
+        curved.Next(curve[0],(_,_)=>false);
+        if(curved.Next(curve[1],(_,_)=>true)!=curve[2] || curved.ArrivalTolerance!=.6 ||
+            curved.UpcomingCurvatureDegrees<35 || curved.UpcomingCurvatureDegrees>40 ||
+            curved.SteeringGoal(curve[1],(_,_)=>true)!=curve[2])
+            throw new Exception("A dense multi-bend route still advanced at full speed into its cumulative curve.");
+        Vec nearCurve=curve[2]+new Vec(-.8,0);
+        if(curved.Next(nearCurve,(_,_)=>true)!=curve[2] || curved.Index!=2)
+            throw new Exception("Local lookahead bypassed a required cumulative-curve capture.");
+
+        Vec[] mild=[new(0,0),new(1.5,0),new(3,.15),new(4.5,.45),new(6,.9)];
+        var path=new RecoveryPath(mild,new(8,1.3));
+        Vec current=new(0,0);
+        if(path.Next(current,(_,_)=>false)!=mild[1] || path.ArrivalTolerance!=0)
+            throw new Exception("A mild recorded curve lost continuous travel.");
+        int checkpointIndex=path.Index;Vec aim=path.SteeringGoal(current,(_,_)=>true);
+        if(aim.X<=mild[1].X || (aim-current).Length>RecoveryPath.SteeringLookaheadUnits+.0001 ||
+            path.Index!=checkpointIndex || path.Next(current,(_,_)=>false)!=mild[1])
+            throw new Exception("Steering failed to look ahead locally, advanced the checkpoint, or escaped its distance bound.");
+        if(path.SteeringGoal(current)!=mild[1] || path.SteeringGoal(current,(_,_)=>false)!=mild[1] ||
+            path.SteeringGoal(current,(from,to)=>!(from.X>=mild[1].X && to.X>from.X))!=mild[1])
+            throw new Exception("A blocked or unverified original segment allowed a steering shortcut.");
+        if(path.SteeringGoal(new(0,-1),(_,_)=>true)!=mild[1] ||
+            path.SteeringGoal(new(-5,0),(_,_)=>true)!=mild[1])
+            throw new Exception("Steering escaped the local connector corridor or skipped a distant required connector.");
+
+        var corner=new RecoveryPath([new(0,0),new(0,2),new(2,2)],new(6,2));
+        corner.Next(new(0,0),(_,_)=>false);
+        if(corner.SteeringGoal(new(0,0),(_,_)=>true)!=new Vec(0,2) || corner.Index!=1)
+            throw new Exception("Steering cut a required right-angle corner.");
+        var hairpin=new RecoveryPath([new(0,0),new(2,0),new(2,.2),new(0,.2)],new(-2,.2));
+        hairpin.Next(new(0,0),(_,_)=>false);
+        if(hairpin.SteeringGoal(new(0,0),(_,_)=>true)!=new Vec(2,0) ||
+            hairpin.Next(new(.2,.2),(_,_)=>true)!=new Vec(2,0) || hairpin.Index!=1)
+            throw new Exception("A U-turn or nearby return leg became a forward shortcut.");
+
+        // Moving the entire fixture must move its steering point identically;
+        // no direction-specific heuristic or personal map coordinates apply.
+        const double rotation=.73;Vec translation=new(20,-7);
+        Vec Transform(Vec value)=>Movement.Rotate(value,rotation)+translation;
+        var transformed=new RecoveryPath(mild.Select(Transform),Transform(new(8,1.3)));
+        transformed.Next(Transform(current),(_,_)=>false);
+        if((transformed.SteeringGoal(Transform(current),(_,_)=>true)-Transform(aim)).Length>.000001)
+            throw new Exception("Route steering depends on map origin or orientation.");
+
+        var final=new RecoveryPath([new(0,0),new(0,3)],new(0,6));
+        final.Next(new(0,0),(_,_)=>false);
+        final.Next(new(0,3),(_,_)=>false);
+        if(!final.Final || final.ArrivalTolerance!=.5 ||
+            final.SteeringGoal(new(0,3),(_,_)=>true)!=new Vec(0,6) ||
+            final.Next(new(0,5.49),(_,_)=>true)!=new Vec(0,6) || final.Next(new(0,5.51),(_,_)=>true)!=null)
+            throw new Exception("Steering loosened the exact final anchor envelope.");
     }
 }

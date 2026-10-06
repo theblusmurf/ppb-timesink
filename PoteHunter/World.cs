@@ -64,6 +64,15 @@ public sealed partial class World : IDisposable
     public IntPtr Window { get; private set; }
     GameWindow.Candidate? windowIdentity;
     internal GameWindow.InputState CheckInputWindow() => GameWindow.CheckInput(windowIdentity, Pid, IsProcessAlive(handle));
+    internal Func<bool> CaptureInputSafety()
+    {
+        // Capture on the controller thread. The short movement worker must
+        // never reread mutable World fields or call scene/UI preflight.
+        var identity=windowIdentity;var gameHandle=handle;int pid=Pid;
+        if(!ConnectionVerified || !GameWindow.CheckInput(identity,pid,IsProcessAlive(gameHandle)).Allowed)
+            throw new OperationCanceledException("The verified game window is unavailable for movement.");
+        return ()=>GameWindow.CheckInput(identity,pid,IsProcessAlive(gameHandle)).Allowed;
+    }
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern bool GetExitCodeProcess(SafeProcessHandle process, out uint exitCode);
     internal static bool IsProcessAlive(SafeProcessHandle? gameHandle) => gameHandle != null &&

@@ -245,7 +245,7 @@ public sealed partial class HunterForm : Form
         Field("Target priority",priorityOptions,7,0);
         priorityHint.SetToolTip(prioritizeGamekeeper,"Gamekeeper interrupts other fights, healing, sitting, buffs, pickup and returning home. It is pursued within the response radius; other work resumes afterward.");
         priorityHint.SetToolTip(stationaryGamekeeperPriority,"Keeps the character planted during Gamekeeper priority. It attacks the Gamekeeper or already engaged targets only when they are inside the attack range, then resumes normal movement after priority handling.");
-        priorityHint.SetToolTip(returnToHuntLocation,"Saves the original hunt location when a Gamekeeper is handled, then routes back there before selecting the next target.");
+        priorityHint.SetToolTip(returnToHuntLocation,"Returns to the activation anchor and saved facing after Gamekeeper. Solo melee Mimic, Pulkhan, Tribal and Tower farming always returns before ordinary targeting, including with this option off. Other solo modes use this preference; group mode follows the group.");
         priorityHint.SetToolTip(prioritizeBreakables,"When enabled, verified boxes, barrels, and treasure boxes take priority over ordinary monsters. When disabled, they are used only if no valid monster is available.");
         Field("Gamekeeper response radius",gamekeeperRadius,7,2);
         var pickupOptions=new FlowLayoutPanel {AutoSize=true,WrapContents=true,Margin=Padding.Empty};
@@ -399,6 +399,8 @@ public sealed partial class HunterForm : Form
         if(!offlinePreview)Shown += async (_, _) => { RegisterKeys(); timer.Start(); await Connect(); };
         FormClosing += (_, e) => { Stop("Closed."); if (busy || working || clientRecoveryRunning) { e.Cancel = true; message = "Stopping. Close again when the current operation has finished."; return; } timer.Stop(); DisposeNavigationOverlay(); zoneMapBackground.Dispose(); world.Dispose(); foreach(var registration in hotkeyRegistrations.Where(result=>result.Registered)) Input.UnregisterHotKey(Handle, registration.Id); };
         Input.Allowed = () => connected && world.CheckInputWindow().Allowed;
+        Input.CapturePulseSafety = () => connected ? world.CaptureInputSafety() :
+            throw new OperationCanceledException("Connect to the game before moving.");
         FormClosed += (_,_)=>{DisposeNavigationOverlay();zoneMapBackground.Dispose();};
         WindowsClientInput.Bind(world);
         ApplyModernLayout(root,tabs);
@@ -1822,7 +1824,6 @@ public sealed partial class HunterForm : Form
              long nextAnchorLootSweep=0;
              bool gamekeeperDefeated=false;
              bool gamekeeperReturnRouting=false;
-             long nextGamekeeperReturnTrace=0;
               Vec gamekeeperReturnLocation=anchor;
               double gamekeeperReturnHeading=savedHuntHeading;
               bool stationaryAssistReturnPending=false;
@@ -1979,87 +1980,41 @@ public sealed partial class HunterForm : Form
                 // throwing EngagedTargetPriorityException before the return
                 // route can start.
                 if(o.GroupMode || !gamekeeperReturnPending || !gamekeeperDefeated)return false;
-                // Keep the route alive between controller passes. Release1.20
-                // stopped and restarted W on every pass, then spent the same
-                // pass restoring the saved heading. That produced short,
-                // uneven movement pulses and could leave the player circling
-                // just outside the saved point.
                 bool startingReturn=!gamekeeperReturnRouting;
-                if(startingReturn)
-                {
-                    ReleaseCombatPickup();
-                    Input.HoldMouse(false,false,returnToken);
-                    drive.StopApproach();
-                    lockedTarget=null;
-                    navigation.BeginGoal("return to saved hunt location after Gamekeeper");
-                    TraceLog.Record("Gamekeeper return started",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Zone=runZone,Engaged=encounter.EngagedCount});
-                }
-                gamekeeperReturnRouting=true;
-                const double returnArrivalTolerance=3.25;
-                message="Returning to saved hunt location after Gamekeeper";
                 returningFromPriority=true;
                 try
                 {
-                    Vec current=world.PlayerPosition();
-                    // The client can stop a character against a collision
-                    // envelope a few units wide. Treat that settled envelope
-                    // as the saved point, then restore facing once; do not
-                    // keep turning while the route is still moving.
-                     if((current-gamekeeperReturnLocation).Length>returnArrivalTolerance)
+                    if(startingReturn)
                     {
-                        // Use the active completion boundary as a route
-                        // allowance.  An engaged Gamekeeper can legitimately
-                        // carry the player beyond the fresh-response radius;
-                        // the destination is still the fixed activation point.
-                        await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,returnToken,
-                            boundaryRadius:Math.Max(responseRadius,activeCompletionBoundary));
+                        ReleaseCombatPickup();Input.HoldMouse(false,false,returnToken);drive.StopApproach();
+                        drive.ResetTurnResponse();lockedTarget=null;
+                        navigation.BeginGoal("return to saved hunt location after Gamekeeper");
+                        TraceLog.Record("Gamekeeper return started",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Zone=runZone,Engaged=encounter.EngagedCount});
                     }
-                }
-                catch(RouteUnavailableException ex)
-                {
-                    drive.StopApproach();
-                    TraceLog.Record("Gamekeeper return route retry",new {Reason=ex.Message,Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Zone=runZone});
-                    await Input.Delay(100,returnToken);
+                    gamekeeperReturnRouting=true;
+                    message="Returning to saved hunt location after Gamekeeper";
+                    // Keep return ownership through settling AND saved facing.
+                    // Ordinary engaged selection resumes only after both pass.
+                    double gamekeeperArrivalTolerance=GamekeeperReturnPolicy.Stationary(o)?NearbyLootPickup.AnchorArrivalTolerance:3.25;
+                    bool arrived=await AnchorArrival.ReturnAsync(world.PlayerPosition,gamekeeperReturnLocation,gamekeeperArrivalTolerance,
+                        async ct=>
+                        {
+                            try {await NavigateTo(drive,gamekeeperReturnLocation,anchor,o,ct,
+                                boundaryRadius:Math.Max(responseRadius,activeCompletionBoundary),arrivalTolerance:gamekeeperArrivalTolerance);}
+                            catch(RouteUnavailableException ex)
+                            {
+                                drive.StopApproach();
+                                TraceLog.Record("Gamekeeper return route retry",new {Reason=ex.Message,Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Zone=runZone});
+                                await Input.Delay(100,ct);
+                            }
+                        },()=>drive.StopApproach(),ct=>RestoreHuntFacing(ct,3),Input.Delay,()=>Environment.TickCount64,returnToken,
+                        defend:DefendDuringAnchorReturn,extendOnProgress:true);
+                    if(!arrived)throw new AnchorReturnException("Gamekeeper return could not settle at the saved anchor; stopped rather than resume away from it.");
+                    gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;
+                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
                     return true;
                 }
-                catch(MovementBlockedException ex)
-                {
-                    drive.StopApproach();
-                    TraceLog.Record("Gamekeeper return movement retry",new {Reason=ex.Message,Position=ex.Position,Location=gamekeeperReturnLocation,Zone=runZone});
-                    await Input.Delay(100,returnToken);
-                    return true;
-                }
-                finally { returningFromPriority=false; }
-
-                Vec settled=world.PlayerPosition();
-                bool settledAtPoint=(settled-gamekeeperReturnLocation).Length<=returnArrivalTolerance;
-                if(settledAtPoint)
-                {
-                    drive.StopApproach();
-                    try { await RestoreSavedHuntFacing(returnToken); }
-                    catch(TurnUnresponsiveException ex)
-                    {
-                        drive.ResetTurnResponse();
-                        TraceLog.Record("Gamekeeper return facing retry",new {Reason=ex.Message,Position=ex.Position,Location=gamekeeperReturnLocation,Zone=runZone});
-                        await Input.Delay(100,returnToken);
-                        return true;
-                    }
-                    gamekeeperReturnPending=false;
-                    gamekeeperDefeated=false;
-                    gamekeeperReturnRouting=false;
-                    gamekeeperExcursion=false;
-                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=settled,Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
-                }
-                else
-                {
-                    long now=Environment.TickCount64;
-                    if(now>=nextGamekeeperReturnTrace)
-                    {
-                        nextGamekeeperReturnTrace=now+500;
-                        TraceLog.Record("Gamekeeper return still in progress",new {Position=settled,Location=gamekeeperReturnLocation,Distance=(settled-gamekeeperReturnLocation).Length,Zone=runZone,Engaged=encounter.EngagedCount});
-                    }
-                }
-                return true;
+                finally {returningFromPriority=false;drive.StopApproach();}
             }
             async Task ReturnToSavedHuntPointAfterLoot(CancellationToken returnToken)
             {
@@ -2218,7 +2173,8 @@ public sealed partial class HunterForm : Form
                         // Approach keeps forward held through successive recorded
                         // waypoints. Resetting the local planner at every point
                         // used to release/repress movement and cause jerky turns.
-                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance);
+                        Vec steeringGoal=path.SteeringGoal(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && navigation.CanAdvance(from,to,avoidZones));
+                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance,steeringDelta:steeringGoal-current);
                         await Input.Delay(25,returnToken);
                     }
                 }
@@ -2331,7 +2287,7 @@ public sealed partial class HunterForm : Form
             }
             void RememberGamekeeperReturn(Vec current)
             {
-                if(o.GroupMode || !o.ReturnToHuntLocationAfterGamekeeper || gamekeeperReturnPending)return;
+                if(!GamekeeperReturnPolicy.Required(o) || gamekeeperReturnPending)return;
                 gamekeeperReturnPending=true;gamekeeperDefeated=false;gamekeeperReturnLocation=activationLocation;
                 TraceLog.Record("saved hunt location for Gamekeeper return",new {Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Current=current,Zone=runZone});
             }
@@ -2382,8 +2338,10 @@ public sealed partial class HunterForm : Form
                     if(!startupRouteTravel && !activeFarmOnArrival)return;
                     continue;
                 }
-                await Input.Delay(rangedPull.Active?15:encounter.Active?25:100, token);
                 var gamekeeper=PriorityGamekeeper(o);
+                if(GamekeeperReturnPolicy.Ready(gamekeeper!=null,gamekeeperReturnPending,gamekeeperDefeated) && await ReturnAfterGamekeeper(token))continue;
+                await Input.Delay(rangedPull.Active?15:encounter.Active?25:100, token);
+                gamekeeper=PriorityGamekeeper(o);
                 if(gamekeeper!=null)RememberGamekeeperReturn(world.PlayerPosition());
                 // A dead priority target can leave healing or nearby-pickup
                 // input ahead of the return transition. Complete the return

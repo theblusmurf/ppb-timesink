@@ -63,8 +63,12 @@ internal static class WindowsClientInput
         sent = verified.Send(1, [packet], size);
         error = Marshal.GetLastWin32Error();
         if (sent == 1) Interlocked.Increment(ref used);
-        try { TraceLog.Record("compatibility input", new { Requested = 1, Sent = sent, WindowsError = error,
-            PacketType = packet.Type, Flags = packet.Type == 1 ? packet.Value.Keyboard.Flags : packet.Value.Mouse.Flags, PacketSize = size }); }
+        try
+        {
+            var details=new { Requested = 1, Sent = sent, WindowsError = error,
+                PacketType = packet.Type, Flags = packet.Type == 1 ? packet.Value.Keyboard.Flags : packet.Value.Mouse.Flags, PacketSize = size };
+            if(!PulseInputTrace.TryRecord("compatibility input",details))TraceLog.Record("compatibility input",details);
+        }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
         return true;

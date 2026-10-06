@@ -1,3 +1,14 @@
+## Release1.122
+
+Return to the farming anchor after Gamekeeper before selecting ordinary engaged enemies, and smooth route steering and short forward corrections.
+
+- Solo melee Mimic, Pulkhan, Tribal and Tower farming always retains its activation anchor and facing through a Gamekeeper excursion, including older settings with the optional return checkbox off. Handle the confirmed-death return before input preflight can select surviving enemies outside the ordinary leash. Keep the encounter for afterward; other solo modes retain their return preference and group mode follows the group.
+- Use the shared half-unit arrival and settling checks for stationary Gamekeeper return; other optional solo modes keep their existing arrival envelope. Keep return ownership through saved-facing restoration, allow protected stationary defense near home, and clear the request only after confirmed arrival. Measured distance progress renews the travel allowance, bounded facing retains its own allowance, and the whole return retains a two-minute hard cap. Preserve health, focus, new-Gamekeeper interrupts and collision protection.
+- Separate saved-route steering from checkpoint arrival. Look ahead up to 3.5 path units through locally clear gentle bends, confined to a narrow corridor; brake for cumulative curves. Preserve exact sharp-corner and final-anchor capture, original waypoint progress, blocked-segment checks and the configured turn cap. Logs distinguish steering direction from checkpoint direction.
+- Run each short forward correction with one serialized worker responsible for W release. Capture the verified window guard before the pulse, check stop/focus/cancellation while held, and run full scene preflight before and after on the controller thread. Buffer bounded timestamped input audit events until key-up so logging and UI delays do not extend the requested hold. Stop invalidates queued pulses; overlapping pulses and duplicate accepted releases are rejected.
+
+Validate the recorded Gamekeeper handoff distances, surviving encounters, mode preferences, gentle curves, sharp bends, blocked/unknown paths, exact arrival, delayed UI continuation, stop/focus loss, overlapping input and existing offline/UI checks without game input. Settings, routes and calibration profiles are preserved. Live smoothness and the complete death/repair/return cycle still require confirmation after upgrading; the running application is not replaced during validation.
+
 ## Release1.121
 
 Stop anchor corrections from bouncing across the saved point and starving stationary combat.

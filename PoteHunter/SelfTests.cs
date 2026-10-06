@@ -54,6 +54,7 @@ static class SelfTests
                 Checks = new[] { "recorded 5482 to 5413 player HP drop", "fresh full-health nearby Mimic defense", "initial low health is not an attack", "stand before resuming defense", "existing engagements retained", "Gamekeeper overrides defense", "confirmed deaths clear defense", "quiet period permits full-health recovery", "unknown, dead, distant, protected and ambiguous candidates excluded", "damage without a candidate exits sitting" }
             }, new JsonSerializerOptions { WriteIndented = true }));
             GamekeeperPriority.SelfTest();
+            GamekeeperReturnPolicy.Checks().GetAwaiter().GetResult();
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "gamekeeper-override-checks.json"), JsonSerializer.Serialize(new
             {
                 Passed = true,

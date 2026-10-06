@@ -229,6 +229,8 @@ internal static class MovementSmoothingChecks
             catch(ArgumentOutOfRangeException){rejectedPulse=true;}
             Require(rejectedPulse,"movement pulse admitted duration outside its short correction bounds");
         }
+        await MovementPulseTimingChecks.Run();
+        await Input.CheckForwardPulseInput();
         var completePulse=new ArrivalMotion();double priorPulseSpeed=completePulse.Speed;
         completePulse.ObservePulse(.7814072341773657,62);
         Require(completePulse.Speed>=priorPulseSpeed && completePulse.Speed<=priorPulseSpeed*1.0625,
@@ -413,6 +415,8 @@ internal static class MovementSmoothingChecks
                 "slow-cap progressive saved facing and delayed feedback","speed-derived bounded facing deadline",
                 "saved-facing deadline distinguished from real no-progress watchdog","extended facing cancellation and focus guards",
                 "movement key-up precedes slow postflight","short pulse focus/cancellation/duration gates",
+                "UI-blocked owner cannot delay worker key-up","serialized nested/overlapping pulse rejection",
+                "paired injected pulse packets and release races","bounded timestamp-preserving pulse trace",
                 "recorded complete delayed pulse displacement","measured slow-reader turn cadence bounded convergence",
                 "freshly reduced low-cap facing error extends soft allowance","stale/noisy/oscillating facing cannot renew deadline",
                 "progress-aware facing hard total bound and unavailable-error guard",
