@@ -1,3 +1,15 @@
+## Release1.121
+
+Stop anchor corrections from bouncing across the saved point and starving stationary combat.
+
+- Remove duplicate saved-route destination points so the final waypoint actually brakes. Brake at sharp corners and short final connectors while retaining continuous forward travel on straight route sections.
+- Time short forward corrections with stop/focus checks while held; run slow scene checks after key-up. Learn movement speed from the whole settled step, including delayed client position updates. Use the same half-unit arrival envelope for loot, melee-assist and saved-route returns, then confirm settling and the saved facing.
+- Let measured turning progress extend the saved-facing allowance within a shared twenty-second bound. Retain the separate no-response watchdog, speed/pixel limits and cancellation. Slow reader cadence no longer forces every turn correction to use only twenty milliseconds.
+- Once already near the stationary anchor, let incoming-damage handling proceed to protected target selection instead of repeatedly returning to the same spot. During an enabled farming return, defend against approved living targets already in the existing swing range, without chasing or assist steps. Renew character, zone, floor, target, HP and input checks; retain self-heal rules and completed revival/repair phases.
+- A near-anchor movement fault now preserves the pending return and retries after bounded stationary defense rather than releasing attack to wait passively for death. Travel-only routes with farming disabled, distant travel, unknown health, repair ownership and stop/focus guards retain their restrictions.
+
+Validate recorded overshoot geometry, delayed step feedback, minimum-frame arrival, route duplication/corners, low-cap and slow-feedback facing, target/range/identity changes, damage handoff, cancellation and existing offline/UI checks without game input. The running installation remains untouched; a complete live death/repair/return cycle still needs confirmation after upgrading. Short-step release retains one input owner on the UI thread, so operating-system scheduling can still delay key-up.
+
 ## Release1.120
 
 Keep completed revival and repair steps attached to each death until the character reaches its saved anchor. A route or final-facing retry now resumes the return instead of treating a living character as newly revived and opening repair again at the combat spot. A real new death starts a fresh recovery episode; unknown health and stale asynchronous completions cannot finish it.

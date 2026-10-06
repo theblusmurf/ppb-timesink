@@ -66,6 +66,8 @@ public sealed partial class HunterForm : Form
     bool encounterHasAttack;
     bool returningFromPriority;
     bool navigationInputOwned;
+    Func<StationaryReturnDefense.Observation>? stationaryReturnDefenseGuard;
+    sealed class StationaryReturnYieldException : Exception;
     bool HasNavigationInputOwner => navigationInputOwned || returningFromPriority || deathReturnInProgress || lootGuardPosition.HasValue;
     long nextEngagementObservation;
     double activeMovementBoundary;
@@ -1391,6 +1393,13 @@ public sealed partial class HunterForm : Form
             DeathRecoveryState.InterruptIfDead(playerHealth,o.AutoReviveAfterDeath,ObserveDeath);
             throw new InvalidOperationException("Player health is unavailable or the character died; stopped.");
         }
+        if(stationaryReturnDefenseGuard is { } defenseGuard)
+        {
+            // A short, in-place defense may borrow return ownership after
+            // repair. It renews the same live protections before every input.
+            if(!StationaryReturnDefense.CanDefend(defenseGuard()))throw new StationaryReturnYieldException();
+            _=CheckedHotbar();return;
+        }
         if(deathReturnInProgress || repairInProgress)
         {
             // Recovery owns movement until the destination and facing are
@@ -1818,6 +1827,115 @@ public sealed partial class HunterForm : Form
               double gamekeeperReturnHeading=savedHuntHeading;
               bool stationaryAssistReturnPending=false;
               bool stopAfterDeathReturn=false;
+            bool startupReturnPending=false;
+            long anchorAdjustmentRetryAt=0,nextAnchorAdjustmentTrace=0;
+            bool StationaryReturnContext()
+            {
+                if(!activeFarmOnArrival || o.GroupMode || o.HealerMode || o.Ranged || !Targeting.IsStationaryHuntFilter(o.Target) ||
+                    repairInProgress || deathRecovery.Pending && !deathRecovery.RepairCompleted || runCharacter==null ||
+                    world.ActiveZone()!=runZone || !StationaryReturnDefense.NearAnchor(world.PlayerPosition(),anchor))return false;
+                var self=world.LocalPlayer();
+                return LocalCharacter.Same(runCharacter,self) && world.TargetHealth(self.Id) is {Known:true,Dead:false} &&
+                    double.IsFinite(self.Height) && double.IsFinite(savedHuntHeight) && self.Height>0 && savedHuntHeight>0 &&
+                    Math.Abs(self.Height-savedHuntHeight)<2 && Avoidance.BlockedPoint(self.Position,avoidZones)==null;
+            }
+            bool RetryAnchorAdjustment(Exception failure)=>failure is TurnUnresponsiveException or MovementBlockedException or AnchorReturnException && StationaryReturnContext();
+            void DeferAnchorAdjustment(Exception failure)
+            {
+                ReleaseCombatPickup();drive.StopApproach();Input.Release();drive.ResetTurnResponse();lockedTarget=null;
+                faultDeathWatch.Reset();anchorAdjustmentRetryAt=Environment.TickCount64+500;
+                message="Holding near the saved anchor; defending nearby targets before retrying arrival.";
+                if(Environment.TickCount64>=nextAnchorAdjustmentTrace)
+                {
+                    nextAnchorAdjustmentTrace=Environment.TickCount64+2000;
+                    TraceLog.Record("anchor adjustment deferred for stationary defense",new{Error=failure.Message,
+                        Position=world.PlayerPosition(),Anchor=anchor,ReturnPending=deathRecovery.Pending,
+                        lootReturnPending,stationaryAssistReturnPending,startupReturnPending});
+                }
+            }
+            async Task<bool> DefendDuringAnchorReturn(CancellationToken defenseToken)
+            {
+                Input.CheckSafety(defenseToken);
+                if(!StationaryReturnContext())return false;
+                RefreshGuardScene();
+                var health=world.HealthSnapshot();var position=world.PlayerPosition();int level=world.PlayerLevel();
+                ObserveEncounter(o,health,position,level);
+                double swingRange=Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,Targeting.MeleeAttackRange+1.0);
+                var candidate=entities.Where(e=>e.Monster && !e.PriorityLootObject &&
+                    (Targeting.IsStationaryHuntTargetId(e.Id) || o.PrioritizeGamekeeper && Targeting.IsGamekeeper(e)) &&
+                    health.GetValueOrDefault(e.Id) is {Known:true,Dead:false} && (e.Position-position).Length<=swingRange &&
+                    (encounter.IsEngaged(e) || courtesy.StartedHere(e) || MatchesRequestedTarget(e,o,level)) &&
+                    TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,o)==null)
+                    .OrderBy(e=>o.PrioritizeGamekeeper && Targeting.IsGamekeeper(e)?0:1)
+                    .ThenByDescending(e=>health.GetValueOrDefault(e.Id).Current).FirstOrDefault();
+                if(candidate==null)return false;
+                long episode=deathRecovery.Episode;Vec defenseAnchor=anchor;
+                StationaryReturnDefense.Observation ObserveDefense()
+                {
+                    RefreshGuardScene();var liveHealth=world.HealthSnapshot();var self=world.LocalPlayer();
+                    var current=entities.FirstOrDefault(e=>TargetIdentity(e)==TargetIdentity(candidate));
+                    bool ambiguous=entities.Any(e=>e.Id==candidate.Id && TargetIdentity(e)!=TargetIdentity(candidate));
+                    ObserveEncounter(o,liveHealth,self.Position,level);
+                    return new(self.Position,anchor,liveHealth.GetValueOrDefault(self.Id),current,
+                        liveHealth.GetValueOrDefault(candidate.Id),swingRange,
+                        !ambiguous && deathRecovery.Episode==episode && anchor==defenseAnchor && StationaryReturnContext(),
+                        current!=null && (encounter.IsEngaged(current) || courtesy.StartedHere(current) || MatchesRequestedTarget(current,o,level)) &&
+                        TargetGuardReason(current,liveHealth.GetValueOrDefault(current.Id),self.Position,o)==null);
+                }
+                if(!StationaryReturnDefense.CanDefend(ObserveDefense()))return false;
+                bool previousNavigationOwner=navigationInputOwned;var previousGuard=stationaryReturnDefenseGuard;
+                var previousPickup=Input.PickupHoldProvider;
+                navigationInputOwned=true;stationaryReturnDefenseGuard=ObserveDefense;lockedTarget=candidate;defensePending=false;defenseStep=null;
+                Input.PickupHoldProvider=null;ReleaseCombatPickup();
+                if(!encounter.Active)
+                {
+                    encounter.Begin();encounterExistingDrops=world.Loot().Select(item=>(item.KeyA,item.KeyB)).ToHashSet();
+                    encounterAnchor=anchor;encounterHasAttack=false;
+                }
+                TraceLog.Record("stationary defense during anchor return",new{candidate.Id,candidate.DisplayName,
+                    Position=position,Anchor=anchor,Distance=(candidate.Position-position).Length,SwingRange=swingRange,
+                    ReturnPending=deathRecovery.Pending,Episode=episode});
+                try
+                {
+                    var outcome=await StationaryReturnDefense.RunAsync(ObserveDefense,()=>drive.StopApproach(),async (sample,ct)=>
+                    {
+                        var current=sample.Target!;lockedTarget=current;
+                        Input.HoldMouse(false,true,ct);
+                        courtesy.MarkAttack(current);encounter.MarkAttack(current,sample.TargetHealth);encounterHasAttack=true;
+                        encounter.NoteAttack(sample.Position,Encounter.CollateralReach((double)o.MeleeRange));encounterQuietSince=0;
+                        try {await drive.Face(world,current.Position-world.PlayerPosition(),ct,.035);}
+                        catch(TurnUnresponsiveException) {drive.ResetTurnResponse();}
+                        // Reuse survival rules without casting offensive skills,
+                        // chasing, resting, or repeating completed repair stages.
+                        await TryHeal(drive,o,ct);
+                        var bar=CheckedHotbar();long now=Environment.TickCount64;
+                        int healIndex=CombatSkillPolicy.Choose(o.SkillKeys,skillCursor,bar,skillDue,now,SkillConditionHealth(o),o,
+                            default,targetReady:true,offensiveReady:false,delayReady:false,
+                            eligible:slot=>CombatSkillPolicy.IsPriorityHeal(slot,o) && ManaSkillAllowed(slot,o));
+                        if(healIndex>=0)
+                        {
+                            char key=o.SkillKeys[healIndex];var slot=bar.Slot(key);
+                            await Input.Key((Keys)key,50,ct);await Input.Delay(80,ct);
+                            if(await CastHealthCheckedSkill(slot,o,ct))
+                            {
+                                Input.HoldMouse(false,true,ct);await Input.Delay(150,ct);
+                                var after=CheckedHotbar().Slot(key);
+                                skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,after.RemainingCooldown>0 || after.Locked,o.SkillSeconds);
+                                skillCursor=(healIndex+1)%Math.Max(1,o.SkillKeys.Length);
+                            }
+                        }
+                    },()=>Input.HoldMouse(false,false,default),Input.Delay,()=>Environment.TickCount64,defenseToken);
+                    return outcome!=StationaryReturnDefenseOutcome.Unavailable;
+                }
+                catch(StationaryReturnYieldException){return true;}
+                finally
+                {
+                    drive.StopApproach();Input.HoldMouse(false,false,default);lockedTarget=null;
+                    stationaryReturnDefenseGuard=previousGuard;navigationInputOwned=previousNavigationOwner;
+                    Input.PickupHoldProvider=previousPickup;
+                }
+            }
+
             Task RestoreSavedHuntFacing(CancellationToken restoreToken)=>RestoreHuntFacing(restoreToken,1);
             Task RestoreLootFacing(CancellationToken restoreToken)=>RestoreHuntFacing(restoreToken,3);
             async Task RestoreHuntFacing(CancellationToken restoreToken,int attempts)
@@ -1830,10 +1948,12 @@ public sealed partial class HunterForm : Form
                     attempt=>TraceLog.Record("saved facing retry",new{Attempt=attempt,Position=world.PlayerPosition(),Heading=gamekeeperReturnHeading}),
                     timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(drive.TurnSpeedDegreesPerSecond),
                     failureObserved:failure=>TraceLog.Record("saved facing failed",new{failure.Reason,failure.Attempt,
-                        failure.ElapsedMilliseconds,failure.TimeoutMilliseconds,Position=world.PlayerPosition(),
+                        failure.ElapsedMilliseconds,failure.TimeoutMilliseconds,failure.BestErrorRadians,failure.ProgressExtensions,
+                        failure.TotalElapsedMilliseconds,Position=world.PlayerPosition(),
                         ActualHeading=world.PlayerHeading(),SavedHeading=gamekeeperReturnHeading,drive.TurnSpeedDegreesPerSecond}),
                     deadlineFailure:()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward,
-                        "Saved facing did not settle within its turn-speed allowance."));
+                        "Saved facing did not settle within its turn-speed allowance."),
+                    errorRadians:()=>Movement.Angle(Movement.FromClientHeading(world.PlayerHeading()),desiredForward));
                 TraceLog.Record("restored saved hunt facing",new {Heading=gamekeeperReturnHeading,Position=world.PlayerPosition(),Attempts=observations,Zone=runZone});
             }
             var fallbackCycle=new RecoveryFallbackCycle(activeSavedRouteSlot);
@@ -1843,7 +1963,8 @@ public sealed partial class HunterForm : Form
             {
                 try { await MoveToSavedHuntAnchor(token,false); }
                 catch(DeathRecoveryRequiredException) { /* Continue into the recovery loop below. */ }
-                if(!startupRouteTravel && !deathRecovery.Pending && !activeFarmOnArrival)
+                catch(Exception ex) when(RetryAnchorAdjustment(ex)) {startupReturnPending=true;DeferAnchorAdjustment(ex);}
+                if(!startupReturnPending && !startupRouteTravel && !deathRecovery.Pending && !activeFarmOnArrival)
                 {
                     message="Saved route reached; farming on arrival is disabled.";
                     TraceLog.Record("saved route reached without farming",new{Slot=selectedSavedRouteSlot,Location=anchor,Zone=runZone});
@@ -1952,7 +2073,8 @@ public sealed partial class HunterForm : Form
                     bool arrived=await AnchorArrival.ReturnAsync(world.PlayerPosition,anchor,NearbyLootPickup.AnchorArrivalTolerance,
                         async ct=>{await NavigateTo(drive,anchor,anchor,o,ct,
                             boundaryRadius:(double)o.LootPickupRadius,arrivalTolerance:NearbyLootPickup.AnchorArrivalTolerance);},
-                        ()=>drive.StopApproach(),RestoreLootFacing,Input.Delay,()=>Environment.TickCount64,returnToken);
+                        ()=>drive.StopApproach(),RestoreLootFacing,Input.Delay,()=>Environment.TickCount64,returnToken,
+                        defend:DefendDuringAnchorReturn);
                     if(!arrived)throw new AnchorReturnException("Loot return could not settle at the saved anchor; stopped rather than resume away from it.");
                     lootReturnPending=false;
                     TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
@@ -1961,7 +2083,7 @@ public sealed partial class HunterForm : Form
             }
             async Task<bool> ReturnToSavedHuntPointAfterStationaryAssist(CancellationToken returnToken)
             {
-                const double arrivalTolerance=.15;
+                const double arrivalTolerance=NearbyLootPickup.AnchorArrivalTolerance;
                 ReleaseCombatPickup();Input.HoldMouse(false,false,returnToken);drive.StopApproach();
                 message="Returning to saved hunt point after stationary melee assist";
                 navigation.BeginGoal("return after stationary melee assist");
@@ -1975,7 +2097,8 @@ public sealed partial class HunterForm : Form
                             try {await NavigateTo(drive,anchor,anchor,o,ct,
                                 boundaryRadius:Math.Max((double)o.HuntRadius,activeCompletionBoundary),arrivalTolerance:arrivalTolerance);}
                             catch(RouteUnavailableException ex) {drive.StopApproach();TraceLog.Record("stationary assist return route retry",new {Reason=ex.Message,Anchor=anchor});}
-                        },()=>drive.StopApproach(),RestoreSavedHuntFacing,Input.Delay,()=>Environment.TickCount64,returnToken);
+                        },()=>drive.StopApproach(),RestoreSavedHuntFacing,Input.Delay,()=>Environment.TickCount64,returnToken,
+                        defend:DefendDuringAnchorReturn);
                     if(!arrived)
                     {
                         TraceLog.Record("stationary assist return still pending",new {Position=world.PlayerPosition(),Anchor=anchor});
@@ -2001,7 +2124,7 @@ public sealed partial class HunterForm : Form
                     var route=navigation.GetSavedRoute(slot)!;
                     return RecoveryRouting.Occupied(route.Anchor,route.Height,route.HuntRadius>0?route.HuntRadius:(double)o.HuntRadius,entities,guardSelfId);
                 }
-                bool CompatibleSlot(int slot)=>navigation.GetSavedRoute(slot) is {} route && RecoveryRouting.CompatibleIdentity(route,runZone.Value,runCharacter.Name) && RecoveryTravel.SharedOrigin(reference,route);
+                bool CompatibleSlot(int slot)=>navigation.GetSavedRoute(slot) is {} route && RecoveryRouting.CompatibleIdentity(route,runZone!.Value,runCharacter.Name) && RecoveryTravel.SharedOrigin(reference,route);
                 void ResetPath(){path=null;progressIndex=-1;bestDistance=double.PositiveInfinity;progressAt=Environment.TickCount64;drive.StopApproach();drive.ResetTurnResponse();}
                 void Activate(int slot)
                 {
@@ -2012,7 +2135,7 @@ public sealed partial class HunterForm : Form
                     if(original)savedHuntHeight=originalSavedPoint.Height;
                     else if(route.Height>0)savedHuntHeight=route.Height;
                     activeSavedRouteSlot=selectedSavedRouteSlot=slot;selectedSavedRoute=route;ApplyRouteProfile(route);
-                    activeHuntAnchor=anchor;ArmClientRecovery(runCharacter,runZone.Value,anchor,savedHuntHeading,savedHuntHeight,o,route,slot);activeExcursion=new HuntExcursion(anchor,(double)o.HuntRadius);ResetPath();
+                    activeHuntAnchor=anchor;ArmClientRecovery(runCharacter,runZone!.Value,anchor,savedHuntHeading,savedHuntHeight,o,route,slot);activeExcursion=new HuntExcursion(anchor,(double)o.HuntRadius);ResetPath();
                     TraceLog.Record("recovery destination selected",new{Slot=slot,Anchor=anchor,AfterDeath=afterDeath});
                 }
                 bool ChooseDestination()
@@ -2039,7 +2162,7 @@ public sealed partial class HunterForm : Form
                         if(path==null)
                         {
                             var destination=fallbackCycle.Waiting?reference:activeRouteProfile!;
-                            if(!RecoveryRouting.CompatibleIdentity(destination,runZone.Value,runCharacter.Name))throw new RouteUnavailableException("Saved route no longer matches the character or map.");
+                            if(!RecoveryRouting.CompatibleIdentity(destination,runZone!.Value,runCharacter.Name))throw new RouteUnavailableException("Saved route no longer matches the character or map.");
                             var routes=alternatives?navigation.SavedRoutes:new SavedNavigationRoute?[]{destination};
                             var plan=RecoveryTravel.Plan(routes,destination,current,fallbackCycle.Waiting,!afterDeath && startupRouteTravel?(double)o.RouteCorridorRadius:20);
                             // Activation may be up to 2.5 units from the route's
@@ -2048,6 +2171,13 @@ public sealed partial class HunterForm : Form
                             activeMovementBoundary=Math.Max((double)o.HuntRadius,Math.Max((current-anchor).Length+2,
                                 plan.Points.Select(p=>(p-anchor).Length+2).DefaultIfEmpty(0).Max()));
                             navigation.BeginGoal(fallbackCycle.Waiting?"retreat on saved route to revival point":"follow saved return route");
+                        }
+                        long defenseAt=Environment.TickCount64;
+                        if(!fallbackCycle.Waiting && await DefendDuringAnchorReturn(returnToken))
+                        {
+                            // Fighting in place is not failed route progress.
+                            progressAt+=Math.Max(0,Environment.TickCount64-defenseAt);
+                            await Input.Delay(20,returnToken);continue;
                         }
                         Vec? goal=path.Next(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && navigation.CanAdvance(from,to,avoidZones));
                         if(goal==null)
@@ -2068,7 +2198,7 @@ public sealed partial class HunterForm : Form
                             }
                             RefreshGuardScene();if(ChooseDestination())continue;
                             var arrivedBody=world.LocalPlayer();
-                            if(!RecoveryRouting.Compatible(activeRouteProfile!,runZone.Value,runCharacter.Name,arrivedBody.Height))
+                            if(!RecoveryRouting.Compatible(activeRouteProfile!,runZone!.Value,runCharacter.Name,arrivedBody.Height))
                                 throw new RouteUnavailableException("Saved anchor position reached on a different or unreadable floor; route arrival was not confirmed.");
                             await RestoreSavedHuntFacing(returnToken);
                             RefreshGuardScene();if(ChooseDestination())continue;
@@ -2088,7 +2218,7 @@ public sealed partial class HunterForm : Form
                         // Approach keeps forward held through successive recorded
                         // waypoints. Resetting the local planner at every point
                         // used to release/repress movement and cause jerky turns.
-                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.Final?.5:0);
+                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance);
                         await Input.Delay(25,returnToken);
                     }
                 }
@@ -2211,6 +2341,15 @@ public sealed partial class HunterForm : Form
             {
                 try
                 {
+                if(faultDeathWatch.Active && StationaryReturnContext())
+                {
+                    faultDeathWatch.Reset();anchorAdjustmentRetryAt=Environment.TickCount64+500;
+                    TraceLog.Record("near anchor fault watch resumed stationary defense",new{Position=world.PlayerPosition(),Anchor=anchor});
+                }
+                if(Environment.TickCount64<anchorAdjustmentRetryAt)
+                {
+                    await DefendDuringAnchorReturn(token);await Input.Delay(50,token);continue;
+                }
                 if(faultDeathWatch.Active)
                 {
                     Input.CheckSafety(token);
@@ -2236,6 +2375,12 @@ public sealed partial class HunterForm : Form
                     _=CheckedHotbar();
                     message="Movement fault: input released; monitoring for death for up to two minutes. "+faultDeathWatch.Reason;
                     await Task.Delay(100,token);continue;
+                }
+                if(startupReturnPending && !deathRecovery.Pending)
+                {
+                    await MoveToSavedHuntAnchor(token,false);startupReturnPending=false;
+                    if(!startupRouteTravel && !activeFarmOnArrival)return;
+                    continue;
                 }
                 await Input.Delay(rangedPull.Active?15:encounter.Active?25:100, token);
                 var gamekeeper=PriorityGamekeeper(o);
@@ -2268,8 +2413,15 @@ public sealed partial class HunterForm : Form
                 {
                     if(defensePending && !HasActiveFight())
                     {
-                        await RepositionUnderPressure(drive,anchor,o,token);
-                        continue;
+                        if(StationaryReturnDefense.ShouldHandOffPressure(o.GroupMode,Targeting.IsStationaryHuntFilter(o.Target),
+                            world.PlayerPosition(),anchor,world.TargetHealth(guardSelfId)))
+                        {
+                            // We are already home. Let protected target selection
+                            // run in this pass instead of re-entering the same
+                            // damage-return branch on every preflight.
+                            defensePending=false;defenseStep=null;drive.StopApproach();
+                        }
+                        else {await RepositionUnderPressure(drive,anchor,o,token);continue;}
                     }
                     if(!(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
                     if(deathRecovery.Pending)continue;
@@ -3250,6 +3402,10 @@ public sealed partial class HunterForm : Form
                     message="Incoming damage: staying upright and looking for a nearby enemy to defend against.";
                     TraceLog.Record("recovery resumed under incoming damage",new {HP=world.TargetHealth(guardSelfId),Engaged=encounter.EngagedCount});
                 }
+                catch(Exception ex) when(RetryAnchorAdjustment(ex))
+                {
+                    DeferAnchorAdjustment(ex);
+                }
                 catch(Exception ex) when(faultDeathWatch.TryBegin(ex,o.AutoReviveAfterDeath,o.GroupMode,token.IsCancellationRequested,Environment.TickCount64))
                 {
                     Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();drive.ResetTurnResponse();lockedTarget=null;
@@ -3275,7 +3431,7 @@ public sealed partial class HunterForm : Form
             if(pendingClientResume==null && !TryQueueClientRecovery())Stop(reason);
         }
         catch (Exception ex) { TraceLog.Record("hunt failed", new { Error = ex.Message }); if(!TryQueueClientRecovery())Stop(ex.Message); }
-        finally { FinishLoggedHunt(message);navigation.EndRecording();faultDeathWatch.Reset();deathRecoveryActive=false;deathRecovery.Reset();deathReturnInProgress=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;navigationInputOwned=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
+        finally { stationaryReturnDefenseGuard=null;FinishLoggedHunt(message);navigation.EndRecording();faultDeathWatch.Reset();deathRecoveryActive=false;deathRecovery.Reset();deathReturnInProgress=false;combatPressure.Reset();defensePending=false;defenseRepositioning=false;defenseStep=null;inferredDefense=null;buffInProgress=false;returningFromPriority=false;navigationInputOwned=false;Input.PickupHoldProvider=null;nearbyPickupCount=0;working = false; settings.Enabled = true; protectionPanel.Enabled=true;automaticRouting.Enabled=true;clearNavigation.Enabled=true; connect.Enabled = true; start.Enabled=true; ReleaseCombatPickup(); Input.Release(); Input.Preflight=null; healingRestPending=false; healingRest=null; runCharacter=null; activeHuntAnchor=null; activeExcursion=null; activeGuardOptions=null; retreatRecovery=null;retreatDrive=null;lootGuardPosition=null; lootBeforeFight=null; encounter.Reset(); deferredLoot.Clear(); encounterExistingDrops=null; encounterAnchor=null; encounterHasAttack=false; courtesy.Reset(); playerGreeting.Reset(); movement = null; runHotbarPage = null;runZone=null; cancel?.Dispose(); cancel = null; }
     }
 
     async Task RecoverUnresponsiveTurn(Movement drive,Entity target,Vec anchor,Options options,double boundary,int attempt,

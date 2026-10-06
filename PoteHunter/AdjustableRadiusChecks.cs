@@ -77,9 +77,9 @@ internal static class AdjustableRadiusChecks
             NearbyLootPickup.InsideAnchor(Drop(4,125).Position,anchor,30),
             "Loot eligibility did not respond to a smaller or larger pickup radius.");
         Require(!NearbyLootPickup.EvaluateAnchor(anchor,anchor,[Drop(5,104)],30).HoldLoot &&
-            NearbyLootPickup.PickupReach==3 && NearbyLootPickup.ArrivedAtAnchor(new(100.1,100),anchor) &&
-            !NearbyLootPickup.ArrivedAtAnchor(new(100.2,100),anchor),
-            "A larger loot circle changed physical pickup reach or exact anchor-return tolerance.");
+            NearbyLootPickup.PickupReach==3 && NearbyLootPickup.ArrivedAtAnchor(new(100.5,100),anchor) &&
+            !NearbyLootPickup.ArrivedAtAnchor(new(100.5001,100),anchor),
+            "A larger loot circle changed physical pickup reach or the fixed half-unit anchor arrival envelope.");
 
         var target=new Entity(1,0x813d1753,"Mimic",new(10.5,0),0,Model:"MON_mimic.GCMDS");
         var health=new Dictionary<uint,Health>{{target.Id,new(100,100)}};

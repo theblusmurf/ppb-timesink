@@ -89,12 +89,21 @@ internal sealed class RecoveryPath
     public int Index=>index;
     public RecoveryPath(IEnumerable<Vec> waypoints,Vec anchor)
     {
-        points=waypoints.Append(anchor).ToArray();
-        if(points.Any(p=>!p.Finite))throw new RouteUnavailableException("Recovery route contains an invalid position.");
+        var source=waypoints.Append(anchor).ToArray();
+        if(source.Any(p=>!p.Finite))throw new RouteUnavailableException("Recovery route contains an invalid position.");
+        // Plans already include their destination. Keep the actual anchor only
+        // once, so it receives final-arrival braking before we pass it.
+        points=source.Where((point,at)=>at==source.Length-1 || point!=source[at+1]).ToArray();
     }
     // A clear, short lookahead avoids turning sideways just to touch the
     // projected route entry. Sharp corners and the final anchor stay exact.
     public bool Final=>index==points.Length-1;
+    // Straight recorded samples use continuous movement. A required bend or
+    // short final adjustment must release W and approach within its capture
+    // distance, rather than overshoot and turn back while enemies hit us.
+    public double ArrivalTolerance=>Final?.5:index<points.Length &&
+        (index>0 && !Straight(index-1) || !Straight(index) ||
+         index==points.Length-2 && (points[index+1]-points[index]).Length<=2.5) ? .6 : 0;
     bool Straight(int at)
     {
         if(at+2>=points.Length)return true;

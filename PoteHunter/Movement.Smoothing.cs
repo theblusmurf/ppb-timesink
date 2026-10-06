@@ -41,13 +41,19 @@ internal sealed class SmoothSteering
         if(awaitingHeading && now-sentAt<80 && Math.Abs(Wrap(heading-sentHeading))<.001)return 0;
         // Long combat/reader pauses never turn into a large catch-up packet.
         double elapsed=started?(now-lastAt)/1000.0:.016;
-        double dt=elapsed>.050?.020:Math.Clamp(elapsed,.016,.032);
-        if(!started || now-lastAt>250)velocity=fractionalPixels=0;
+        // Reader/preflight work can put measured feedback 80–120ms apart.
+        // Admit at most 50ms of elapsed correction, also bounded by the
+        // calibrated rate/pixel and outstanding-angle budgets below. Treating
+        // every slow observation as only 20ms made a responsive turn crawl.
+        bool restartFrame=!started || now-lastAt>=250;
+        double dt=restartFrame?.016:Math.Clamp(elapsed,.016,.050);
+        if(restartFrame)velocity=fractionalPixels=0;
         // Reserve unreported corrections against the remaining angle. Small
         // sensitivity can pipeline turns without blindly stacking near the goal.
         if(outstandingTurn!=0 && Math.Sign(outstandingTurn)!=Math.Sign(error))return 0;
         double available=Math.Max(0,Math.Abs(error)*.70-Math.Abs(outstandingTurn));
-        int budgetPixels=(int)Math.Min(limit,Math.Floor(available/Math.Abs(sensitivity)));
+        double packetAngularLimit=walking?.225:.300;
+        int budgetPixels=(int)Math.Min(limit,Math.Floor(Math.Min(available,packetAngularLimit)/Math.Abs(sensitivity)));
         if(budgetPixels<1)return 0;
         if(Math.Sign(velocity)!=Math.Sign(error))velocity=fractionalPixels=0;
         const double acceleration=32;
@@ -129,15 +135,28 @@ internal static class AnchorArrival
     // injected so the whole stop/settle/face/recheck sequence is testable offline.
     public static async Task<bool> ReturnAsync(Func<Vec> position,Vec anchor,double tolerance,
         Func<CancellationToken,Task> approach,Action stop,Func<CancellationToken,Task> face,
-        Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token)
+        Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token,
+        Func<CancellationToken,Task<bool>>? defend=null)
     {
         if(!anchor.Finite || !double.IsFinite(tolerance) || tolerance<=0)throw new ArgumentOutOfRangeException(nameof(anchor));
-        long deadline=clock()+15000;
+        long startedAt=clock(),deadline=startedAt+15000,hardDeadline=startedAt+120000;
         try
         {
-            while(clock()<deadline)
+            while(clock()<deadline && clock()<hardDeadline)
             {
                 token.ThrowIfCancellationRequested();
+                if(defend!=null)
+                {
+                    long defenseAt=clock();
+                    // The injected stationary defense owns/relinquishes its
+                    // attack input. It must not leave attack held when it
+                    // returns false and this controller resumes aiming.
+                    if(await defend(token))
+                    {
+                        deadline=Math.Min(hardDeadline,deadline+Math.Max(0,clock()-defenseAt));
+                        stop();await delay(20,token);continue;
+                    }
+                }
                 Vec before=position();
                 if(!before.Finite)throw new InvalidOperationException("Anchor return position is unavailable.");
                 if((before-anchor).Length>tolerance)
@@ -149,7 +168,7 @@ internal static class AnchorArrival
                 if(!Settled(before,settled,anchor,tolerance))continue;
                 await face(token);
                 stop();before=position();await delay(120,token);
-                if(clock()<=deadline && Settled(before,position(),anchor,tolerance))return true;
+                if(clock()<=deadline && clock()<=hardDeadline && Settled(before,position(),anchor,tolerance))return true;
             }
             return false;
         }
@@ -176,19 +195,19 @@ public sealed partial class Movement
         int duration=arrivalMotion.PulseMilliseconds(delta.Length,tolerance);
         double step=Math.Min(delta.Length,Math.Max(.05,arrivalMotion.Speed*duration*2));
         if(CanAdvance?.Invoke(position,position+forward*step)==false)return;
-        long heldAt=Environment.TickCount64;
         double heldMilliseconds=0;
         try
         {
-            Input.Hold(Keys.W,true,token);advancing=true;
-            heldAt=Environment.TickCount64;
-            await Input.Delay(duration,token);
+            advancing=true;
+            heldMilliseconds=await Input.PulseForward(duration,token);
         }
-        finally { Input.Hold(Keys.W,false,default);advancing=false;heldMilliseconds=Environment.TickCount64-heldAt; }
+        finally { Input.Hold(Keys.W,false,default);advancing=false; }
         Vec released=world.PlayerPosition();
         await Input.Delay(120,token);
         Vec after=world.PlayerPosition();
-        arrivalMotion.ObservePulse((released-position).Length,heldMilliseconds);
+        // The client frequently publishes most/all movement after key-up.
+        // Train on the complete settled pulse rather than a partial first read.
+        arrivalMotion.ObservePulse((after-position).Length,heldMilliseconds);
         TraceLog.Record("anchor approach correction",new {Before=position,After=after,Goal=goal,
             Remaining=(goal-after).Length,PulseMilliseconds=duration,HeldMilliseconds=heldMilliseconds,
             MovedWhileHeld=(released-position).Length,SettlingDisplacement=(after-released).Length,EstimatedUnitsPerMs=arrivalMotion.Speed});

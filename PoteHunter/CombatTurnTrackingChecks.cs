@@ -58,7 +58,10 @@ internal static class CombatTurnTrackingChecks
                 Require(Math.Sign(error)==Math.Sign(goal)||Math.Abs(error)<=.018,"fine tracking overshot delayed feedback");
                 if(Math.Abs(error)<=.018&&pending.Count==0)break;
                 int pixels=steering.Next(error,-observed,sensitivity,false,elapsed,rate,150,.018);
-                Require(Math.Abs(pixels*sensitivity)<=150*Math.PI/180*.032+Math.Abs(sensitivity),"correction exceeded two frames at the cap");
+                // Delayed heading reads can spread sends beyond two frames.
+                // They admit at most50ms from the measured rate budget; the
+                // remaining-angle reservation still forbids stacked overshoot.
+                Require(Math.Abs(pixels*sensitivity)<=150*Math.PI/180*.050+Math.Abs(sensitivity),"correction exceeded the bounded50ms measured allowance");
                 if(pixels!=0)
                     for(int part=0;part<4;part++)pending.Enqueue(pixels*sensitivity/4,elapsed+latency+part*16);
             }

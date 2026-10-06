@@ -170,7 +170,7 @@ internal static class MovementSmoothingChecks
             },noProgressResponse.Reset,()=>{},FacingDelay,()=>facingClock,
                 ()=>new TurnUnresponsiveException(default,default),default,
                 timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(30),failureObserved:facingFailures.Add,
-                deadlineFailure:()=>{deadlineFactories++;return deadlineException;});
+                deadlineFailure:()=>{deadlineFactories++;return deadlineException;},errorRadians:()=>1);
         }
         catch(TurnUnresponsiveException ex){observedFailure=ex;}
         Require(ReferenceEquals(observedFailure,noProgressException) && deadlineFactories==0 &&
@@ -194,6 +194,128 @@ internal static class MovementSmoothingChecks
             catch(OperationCanceledException){interrupted=true;}
             Require(interrupted && facingFailures.Count==0 && stopCalls==0,
                 "extended saved-facing retries swallowed cancellation or a lost-focus guard");
+        }
+
+        // Replay a 16ms correction with a slow 46ms scene read. The read must
+        // execute with W already up, rather than turning it into the recorded
+        // 62ms pulse that crossed the anchor by about .78 map units.
+        long pulseClock=0;bool forwardHeld=false;int fullPulseChecks=0,pulseEnds=0;
+        long measuredPulseHeld=await MovementPulseTiming.RunAsync(16,()=>{pulseClock+=100;fullPulseChecks++;forwardHeld=true;},
+            ()=>{forwardHeld=false;pulseEnds++;},()=>Require(forwardHeld,"pulse safety ran after its input owner ended"),
+            ()=>{Require(!forwardHeld,"slow postflight ran while W remained held");pulseClock+=46;fullPulseChecks++;},
+            (ms,ct)=>{ct.ThrowIfCancellationRequested();pulseClock+=ms;return Task.CompletedTask;},()=>pulseClock,default);
+        Require(measuredPulseHeld==16 && pulseClock==162 && fullPulseChecks==2 && pulseEnds==1 && !forwardHeld,
+            "slow full preflight extended the movement pulse or measured pre/post reads as held time");
+        foreach(bool focusFailure in new[]{false,true})
+        {
+            pulseClock=0;forwardHeld=false;int postChecks=0;bool ended=false,interrupted=false;
+            using var pulseCancellation=new CancellationTokenSource();
+            try
+            {
+                await MovementPulseTiming.RunAsync(16,()=>forwardHeld=true,()=>{forwardHeld=false;ended=true;},
+                    ()=>{if(focusFailure)throw new OperationCanceledException("Game lost focus.");},()=>postChecks++,
+                    (ms,ct)=>{pulseClock+=ms;pulseCancellation.Cancel();ct.ThrowIfCancellationRequested();return Task.CompletedTask;},
+                    ()=>pulseClock,pulseCancellation.Token);
+            }
+            catch(OperationCanceledException){interrupted=true;}
+            Require(interrupted && ended && !forwardHeld && postChecks==0,
+                "short movement pulse swallowed stop/focus or left W held on cancellation");
+        }
+        foreach(int invalidPulse in new[]{0,15,61,int.MaxValue})
+        {
+            bool rejectedPulse=false;
+            try {await MovementPulseTiming.RunAsync(invalidPulse,()=>throw new Exception("Invalid pulse emitted input"),
+                ()=>{},()=>{},()=>{},(ms,ct)=>Task.CompletedTask,()=>0,default);}
+            catch(ArgumentOutOfRangeException){rejectedPulse=true;}
+            Require(rejectedPulse,"movement pulse admitted duration outside its short correction bounds");
+        }
+        var completePulse=new ArrivalMotion();double priorPulseSpeed=completePulse.Speed;
+        completePulse.ObservePulse(.7814072341773657,62);
+        Require(completePulse.Speed>=priorPulseSpeed && completePulse.Speed<=priorPulseSpeed*1.0625,
+            "recorded total displacement was ignored or changed arrival speed without filtering");
+        var delayedPulse=new ArrivalMotion();delayedPulse.ObservePulse(.26012016453944425,32);
+        Require(delayedPulse.Speed<priorPulseSpeed,
+            "all-after-release recorded motion was ignored instead of training the complete pulse");
+
+        // Measured feedback at the observed reader cadence must use elapsed
+        // time without exceeding the rate/pixel/remaining-angle bounds.
+        foreach(int cadence in new[]{80,120})
+        foreach(double sensitivity in new[]{-.004,.004})
+        {
+            var slowReaderSteering=new SmoothSteering();var rate=new TurnRateBudget();
+            double readerRemaining=Math.PI,heading=0;long at=0;
+            for(;at<3091 && readerRemaining>.035;at+=cadence)
+            {
+                int pixels=slowReaderSteering.Next(readerRemaining,heading,sensitivity,false,at,rate,165);
+                double correction=pixels*sensitivity;
+                Require(correction>=0 && correction<=.301 && Math.Abs(pixels)<=112,
+                    "slow-reader steering exceeded packet bounds or corrected away from the goal");
+                readerRemaining-=correction;heading-=correction;
+                Require(readerRemaining>=-.035,"slow-reader steering overshot its remaining-angle reservation");
+            }
+            Require(readerRemaining<=.035 && at<=3091,"responsive 165-degree cap could not finish a half-turn at the recorded reader cadence");
+        }
+
+        // A low cap with slow but freshly observed feedback takes longer than
+        // the nominal allowance. Keep the original watchdog and grant time
+        // only when measured error beats the previous best by a useful amount.
+        facingClock=0;var slowCapSteering=new SmoothSteering();var slowCapRate=new TurnRateBudget();
+        var slowCapResponse=new TurnResponse();double measuredRemaining=Math.PI,measuredHeading=0;
+        facingFailures.Clear();
+        await FacingRestore.RunAsync(_=>
+        {
+            facingClock+=100;
+            if(measuredRemaining<=.035)return Task.FromResult(true);
+            int pixels=slowCapSteering.Next(measuredRemaining,measuredHeading,.004,false,facingClock,slowCapRate,30);
+            if(slowCapResponse.Observe(default,measuredHeading,pixels,facingClock,true))
+                throw new TurnUnresponsiveException(default,default);
+            double correction=pixels*.004;measuredHeading-=correction;measuredRemaining-=correction;
+            return Task.FromResult(false);
+        },slowCapResponse.Reset,()=>{},FacingDelay,()=>facingClock,()=>new TurnUnresponsiveException(default,default),
+            default,timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(30),failureObserved:facingFailures.Add,
+            errorRadians:()=>measuredRemaining);
+        Require(facingClock>8000 && facingClock<=20000 && facingFailures.Count==0 && measuredRemaining<=.035,
+            "fresh low-cap progress could not complete without bypassing measured direction or the watchdog");
+        foreach(bool oscillating in new[]{false,true})
+        {
+            facingClock=0;facingFailures.Clear();int polls=0;double measuredError=1;
+            try
+            {
+                await FacingRestore.RunAsync(_=>
+                {
+                    facingClock+=100;polls++;
+                    measuredError=oscillating?(polls%2==0?1:.98):1-(polls%2==0?.004:0);
+                    return Task.FromResult(false);
+                },()=>{},()=>{},FacingDelay,()=>facingClock,()=>new TurnUnresponsiveException(default,default),default,
+                    timeoutMilliseconds:8000,failureObserved:facingFailures.Add,errorRadians:()=>measuredError);
+            }
+            catch(TurnUnresponsiveException){ }
+            Require(facingFailures.Count==1 && facingFailures[0].Reason=="Deadline" && facingClock<=8300 &&
+                facingFailures[0].ProgressExtensions==(oscillating?1:0),
+                "unchanged/noisy/oscillating error repeatedly renewed the facing deadline");
+        }
+        facingClock=0;facingFailures.Clear();double slowlyMeasuredError=1;int progressResets=0;
+        try
+        {
+            await FacingRestore.RunAsync(_=>
+            {
+                facingClock+=100;slowlyMeasuredError-=.002;
+                return Task.FromResult(false);
+            },()=>progressResets++,()=>{},FacingDelay,()=>facingClock,
+                ()=>new TurnUnresponsiveException(default,default),default,3,timeoutMilliseconds:8000,
+                failureObserved:facingFailures.Add,errorRadians:()=>slowlyMeasuredError);
+        }
+        catch(TurnUnresponsiveException){ }
+        Require(facingFailures.Count==1 && facingFailures[0] is {Reason:"Deadline",ProgressExtensions:>0} &&
+            facingClock>=20000 && facingClock<=20120 && progressResets==1,
+            "fresh progress exceeded the hard total bound or restarted its bound on retry");
+        foreach(double missingError in new[]{double.NaN,double.PositiveInfinity})
+        {
+            bool invalidFacingError=false;int erroneousTurns=0;
+            try {await FacingRestore.RunAsync(_=>{erroneousTurns++;return Task.FromResult(false);},()=>{},()=>{},
+                FacingDelay,()=>0,()=>new TurnUnresponsiveException(default,default),default,errorRadians:()=>missingError);}
+            catch(InvalidOperationException){invalidFacingError=true;}
+            Require(invalidFacingError && erroneousTurns==0,"unavailable measured direction admitted facing input or progress");
         }
 
         // Reproduce a fast approach that would cross a .15-unit anchor during
@@ -237,6 +359,26 @@ internal static class MovementSmoothingChecks
         catch(OperationCanceledException){rejected=true;}
         Require(rejected && stops>0,"focus/preflight rejection did not release movement");
 
+        clock=0;stops=0;pos=new(.10,0);int defenses=0;faces=0;
+        bool defendedReturn=await AnchorArrival.ReturnAsync(()=>pos,default,.15,
+            _=>throw new Exception("Defense moved a settled character"),()=>stops++,
+            _=>{faces++;return Task.CompletedTask;},Delay,()=>clock,default,
+            _=>{if(defenses++<20){clock+=1000;return Task.FromResult(true);}return Task.FromResult(false);});
+        Require(defendedReturn && clock>20000 && faces==1 && stops>=21,
+            "stationary defense consumed the active correction budget or bypassed confirmed facing");
+        clock=0;stops=0;faces=0;
+        bool endlessDefense=await AnchorArrival.ReturnAsync(()=>pos,default,.15,
+            _=>throw new Exception("Endless defense approached"),()=>stops++,
+            _=>{faces++;return Task.CompletedTask;},Delay,()=>clock,default,
+            _=>{clock+=1000;return Task.FromResult(true);});
+        Require(!endlessDefense && clock>=120000 && clock<=121020 && faces==0 && stops>0,
+            "defense extension lost its hard total bound or claimed unconfirmed arrival");
+        clock=0;stops=0;bool defenseCancelled=false;
+        try {await AnchorArrival.ReturnAsync(()=>pos,default,.15,_=>Task.CompletedTask,()=>stops++,
+            _=>Task.CompletedTask,Delay,()=>clock,default,_=>throw new OperationCanceledException("Defense stopped"));}
+        catch(OperationCanceledException){defenseCancelled=true;}
+        Require(defenseCancelled && stops>0,"cancelled defense retained movement ownership");
+
         var pressure=new CombatPressure();pressure.Observe(new(100,100),0);
         for(int attempt=1;attempt<=20;attempt++)
         {
@@ -270,9 +412,14 @@ internal static class MovementSmoothingChecks
                 "unsent turns cannot start stall timing","new facing goal clears idle timer","bounded post-loot facing retry and cancellation",
                 "slow-cap progressive saved facing and delayed feedback","speed-derived bounded facing deadline",
                 "saved-facing deadline distinguished from real no-progress watchdog","extended facing cancellation and focus guards",
+                "movement key-up precedes slow postflight","short pulse focus/cancellation/duration gates",
+                "recorded complete delayed pulse displacement","measured slow-reader turn cadence bounded convergence",
+                "freshly reduced low-cap facing error extends soft allowance","stale/noisy/oscillating facing cannot renew deadline",
+                "progress-aware facing hard total bound and unavailable-error guard",
                 "recorded sub-frame steps excluded from speed training","frame-sized pulse and filtered speed gain",
                 "frame-quantized precise arrival","recorded post-facing drift rejected","settle then face then recheck",
-                "blocked/cancelled/focus-lost return releases movement","persistent damage quiet period","stationary defense family/range/protection gates"}
+                "blocked/cancelled/focus-lost return releases movement","bounded stationary defense preserves active return budget",
+                "persistent damage quiet period","stationary defense family/range/protection gates"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }
 

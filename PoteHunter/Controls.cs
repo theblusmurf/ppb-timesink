@@ -22,6 +22,37 @@ internal sealed class HeldInputs<T>(Action<T, bool> emit) where T : notnull
     }
 }
 
+// One awaited input owner retains the game-thread context. Slow scene/health
+// reads run before key-down and after key-up, never while timing a short step.
+internal static class MovementPulseTiming
+{
+    internal static async Task<long> RunAsync(int milliseconds,Action begin,Action end,Action safety,
+        Action postflight,Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token)
+    {
+        if(milliseconds is <16 or >60)throw new ArgumentOutOfRangeException(nameof(milliseconds));
+        token.ThrowIfCancellationRequested();
+        long startedAt=0,heldMilliseconds=0;bool started=false;
+        try
+        {
+            begin();started=true;startedAt=clock();long deadline=startedAt+milliseconds;
+            while(clock()<deadline)
+            {
+                token.ThrowIfCancellationRequested();safety();
+                int remaining=(int)Math.Clamp(deadline-clock(),0,milliseconds);
+                if(remaining>0)await delay(Math.Min(16,remaining),token);
+            }
+            safety();
+        }
+        finally
+        {
+            end();
+            if(started)heldMilliseconds=Math.Max(0,clock()-startedAt);
+        }
+        postflight();
+        return heldMilliseconds;
+    }
+}
+
 public static class Input
 {
     [StructLayout(LayoutKind.Sequential)] internal struct Mouse { public int X, Y; public uint Data, Flags, Time; public nuint Extra; }
@@ -243,6 +274,9 @@ public static class Input
         while (Environment.TickCount64 < deadline) { Check(token); int step = (int)Math.Min(20, deadline - Environment.TickCount64); if (step > 0) await Task.Delay(step, token); }
         Check(token);
     }
+    internal static Task<long> PulseForward(int milliseconds,CancellationToken token)=>
+        MovementPulseTiming.RunAsync(milliseconds,()=>Hold(Keys.W,true,token),()=>Hold(Keys.W,false,default),
+            ()=>CheckSafety(token),()=>Check(token),Task.Delay,()=>Environment.TickCount64,token);
     public static void Chat(string text)
     {
         if (string.IsNullOrWhiteSpace(text) || !Allowed()) throw new InvalidOperationException("Chat input requires the game in the foreground.");

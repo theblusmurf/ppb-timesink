@@ -75,6 +75,7 @@ internal static class DeathRecoveryChecks
         var remotePoint=new RecoveryPath([new(0,0),new(0,2)],new(0,4));
         if(remotePoint.Next(new(5,0),(_,_)=>true)!=new Vec(0,0))
             throw new Exception("Lookahead skipped a distant required connector.");
+        RecoveryArrivalBraking();
 
         var self=new Entity(100,1,"Farmer",new(80,0),10,Model:"PC_MAN.GCMDS");
         var other=new Entity(200,2,"Neighbor",anchor,10,Model:"PC_MAN.GCMDS");
@@ -141,9 +142,36 @@ internal static class DeathRecoveryChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,HardwareInputEmitted=false,Checks=new[]{"bounded movement-fault death watch","explicit stop/unknown failure/group/disabled revival never enables fault recovery","watch cannot refresh its deadline","zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
                 "successful repair survives living pending-return retries without repeated preparation or repair","new death clears completed recovery phases","unreadable HP preserves completed phases without creating a death","stale episode completions cannot complete a newer death or stopped recovery","failed repair remains incomplete",
-                "waypoints require actual arrival","final anchor tolerance","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
+                "waypoints require actual arrival","final anchor tolerance","duplicate plan destinations retain final braking","straight route samples keep continuous movement","sharp corners and short final anchor adjustments brake before capture","body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
                 "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static void RecoveryArrivalBraking()
+    {
+        // The observed startup return already contained this destination.
+        // Appending it again formerly left Final=false at 1.535 units, keeping
+        // W held instead of engaging arrival braking.
+        var anchor=new Vec(0,0); // Translate the observed geometry; do not retain a user's farming coordinates.
+        var duplicate=new RecoveryPath([anchor,anchor],anchor);
+        if(duplicate.Next(new(1.524375,.1803125))!=anchor || !duplicate.Final || duplicate.ArrivalTolerance!=.5 ||
+            duplicate.Next(anchor)!=null || duplicate.ArrivalTolerance!=0)
+            throw new Exception("A repeated plan destination disabled final arrival braking or retained a completed route.");
+        var straight=new RecoveryPath([new(0,0),new(0,3),new(0,6),new(0,9)],new(0,9));
+        if(straight.Next(new(0,0),(_,_)=>false)!=new Vec(0,3) || straight.ArrivalTolerance!=0 ||
+            straight.Next(new(0,3),(_,_)=>false)!=new Vec(0,6) || straight.ArrivalTolerance!=0 ||
+            straight.Next(new(0,6),(_,_)=>false)!=new Vec(0,9) || !straight.Final || straight.ArrivalTolerance!=.5)
+            throw new Exception("Straight travel stopped at every sample or lost final arrival braking.");
+        var corner=new RecoveryPath([new(0,0),new(0,2),new(2,2)],new(6,2));
+        if(corner.Next(new(0,0),(_,_)=>true)!=new Vec(0,2) || corner.ArrivalTolerance!=.6 ||
+            corner.Next(new(0,1.39),(_,_)=>true)!=new Vec(0,2) || corner.ArrivalTolerance!=.6)
+            throw new Exception("A required sharp corner had no braking before waypoint capture.");
+        var preciseAnchor=new Vec(.9,12);
+        var adjustment=new RecoveryPath([new(0,6),new(0,12)],preciseAnchor);
+        if(adjustment.Next(new(0,6),(_,_)=>false)!=new Vec(0,12) || adjustment.Final || adjustment.ArrivalTolerance!=.6 ||
+            adjustment.Next(new(0,12),(_,_)=>false)!=preciseAnchor || !adjustment.Final || adjustment.ArrivalTolerance!=.5 ||
+            adjustment.Next(new(.39,12))!=preciseAnchor || adjustment.Next(new(.4,12))!=null)
+            throw new Exception("A near-end activation-anchor adjustment bypassed braking or loosened its final tolerance.");
     }
 
     static void CompletedRecoveryPhases()

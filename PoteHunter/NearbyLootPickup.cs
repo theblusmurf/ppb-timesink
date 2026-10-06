@@ -9,7 +9,9 @@ public static class NearbyLootPickup
 {
     public const double DefaultAnchorRadius=10;
     public const double PickupReach=3;
-    public const double AnchorArrivalTolerance=.15;
+    // Match the recorded route endpoint. Sub-frame W steps may advance
+    // ~.26-.38 units; a tighter radius can oscillate across the saved point.
+    public const double AnchorArrivalTolerance=.5;
     public static bool InsideAnchor(Vec point,Vec anchor,double radius=DefaultAnchorRadius) => point.Finite && anchor.Finite &&
         double.IsFinite(radius) && radius>0 && (point-anchor).Length<=radius+1e-9;
     public static bool ArrivedAtAnchor(Vec position,Vec anchor) => position.Finite && anchor.Finite &&
@@ -64,9 +66,16 @@ public static class NearbyLootPickup
             EvaluateAnchor(anchor,anchor,[Drop(25,110,100)]).HoldLoot)
             throw new Exception("Anchor pickup followed the player radius, picked beyond home, or held E before reach.");
         if(!MayPickupAt(anchor,anchor,[Drop(26,111,100)]) ||
-            EvaluateAnchor(anchor,anchor,[]).HoldLoot || !ArrivedAtAnchor(new Vec(100.1,100),anchor) ||
-            ArrivedAtAnchor(new Vec(100.2,100),anchor) || ArrivedAtAnchor(new Vec(double.NaN,100),anchor))
+            EvaluateAnchor(anchor,anchor,[]).HoldLoot || !ArrivedAtAnchor(new Vec(100.5,100),anchor) ||
+            ArrivedAtAnchor(new Vec(100.5001,100),anchor) || ArrivedAtAnchor(new Vec(double.NaN,100),anchor))
             throw new Exception("Anchor pickup exclusion or exact-return tolerance failed.");
+        // Recorded return errors on opposite sides of the saved point. The
+        // old .15 radius rejected both even after a normal minimum-frame step.
+        if(!ArrivedAtAnchor(new Vec(100.2615,100),anchor) ||
+            !ArrivedAtAnchor(new Vec(99.7412,100),anchor) ||
+            ArrivedAtAnchor(new Vec(100.5201,100),anchor) ||
+            ArrivedAtAnchor(new Vec(99.4745,100),anchor))
+            throw new Exception("Quantized anchor corrections did not stop inside the shared half-unit arrival envelope.");
         var exact=Drop(1,5);var outside=Drop(2,5.01);var diagonal=Drop(3,3,4);
         if(Evaluate(origin,5,[exact,outside,diagonal]).NearbyCount!=2 ||
             !HasLoot(origin,5,[exact]) || HasLoot(origin,5,[outside]))
