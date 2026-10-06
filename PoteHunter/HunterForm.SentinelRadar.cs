@@ -7,7 +7,7 @@ public sealed partial class HunterForm
     readonly TrackBar sentinelRange=new(){Name="sentinelRange",Minimum=1,Maximum=100,Value=25,SmallChange=1,LargeChange=5,TickStyle=TickStyle.None,Width=226,AccessibleName="Sentinel detection range in map units"};
     readonly Label sentinelRangeLabel=new(){Name="sentinelRangeLabel",AutoSize=true,Text="Enemy alert range · 25 map units"};
     readonly NumericUpDown sentinelVolume=new(){Name="sentinelVolume",Minimum=0,Maximum=100,Value=45,Width=90,AccessibleName="Sentinel sound volume percent"};
-    readonly Button resetSentinelPosition=new(){Name="resetSentinelPosition",Text="Reset radar position",AutoSize=true};
+    readonly Button resetSentinelPosition=new(){Name="resetSentinelPosition",Text="Reset MiniMap position",AutoSize=true};
     readonly SentinelAlertPolicy sentinelPolicy=new();
     readonly SentinelDisplayNumbers sentinelNumbers=new();
     SentinelAlertContext sentinelContext;

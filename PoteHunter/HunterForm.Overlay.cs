@@ -5,8 +5,8 @@ namespace PoteHunter;
 public sealed partial class HunterForm
 {
     const int NavigationOverlayMargin = 24;
-    readonly CheckBox showNavigationOverlay = new() { Text = "Show radar overlay", AutoSize = true };
-    readonly CheckBox showNavigationRoutes = new() { Text = "Show routes on radar", AutoSize = true, Checked = true };
+    readonly CheckBox showNavigationOverlay = new() { Text = "Show MiniMap overlay", AutoSize = true };
+    readonly CheckBox showNavigationRoutes = new() { Text = "Show routes on MiniMap", AutoSize = true, Checked = true };
     readonly CheckBox showRouteOverlay = new() { Text = "Show route overlay", AutoSize = true };
     readonly ComboBox lootTrackerDesign = new() { DropDownStyle=ComboBoxStyle.DropDownList,Width=175 };
     readonly NumericUpDown lootTrackerBackgroundOpacity=new(){Minimum=0,Maximum=100,Increment=5,Value=LootOverlayBackground.DefaultOpacityPercent,Width=65};
@@ -439,7 +439,7 @@ public sealed partial class HunterForm
                     width,
                     height);
                 RefreshOverlay3DFrames(navigationOverlay.ClientSize,routeOverlay?.ClientSize ?? Size.Empty);
-                navigationOverlay.SetTitle("RADAR · "+Overlay3DMode(radar3D.Checked,navigationOverlay3D)+" · "+ZonePlayerStatus());
+                navigationOverlay.SetTitle("MINIMAP · "+Overlay3DMode(radar3D.Checked,navigationOverlay3D)+" · "+ZonePlayerStatus());
                 if (!navigationOverlay.Visible) navigationOverlay.Show();
                 navigationOverlay.Invalidate();
             }

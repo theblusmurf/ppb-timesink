@@ -3,28 +3,28 @@
 Player status is observational. It does not target players, start combat, change
 movement, send chat, or establish who caused damage.
 
-## Sentinel Radar
+## Sentinel MiniMap
 
-In **Routes → Navigation → Sentinel Radar**, **Auto Sentinel in Zone 8** is enabled
+In **Routes → Navigation → Sentinel MiniMap**, **Auto Sentinel in Zone 8** is enabled
 by default. The overlay opens automatically on a fresh connected Zone 8 reading
 and hides when leaving Zone 8, disconnecting or losing fresh player readings.
 Uncheck it to disable automatic activation; existing saved choices are retained.
 Turn paired sonar sound on/off, adjust **Enemy alert range** from **1 to 100 map units** in one-unit
 steps, and set sound volume from 0–100%. The initial range is 25 and volume 45%.
 These choices can change during hunting and are saved independently of combat
-settings. The slider changes both the circular radar and arrival sound range.
+settings. The slider changes both the circular MiniMap and arrival sound range.
 
-The compact north-up radar shows only recognized opposing-faction enemies and the nearest enemy's
+The compact north-up MiniMap shows only recognized opposing-faction enemies and the nearest enemy's
 name, faction, distance and map bearing. Drag its header to reposition it; the
-body passes clicks through to the game. **Reset radar position** restores its
+body passes clicks through to the game. **Reset MiniMap position** restores its
 initial placement. It scales to fit the game window and retains negative monitor
 coordinates. Same-faction, party and unknown-faction players do not appear in
-Sentinel's markers, names or count. The existing terrain radar and route overlays
+Sentinel's markers, names or count. The existing terrain MiniMap and route overlays
 remain separate and retain their general player-status display.
 
 One paired sonar clip announces a new opposing-faction enemy entering the chosen
 range in a verified PvP zone. Current players establish a silent baseline when
-connecting, enabling the radar, changing its range/zone/character, or returning
+connecting, enabling the MiniMap, changing its range/zone/character, or returning
 after a prolonged reading gap. Repeated observations do not repeat the sound;
 leaving beyond the selected range plus three units, or disappearing, for two
 seconds rearms that identity. Simultaneous arrivals share one clip; sounds are
@@ -32,7 +32,7 @@ spaced at least three seconds apart. Muted or background arrivals are consumed,
 not replayed on unmute or focus return.
 
 Audio pauses for unknown/dead local HP, stale/disconnected readings, background
-game windows, disabled radar/sound, or zero volume. Unknown/non-PvP zones and
+game windows, disabled MiniMap/sound, or zero volume. Unknown/non-PvP zones and
 validated party members never trigger enemy audio. Other-player HP may be unknown;
 confirmed-dead bodies are excluded. Model-based faction and the zone-policy
 limitations below still apply. Real client playback/placement should be checked
@@ -43,16 +43,27 @@ after upgrading; offline verification does not establish live attackability.
 Sentinel makes the nearest enemy's available name the main heading and lists
 the five nearest enemies separately, using session numbers that
 remain stable as players cross, move or leave the selected watch radius.
-Individual radar badges show available names alongside their session number.
-Overlap badges show how many observed identities share a small radar area, plus their
+Individual MiniMap badges show available names alongside their session number.
+Overlap badges show how many observed identities share a small MiniMap area, plus their
 numbers; leader lines retain the actual positions. More distant enemies remain
 in the total count. A nearby enemy is drawn above the white self marker.
 
-Names come from the client's verified creature-name field. If that field is empty,
-the interface displays `Player` followed by its eight-digit hexadecimal UID and
-states that names are unavailable. This is an observed body ID, not a permanent
+Valid creature names are retained. When that field is empty for a recognized
+player body, the optional name reader uses the active name record associated
+with its UID. The client uses this separate record for player-name lookup and
+player-ID/name text. The reader requires linked on-disk and loaded-code checks,
+stable records and a fresh matching player-body identity. It rejects malformed,
+ambiguous or changing records and does not cache names between polls. Scan time
+and read count are bounded. Alternate names are applied only to the frozen
+player observer used by the overlays; existing combat and route-avoidance name
+rules retain their original inputs.
+
+If a verified name remains unavailable, the interface displays `Player` followed
+by its eight-digit hexadecimal UID. This is an observed body ID, not a permanent
 character identity or a guessed real name. Raw name and name availability remain
-separate in private status data. No verified alternate enemy-name reader exists.
+separate in private status data, alongside reader availability and named/unnamed
+player counts. Offline validation does not establish which names the running
+client supplies; confirm those labels after upgrading.
 Labels reset on connection, character or zone change; duplicate simultaneous UID
 records are excluded before classification. Distinct UIDs at the same position
 remain separate observations.
@@ -95,7 +106,7 @@ inherit combat rules. No complete current official map/ID PvP catalog was found.
 
 ## Display and freshness
 
-The 2D/3D map overlays, radar and main Navigation label each player with their
+The 2D/3D map overlays, MiniMap and main Navigation label each player with their
 available name, without an Enemy, Same faction or Party prefix. If a name is
 unavailable, the label uses the explicit player-ID fallback described above.
 Faction/relation remains visible through the player diamond and label accent:

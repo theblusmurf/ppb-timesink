@@ -48,7 +48,7 @@ internal static class SentinelRadarRenderer
         graphics.DrawLine(gold,1,HeaderHeight,458,HeaderHeight);
         graphics.DrawEllipse(gold,12,9,12,12);
         graphics.DrawLine(gold,18,6,18,24);graphics.DrawLine(gold,9,15,27,15);
-        Text(graphics,"SENTINEL RADAR",10,ImperialTheme.Gold,new(34,6,228,20),FontStyle.Regular,"Georgia");
+        Text(graphics,"SENTINEL MINIMAP",10,ImperialTheme.Gold,new(34,6,228,20),FontStyle.Regular,"Georgia");
         Text(graphics,"drag header to move",7.5f,ImperialTheme.Muted,new(320,9,124,17));
     }
 

@@ -2,7 +2,7 @@ namespace PoteHunter;
 
 public sealed partial class HunterForm
 {
-    readonly CheckBox radar3D=new(){Text="3D radar",AutoSize=true,Checked=true};
+    readonly CheckBox radar3D=new(){Text="3D MiniMap",AutoSize=true,Checked=true};
     readonly CheckBox routes3D=new(){Text="3D route overlay",AutoSize=true,Checked=true};
     readonly CheckBox overlay3DTopView=new(){Text="Overlays: north-up top view",AutoSize=true};
     readonly Label overlay3DStatus=new(){AutoSize=true,MaximumSize=new(240,0),ForeColor=ImperialTheme.Muted,Text="3D overlays use the current game map."};
@@ -23,7 +23,7 @@ public sealed partial class HunterForm
         }
         catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException){ }
         foreach(var check in new[]{radar3D,routes3D,overlay3DTopView})check.CheckedChanged+=(_,_)=>Overlay3DPresentationChanged();
-        priorityHint.SetToolTip(radar3D,"Show recovered local terrain and buildings in the passive radar. Unavailable 3D falls back to 2D. Radar radius controls zoom; north stays fixed.");
+        priorityHint.SetToolTip(radar3D,"Show recovered local terrain and buildings in the passive MiniMap. Unavailable 3D falls back to 2D. MiniMap radius controls zoom; north stays fixed.");
         priorityHint.SetToolTip(routes3D,"Show the selected target's current-zone saved routes, start corridor and anchor area over 3D terrain. Does not change route travel.");
         priorityHint.SetToolTip(overlay3DTopView,"Use a north-up overhead camera instead of the tilted 3D camera. Change display controls here; overlays stay click-through.");
         overlay3DInitialized=true;overlay3DUpdating=false;

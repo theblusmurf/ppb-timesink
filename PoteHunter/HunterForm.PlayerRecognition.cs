@@ -24,6 +24,10 @@ public sealed partial class HunterForm
         recognitionSelf=self;recognitionZone=navigationZone;
         recognitionHealth=latestHealth.GetValueOrDefault(self.Id);
         recognizedPlayers=entities.GroupBy(e=>e.Id).Where(group=>group.Count()==1).Select(group=>group.Single())
+            // Keep alternate names on the frozen observer copy. Existing combat,
+            // route avoidance and party logic retain their original body names.
+            .Select(e=>string.IsNullOrWhiteSpace(e.Name)&&!string.IsNullOrWhiteSpace(e.VerifiedPlayerName)?
+                e with{Name=e.VerifiedPlayerName}:e)
             .Where(e=>CombatCourtesy.IsOtherPlayer(e,self.Id)&&e.Position.Finite&&
                 !latestHealth.GetValueOrDefault(e.Id).Dead)
             .OrderBy(e=>(e.Position-self.Position).Length).Take(128).Select(e=>new ObservedPlayer(e,
@@ -48,6 +52,9 @@ public sealed partial class HunterForm
         var players=RecognizedPlayers();
         return new { Zone=info.Zone,info.Name,Rule=info.Rule.ToString(),RuleLabel=PlayerRecognition.RuleLabel(info.Rule),
             info.Evidence,info.Source,Fresh=PlayerRecognitionFresh,
+            NameReaderSupported=world.PlayerNamesSupported,NameReaderStatus=world.PlayerNamesStatus,
+            NamedPlayers=players.Count(p=>!string.IsNullOrWhiteSpace(p.Entity.Name)),
+            UnnamedPlayers=players.Count(p=>string.IsNullOrWhiteSpace(p.Entity.Name)),
             OwnFaction=PlayerRecognitionFresh?PlayerRecognition.FactionLabel(PlayerRecognition.Faction(recognitionSelf!.Model)):"Unknown faction",
             FactionBasis="Exact player model family; no verified server faction or attackability flag",
             EnemyCountWithin25=players.Count(p=>p.Recognition.Enemy&&(p.Entity.Position-navigationPosition).Length<=25),

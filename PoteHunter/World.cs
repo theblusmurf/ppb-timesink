@@ -18,6 +18,9 @@ public readonly record struct Vec(double X, double Y)
 }
 public record Entity(long Address, uint Id, string Name, Vec Position, double Height, double Heading = 0, uint Generation = 0, string Model = "")
 {
+    // Optional verified metadata is consumed only by frozen map/radar observer
+    // copies. Existing combat, avoidance and party identities retain Name.
+    public string VerifiedPlayerName { get; init; } = "";
     public bool Monster => (Id & 0xF0000000) == 0x80000000 &&
         (Name.StartsWith("Lv. ", StringComparison.Ordinal) || Targeting.IsKnownUnprefixedMonster(Id, Model));
     public bool PriorityLootObject => Targeting.IsPriorityLootObject(Id, Model);
@@ -217,6 +220,7 @@ public sealed partial class World : IDisposable
             ConfigureMana();
             ConfigureWallet();
             ConfigureDurability();
+            ConfigurePlayerNames();
             WriteProfileAudit(true,ProfileStatus);
             ConnectionStage="Connected";
         }
@@ -344,6 +348,7 @@ public sealed partial class World : IDisposable
             var entity = ReadEntity(address, id);
             if (entity != null) result.Add(entity);
         }
+        AttachPlayerNames(result);
         return result;
     }
     Entity? ReadEntity(long address, uint expectedId)
@@ -743,6 +748,7 @@ public sealed partial class World : IDisposable
         ResetMana();
         ResetWallet();
         ResetDurability();
+        ResetPlayerNames();
         windowIdentity = null;
         PlayerName="";
         RestSupported=false;

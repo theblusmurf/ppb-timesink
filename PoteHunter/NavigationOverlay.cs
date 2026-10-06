@@ -25,7 +25,7 @@ internal sealed class NavigationOverlay : Form
     readonly Font titleFont = new("Georgia", 10f, FontStyle.Regular);
     readonly Pen framePen = new(ImperialTheme.Gold, 1f);
 
-    public NavigationOverlay(Action<Graphics, Size> drawNavigation,string title="PlayPoteBot RADAR",string legend="Player diamonds · enemy: pink · status on label")
+    public NavigationOverlay(Action<Graphics, Size> drawNavigation,string title="PlayPoteBot MINIMAP",string legend="Player diamonds · enemy: pink · status on label")
     {
         this.title=title;this.legend=legend;
         this.drawNavigation = drawNavigation ?? throw new ArgumentNullException(nameof(drawNavigation));

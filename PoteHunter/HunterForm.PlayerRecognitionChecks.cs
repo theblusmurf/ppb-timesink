@@ -55,6 +55,17 @@ public sealed partial class HunterForm
                 bitmap.Save(Path.Combine(AppContext.BaseDirectory,name),System.Drawing.Imaging.ImageFormat.Png);
             }
             Capture("player-radar-pvp.png");
+            var alternate=same with{Name="",VerifiedPlayerName="Silva"};
+            entities=[self,alternate];UpdatePlayerRecognition(self);
+            Require(entities.Single(e=>e.Id==same.Id).Name==""&&
+                PlayerMarkerName(RecognizedPlayers().Single())=="Silva"&&Player3DMarkers(25).Single().Name=="Silva",
+                "Verified UID name did not reach the observer or changed shared combat names.");
+            Capture("player-minimap-verified-name.png");
+            entities=[self,same with{VerifiedPlayerName="Alternate record"}];UpdatePlayerRecognition(self);
+            Require(PlayerMarkerName(RecognizedPlayers().Single())=="Silva","Alternate name overrode a valid creature name.");
+            entities=[self,same with{Name=""}];UpdatePlayerRecognition(self);
+            Require(PlayerMarkerName(RecognizedPlayers().Single())=="Player 00000003",
+                "An unavailable next-poll UID name retained a prior player label.");
             var blank=same with{Id=7,Name="",Position=new(6,6)};
             var whitespace=same with{Id=8,Name=" \t ",Position=new(10,5)};
             var unicode=same with{Id=9,Name="  Éowyn星の旅人 · "+new string('界',90)+"  ",Position=new(5,11)};
@@ -92,7 +103,7 @@ public sealed partial class HunterForm
             UpdatePlayerRecognitionLabel();Require(navigationPlayerRecognitionLabel.Text.Contains("Player reading unavailable"),"Disconnected player faction remained in the visible legend.");
             connected=true;ClearPlayerRecognition();Require(!PlayerRecognitionFresh&&RecognizedPlayers().Length==0,"Reset retained player status.");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"player-recognition-ui-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,
-                Checks=new[]{"immutable accepted name/faction poll","actual self faction","name-only same-faction/enemy/party captions","blank/whitespace identity fallback","bounded Unicode 2D label preview","PvP enemy diamond/status","non-PvP and unknown-zone suppression","party ID/name validation","dead/NPC/self exclusions","freshness/zone/identity/disconnection gates","2D preview and 3D name/color/position parity"}},new JsonSerializerOptions{WriteIndented=true}));
+                Checks=new[]{"immutable accepted name/faction poll","actual self faction","name-only same-faction/enemy/party captions","verified UID names on frozen observer only","valid creature name priority","no next-poll name retention","blank/whitespace identity fallback","bounded Unicode 2D label preview","PvP enemy diamond/status","non-PvP and unknown-zone suppression","party ID/name validation","dead/NPC/self exclusions","freshness/zone/identity/disconnection gates","2D preview and 3D name/color/position parity"}},new JsonSerializerOptions{WriteIndented=true}));
         }
         finally
         {

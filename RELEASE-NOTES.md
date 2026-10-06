@@ -1,3 +1,12 @@
+## Release1.115
+
+Rename Radar to MiniMap and recover available player names from the client’s ID-bound name records.
+
+- Use MiniMap throughout navigation controls and overlay headings, including Sentinel MiniMap. Preserve saved options, Zone 8 enemy-only activation, alert range and sound behavior.
+- Read the separate active player-name record used by the client’s own player-ID/name consumers. Enable this optional reader only after linked on-disk and loaded-code checks; keep valid existing names and player-ID fallback when a name is unavailable.
+- Bind each name to a fresh accepted player body, reject duplicate or changing records and malformed text, and avoid retaining names across polling, zone or connection changes. Apply alternate names to the observer display only; preserve existing combat and route-avoidance name behavior. Limit scan time and read count to protect polling responsiveness.
+- Add private status counts for available/missing names and reader availability. Validate name decoding, identity/race rejection, unsupported layouts and overlay rendering offline. The independent live name probe was denied read access by Windows, so live names require confirmation after upgrading.
+
 ## Release1.114
 
 Show player names directly on the game map overlays.

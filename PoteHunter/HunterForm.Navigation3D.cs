@@ -72,9 +72,9 @@ public sealed partial class HunterForm
         Section("navigationSavedRoutes","Saved routes",true,navigation3DTarget,savedNavigationSlot,startNavigationRecording,saveNavigationRoute,navigationRecordingStatus,useAlternativeHuntRoutes,savedNavigationRoutesStatus);
         Section("navigationRouteManagement","Route management",false,saveNavigationSpot,assignUnassignedNavigationRoutes,clearSavedNavigationRoute,clearAllSavedNavigationRoutes);
         Section("navigationOverlayOptions","Overlay options",false,showNavigationOverlay,radar3D,showNavigationRoutes,showRouteOverlay,routes3D,overlay3DTopView,showTreasureChestMarkers,overlay3DStatus,
-            new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="Radar radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);
+            new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="MiniMap radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);
         Section("navigationLootPresentation","Loot overlay",false,showLootTrackerOverlay,lootTrackerDesign,lootTrackerScaleLabel,lootTrackerScale,lootTrackerBackgroundLabel,lootTrackerBackgroundOpacity,resetLootTracker,resetLootTimer);
-        Section("navigationSentinelRadar","Sentinel Radar",false,showSentinelRadar,sentinelSoundEnabled,
+        Section("navigationSentinelRadar","Sentinel MiniMap",false,showSentinelRadar,sentinelSoundEnabled,
             sentinelRangeLabel,sentinelRange,
             new Label{AutoSize=true,MaximumSize=new(240,0),Text="Auto display in Zone 8 · opposing factions only\nPaired sonar on new enemy entries"},
             new Label{AutoSize=true,Text="Sound volume (%)"},sentinelVolume,resetSentinelPosition);
