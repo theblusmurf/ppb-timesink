@@ -8,6 +8,8 @@ public sealed partial class Options
     public string Player { get; set; } = ""; // Last detected name; never an identity selector.
     public string Target { get; set; } = "";
     public decimal HuntRadius { get; set; } = 35;
+    decimal turnSpeedDegreesPerSecond=180;
+    public decimal TurnSpeedDegreesPerSecond { get=>turnSpeedDegreesPerSecond;set=>turnSpeedDegreesPerSecond=Math.Clamp(value,30,360); }
     // Independent route-join and ground-loot areas; keep older settings at
     // their former ten-unit behavior without changing their farming radius.
     decimal routeCorridorRadius = 10, lootPickupRadius = 10;

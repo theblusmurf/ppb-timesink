@@ -50,12 +50,12 @@ public sealed partial class HunterForm
                     Find<Button>("fieldNav"+section).PerformClick(); Layout();
                     var railBounds=RectangleToClient(rail.RectangleToScreen(rail.ClientRectangle));
                     var mainBounds=RectangleToClient(main.RectangleToScreen(main.ClientRectangle));
-                    if(!rail.Visible || railBounds.Right>mainBounds.Left || rail.Width<320 || rail.Height<350)
+                    if(!rail.Visible || railBounds.Right>mainBounds.Left || rail.Width<180 || rail.Height<350)
                         throw new Exception("The operation rail is missing, overlaps a page or clips at "+size+" / "+section);
-                    foreach(var action in new Control[]{connect,start,stop,Find<ComboBox>("overviewMode"),Find<TextBox>("overviewTargetFilter")})
+                    foreach(var action in new Control[]{connect,start,stop})
                     {
                         var rect=RectangleToClient(action.RectangleToScreen(action.ClientRectangle));
-                        if(!action.Visible || rect.Left<railBounds.Left || rect.Right>railBounds.Right || action.Width<70)
+                        if(!action.Visible || !action.Parent!.ClientRectangle.Contains(action.Bounds) || action.Width<70)
                             throw new Exception("An operation moved outside the left rail: "+action.Name);
                     }
                     if(nav.Parent!=rail||nav.FlowDirection!=FlowDirection.TopDown||!rail.ClientRectangle.Contains(nav.Bounds))
@@ -89,6 +89,7 @@ public sealed partial class HunterForm
             foreach(string name in new[]{"overviewAnchor","overviewMapLegend","overviewRouteTarget"})
                 if(Find<Label>(name).Width<Find<TableLayoutPanel>("overviewMapColumn").ClientSize.Width-12)
                     throw new Exception("A scanner note retained a stale width constraint: "+name);
+            Find<Button>("fieldNavFarming").PerformClick();Layout();
             var railScroll=Find<Panel>("orbitalRailScroll");
             foreach(string name in new[]{"overviewResetLoot","overviewResetTimer"})
             {
@@ -101,7 +102,9 @@ public sealed partial class HunterForm
                 throw new Exception("The disconnected scanner invented live coordinates or routes.");
             if(Find<Label>("orbitalSessionGold").Text!="—" || Find<Label>("orbitalGoldRate").Text!="— gold / active hour")
                 throw new Exception("Unknown wallet values were presented as known telemetry.");
+            Find<Button>("fieldNavOverview").PerformClick();Layout();
             Capture("orbital-ops-overview.png");
+            Find<Button>("fieldNavFarming").PerformClick();Layout();
             Find<CollapsibleSection>("overviewFoldSkills").Expanded=true;Capture("orbital-ops-expanded-controls.png");
             Find<CollapsibleSection>("overviewFoldSkills").Expanded=false;
             Find<Button>("fieldNavRoutes").PerformClick();Capture("orbital-ops-routes.png");

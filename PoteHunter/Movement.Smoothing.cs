@@ -8,9 +8,10 @@ internal sealed class SmoothSteering
     double velocity, sentHeading, observedHeading, outstandingTurn;
     bool started, awaitingHeading;
     public void Reset() { started=awaitingHeading=false; velocity=outstandingTurn=0; }
-    public int Next(double error,double heading,double sensitivity,bool walking,long now)
+    public int Next(double error,double heading,double sensitivity,bool walking,long now,TurnRateBudget? rateBudget=null,double maxDegreesPerSecond=360)
     {
         int limit=Math.Abs(Movement.CalculateTurn(error,sensitivity,walking));
+        if(rateBudget!=null)limit=Math.Min(limit,rateBudget.Available(now,maxDegreesPerSecond,sensitivity));
         if(!double.IsFinite(heading))throw new InvalidOperationException("Player heading is unavailable.");
         if(started)
         {
@@ -43,6 +44,7 @@ internal sealed class SmoothSteering
         if(Math.Sign(velocity)!=Math.Sign(error))velocity=0;
         const double acceleration=32;
         double maximum=walking?4.5:6.0;
+        maximum=Math.Min(maximum,maxDegreesPerSecond*Math.PI/180);
         double desired=Math.Sign(error)*Math.Min(maximum,Math.Sqrt(2*acceleration*Math.Max(0,Math.Abs(error)-.035)));
         velocity=Math.Clamp(desired,velocity-acceleration*dt,velocity+acceleration*dt);
         double correction=Math.Sign(error)*Math.Min(Math.Abs(error)*.70,Math.Abs(velocity)*dt);
@@ -50,6 +52,7 @@ internal sealed class SmoothSteering
         if(pixels==0)pixels=Math.Sign(error/sensitivity);
         if(!started) { observedHeading=heading;lastProgressAt=now; }
         outstandingTurn+=pixels*sensitivity;
+        rateBudget?.Consume(pixels,sensitivity);
         lastAt=sentAt=now;sentHeading=heading;started=awaitingHeading=true;
         return pixels;
     }

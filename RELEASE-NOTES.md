@@ -1,3 +1,7 @@
+## Release1.117
+
+Direct feature links under five collapsible sidebar groups; persistent Start/Stop/Connect actions; dedicated Farming and Overlays pages. New original app and desktop logo. Hunt setup now has a saved 30–360°/s horizontal turn cap, default 180°/s, shared by travel, facing and ranged camera yaw. Existing settings, profiles, bindings and stop guards are retained. Offline validation covers native navigation, small-window layouts, profile restoration and rate bounds; live smoothness remains to be checked after updating.
+
 ## Release1.116
 
 Add the three selected features from PoteHunter 2.0.45 while preserving PlayPoteBot's custom controls.
@@ -1170,3 +1174,5 @@ Keep commit subjects specific and user-facing so the generated notes explain wha
 - Record revival attempts, repair stages and anchor return without treating sent input as successful revival. Death cause remains Unknown because no verified killer field is available; existing recovery behavior is unchanged for player/mob deaths.
 - Add Settings > Index > Open session logs. Keep logs out of Git/release packages, preserve them through installer upgrades/uninstall and report file errors without interrupting hunting.
 - Validate deduplication, health/identity gaps, CSV escaping, session/reset lifecycle, wallet accuracy, recovery-stage filtering and file-error recovery offline. No live gameplay or installed-app replacement during development; live session verification remains needed after upgrading.
+
+

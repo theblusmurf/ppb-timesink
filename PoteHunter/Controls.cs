@@ -713,7 +713,7 @@ public sealed partial class Movement
         if (delta.Length < .01) {turnResponse.Reset();return true;}
         double angle = Angle(Forward, delta);
         if(Math.Abs(angle)<=tolerance) { smoothSteering.Reset();turnResponse.Reset();return true; }
-        int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64);
+        int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64,turnRateBudget,TurnSpeedDegreesPerSecond);
         Vec position=world.PlayerPosition();
         if (pixels != 0) Input.Turn(pixels, token);
         if(turnResponse.Observe(position,heading,pixels,Environment.TickCount64,awaitingResponse:true))throw new TurnUnresponsiveException(position,Forward);
@@ -751,7 +751,7 @@ public sealed partial class Movement
             if ((position - progressPosition).Length > .15) { progressPosition = position; progressAt = now; }
             else if (now - progressAt > 1800) { StopApproach(); throw new MovementBlockedException(position,Forward); }
         }
-        int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,advancing,now);
+        int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,advancing,now,turnRateBudget,TurnSpeedDegreesPerSecond);
         if(!watchTurns)turnResponse.Reset();
         if (pixels != 0)
         {

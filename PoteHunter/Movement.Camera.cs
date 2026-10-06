@@ -115,6 +115,7 @@ public sealed partial class Movement
         // A target behind the camera needs a coarse yaw turn before vertical
         // feedback has a stable screen-space meaning.
         int y=opticalError.Depth>0?Pixels(controlError.Pitch,cameraPitchRadiansPerPixel,144,VerticalControlGain(controlError.Pitch)):0;
+        x=LimitCameraTurn(x,cameraYawRadiansPerPixel,Environment.TickCount64);
         Input.Aim(x,y,token);
         TraceCamera("face target 3D",camera,target,opticalError,controlError,pivotValidated,pivotRayMiss,parallaxMultiplier,x,y,precision,
             stabilizedError.Yaw!=opticalError.Yaw||stabilizedError.Pitch!=opticalError.Pitch);

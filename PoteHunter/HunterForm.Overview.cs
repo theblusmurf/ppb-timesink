@@ -21,7 +21,8 @@ public sealed partial class HunterForm
         {
             tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(p => p.Text == "Overview");
             refreshOverview?.Invoke(); PerformLayout(); Application.DoEvents();
-            CheckCollapsibleOverview();
+            tabs.SelectedTab=tabs.TabPages.Cast<TabPage>().Single(p=>p.Name=="farmingPage");
+            PerformLayout();Application.DoEvents();CheckCollapsibleOverview();
             var oldSize=Size;Size=new Size(1480,1000);PerformLayout();Application.DoEvents();
             using(var full=new Bitmap(Width,Height)){DrawToBitmap(full,new Rectangle(Point.Empty,Size));full.Save(Path.Combine(AppContext.BaseDirectory,"orbital-overview.png"));}
             Size=oldSize;PerformLayout();Application.DoEvents();

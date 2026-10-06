@@ -14,7 +14,8 @@ public sealed partial class HunterForm
         foreach(var control in new Control[]{savedNavigationSlot,startNavigationRecording,saveNavigationRoute,useAlternativeHuntRoutes,
             assignUnassignedNavigationRoutes,clearSavedNavigationRoute,clearAllSavedNavigationRoutes,showNavigationOverlay,showRouteOverlay,
             automaticRouting,guideTreasureChests,resetLootTracker,resetLootTimer})
-            if(!navigationPage.Contains(control))throw new InvalidOperationException("Original navigation action was lost: "+control.Text);
+            if(!navigationPage.Contains(control)&&!tabs.TabPages.Cast<TabPage>().Single(p=>p.Name=="overlaysPage").Contains(control))
+                throw new InvalidOperationException("Original navigation or overlay action was lost: "+control.Text);
         foreach(var section in navigationPage.Controls.Find("navigationLayerSidebar",true).Single().Controls.OfType<CollapsibleSection>())
         {
             section.Expanded=true;PerformLayout();Application.DoEvents();

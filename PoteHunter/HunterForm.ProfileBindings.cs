@@ -22,6 +22,7 @@ public sealed partial class HunterForm
             melee.Value=Math.Clamp(o.MeleeRange,melee.Minimum,melee.Maximum);
             filter.Text=o.Target??"";
             radius.Value=Math.Clamp((decimal)o.HuntRadius,radius.Minimum,radius.Maximum);
+            turnSpeedLimit.Value=o.TurnSpeedDegreesPerSecond;
             routeCorridorRadius.Value=Math.Clamp((decimal)o.RouteCorridorRadius,routeCorridorRadius.Minimum,routeCorridorRadius.Maximum);
             lootPickupRadius.Value=Math.Clamp((decimal)o.LootPickupRadius,lootPickupRadius.Minimum,lootPickupRadius.Maximum);
             leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty;

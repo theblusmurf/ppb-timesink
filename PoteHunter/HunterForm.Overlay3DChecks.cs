@@ -23,7 +23,8 @@ public sealed partial class HunterForm
             void Require(bool result,string message)
             {if(!result)throw new InvalidOperationException(message);}
             foreach(var control in new Control[]{radar3D,routes3D,overlay3DTopView,overlay3DStatus})
-                Require(navigationPage.Contains(control),"Overlay presentation control is not accessible: "+control.Name);
+                Require(Controls.Find("overlaysPage",true).Single().Contains(control),
+                    "Overlay presentation control is not accessible: "+control.Name);
 
             var legacy=JsonSerializer.Deserialize<Options>("{\"Target\":\"Mimic\",\"HuntRadius\":35,\"AutoRepairAfterDeath\":true}")!;
             Require(legacy.Radar3D&&legacy.RouteOverlay3D&&!legacy.Overlay3DTopView,

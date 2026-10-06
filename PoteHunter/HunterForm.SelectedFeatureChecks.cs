@@ -11,10 +11,12 @@ public sealed partial class HunterForm
   {
    var settings=JsonSerializer.Deserialize<Options>(JsonSerializer.Serialize(baseline))!;
    settings.Target="Mimic";settings.HuntRadius=46;settings.RouteCorridorRadius=16;settings.LootPickupRadius=9;
+   settings.TurnSpeedDegreesPerSecond=90;
    settings.Ranged=true;settings.ArcherClass=true;settings.MeleeRange=27;settings.RangedPullCount=9;settings.RangedPullTimeoutSeconds=38;
    settings.UseAttackPotions=true;settings.UseDefensePotions=true;settings.AutoRepairLowDurability=true;settings.RepairDurabilityPercent=41;
    settings.RevivalDelaySeconds=27;settings.SmartSkillTargeting=false;settings.AutoDetectSkills=false;settings.SkillKeys="12";
    ApplyProfileSettings(settings);var result=CurrentOptions();
+   if(result.TurnSpeedDegreesPerSecond!=90 || turnSpeedLimit.Value!=90)throw new Exception("Profile turn-speed limit was not restored.");
    if(result.Target!="Mimic"||result.HuntRadius!=46||result.RouteCorridorRadius!=16||result.LootPickupRadius!=9||
      !result.ArcherClass||!result.Ranged||result.MeleeRange!=27||result.RangedPullCount!=9||result.RangedPullTimeoutSeconds!=38||
      !result.UseAttackPotions||!result.UseDefensePotions||!result.AutoRepairLowDurability||result.RepairDurabilityPercent!=41||

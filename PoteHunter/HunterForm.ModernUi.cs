@@ -204,47 +204,25 @@ public sealed partial class HunterForm
         };
         var overviewPage=CreateFieldOverview(tabs,setupPage);
         tabs.TabPages.Add(overviewPage);
-        var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
         var featurePages=InitializeSelectedFeaturePages(tabs);
-        var advancedPages = new[]{protectionPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Overview",new[]{overviewPage}),("Hunt",new[]{setupPage,supportPage}),("Routes",new[]{navigationPage}),("Recovery",new[]{setupPage}),("Settings",featurePages.Concat(monitors).Concat(advancedPages).Append(indexPage).ToArray())};
-        string selectedSection="Overview";
-        var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
-        foreach(var (name,pages) in sections)
+        var farming=new TabPage("Farming"){Name="farmingPage",BackColor=UiWindow};
+        tabs.TabPages.Add(farming);
+        var overlayPage=new TabPage("Overlays"){Name="overlaysPage",AutoScroll=true,Padding=new Padding(12)};
+        var overlayBody=CompactTable();
+        foreach(string name in new[]{"navigationOverlayOptions","navigationLootPresentation"})
         {
-            var button=new Button{Text=name,Tag=pages[0],FlatStyle=FlatStyle.Flat,BackColor=UiSidebar,ForeColor=UiMuted,
-                Name="fieldNav"+name,TextAlign=ContentAlignment.MiddleCenter,Size=new Size(105,34),Margin=new Padding(0,0,5,0),Padding=Padding.Empty,Font=new Font("Segoe UI Semibold",10f)};
-            button.FlatAppearance.BorderSize=1;button.FlatAppearance.BorderColor=UiBorder;button.Cursor=Cursors.Hand;
-            button.FlatAppearance.MouseOverBackColor=UiRaised;
-            RoundControl(button,UiCornerRadius);nav.Controls.Add(button);
-            ComboBox? picker=null;
-            if(pages.Length>1)
-            {
-                picker=new ComboBox{DropDownStyle=ComboBoxStyle.DropDownList,DisplayMember="Text",Name="fieldPicker"+name,Width=166,Visible=false,Dock=DockStyle.Top,Margin=Padding.Empty};
-                picker.Items.AddRange(pages);picker.SelectedIndex=0;pagePickers.Controls.Add(picker);
-                picker.SelectionChangeCommitted+=(_,_)=>{if(picker.SelectedItem is TabPage page)tabs.SelectedTab=page;};
-            }
-            button.Click+=(_,_)=>
-            {
-                selectedSection=name;tabs.SelectedTab=picker?.SelectedItem as TabPage??pages[0];RefreshNavigation();
-                if(name=="Recovery")setupPage.ScrollControlIntoView(autoRevive);
-            };
-            navButtons.Add((button,pages,picker));
+            var section=navigationPage.Controls.Find(name,true).OfType<CollapsibleSection>().Single();
+            section.MaximumSize=Size.Empty;section.MinimumSize=Size.Empty;section.Expanded=true;
+            CompactAdd(overlayBody,section);
         }
-        void RefreshNavigation()
-        {
-            if(tabs.SelectedTab is not TabPage selected)return;
-            pageTitle.Text=selected==overviewPage?"The Endless Pursuit":selected==setupPage?"Setup":FriendlyPageName(selected.Text);
-            pageSubtitle.Text=selected==overviewPage?"Current-zone routes, verified player readings and session resources.":selected==setupPage?"Your mode, recovery and skills.":subtitles.GetValueOrDefault(selected.Text,"Live details and configuration.");
-            pageSubtitle.AutoEllipsis=true;
-            foreach(var (button,pages,picker) in navButtons)
-            {
-                bool active=pages.Contains(selected) && (selected==setupPage ? button.Text==(selectedSection=="Recovery"?"Recovery":"Hunt")
-                    : selected!=overviewPage || button.Text==(selectedSection=="Hunt"?"Hunt":"Overview"));button.BackColor=active?UiAccentDark:UiSidebar;button.ForeColor=active?UiAccent:UiMuted;
-                button.FlatAppearance.BorderColor=active?UiAccent:UiBorder;
-                if(picker!=null){picker.Visible=active;if(active)picker.SelectedItem=selected;}
-            }
-        }
+        overlayPage.Controls.Add(overlayBody);tabs.TabPages.Add(overlayPage);
+        var navigation=BuildGroupedNavigation(nav,tabs,overviewPage,farming,setupPage,packs,featurePages,indexPage,overlayPage,
+            (title)=>{pageTitle.Text=title=="Overview"?"The Endless Pursuit":title;
+                pageSubtitle.Text=title=="Overview"?"Current-zone routes, player readings and session resources.":
+                    title=="Farming"?"Your targets, automatic actions and saved routes.":
+                    title=="Death recovery"?"Revival, return routes and recovery settings.":
+                    subtitles.GetValueOrDefault(tabs.SelectedTab?.Text??"","Your settings and live details.");pageSubtitle.AutoEllipsis=true;});
+        void RefreshNavigation()=>navigation();
         tabs.SelectedIndexChanged+=(_,_)=>RefreshNavigation();
 
         ThemeTree(shell);
@@ -317,7 +295,7 @@ public sealed partial class HunterForm
     {
         foreach (Control control in root.Controls)
         {
-            if(control is Button crownButton && control is not CollapsibleSectionHeader)CrownfireControls.Button(crownButton);
+            if(control is Button crownButton && control is not CollapsibleSectionHeader and not SidebarButton)CrownfireControls.Button(crownButton);
             if(control is CheckBox crownToggle)CrownfireControls.Toggle(crownToggle);
             if (control is TabPage or Panel or TableLayoutPanel or FlowLayoutPanel)
             {
@@ -405,7 +383,7 @@ public sealed partial class HunterForm
                 grid.ColumnHeadersDefaultCellStyle.BackColor = UiRaised;
                 grid.ColumnHeadersDefaultCellStyle.ForeColor = UiText;
             }
-            else if (control is Button button && button.Tag is not TabPage)
+            else if (control is Button button && button.Tag is not TabPage && button is not SidebarButton)
             {
                 StyleActionButton(button, UiRaised, UiText);
             }
@@ -466,4 +444,5 @@ public sealed partial class HunterForm
             WireDisplaySanitizer(child);
     }
 }
+
 

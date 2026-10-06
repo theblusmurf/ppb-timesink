@@ -61,6 +61,7 @@ public sealed partial class HunterForm
         var recovery=CompactCard("RECOVERY & RESERVES");
         CompactAdd(settings,operating);CompactAdd(settings,recovery);
         CompactAdd(operating,CompactRow("Mode",compactMode,compactSaved));
+        InitializeTurnSpeedLimit(operating);
         tankPicker.Width=170;filter.Width=170;skillKeys.Width=135;healingSkillKeys.Width=135;
         ranged.Text="Ranged";archerClass.Text="Archer";
         priorityHint.SetToolTip(ranged,"Use bow/crossbow attack range.");

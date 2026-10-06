@@ -13,7 +13,7 @@ public sealed partial class HunterForm
         var preferences=new TabPage("Settings"){Name="preferencesPage",AutoScroll=true,Padding=new Padding(12)};
         var stack=CompactTable();
         CompactAdd(stack,new Label{Text="Application settings",AutoSize=true,Font=new Font("Segoe UI Semibold",15)});
-        CompactAdd(stack,new Label{Text="Your existing overlay and gameplay settings remain available in the page selector above.",AutoSize=true,MaximumSize=new Size(620,0)});
+        CompactAdd(stack,new Label{Text="Use the grouped menu to open gameplay settings, profiles and overlays.",AutoSize=true,MaximumSize=new Size(620,0)});
         var updates=new Button{Name="settingsUpdates",Text="Updates",AutoSize=true};updates.Click+=(_,_)=>OpenUpdates();
         CompactAdd(stack,updates);preferences.Controls.Add(stack);
         var profiles=new TabPage("Profiles"){Name="profilesPage",AutoScroll=true,Padding=new Padding(12)};

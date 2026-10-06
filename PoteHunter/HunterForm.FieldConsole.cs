@@ -63,30 +63,42 @@ public sealed partial class HunterForm
             throw new Exception("Left navigation overlaps content or banner is clipped.");
         if(ImperialTheme.Logo.Value.Width<1)
             throw new Exception("Embedded application branding is unavailable.");
-        foreach(string name in new[]{"Overview","Hunt","Routes","Recovery","Settings"})
+        var menu=(FlowLayoutPanel)nav;
+        var menuWindow=Size;
+        foreach(var menuSize in new[]{Size,MinimumSize})
         {
-            var button=(Button)Controls.Find("fieldNav"+name,true).Single();
-            if(!button.Visible || !button.Parent!.ClientRectangle.Contains(button.Bounds))
-                throw new Exception("Field Console navigation is clipped: "+name);
+        Size=menuSize;PerformLayout();Application.DoEvents();
+        foreach(var group in menu.Controls.OfType<SidebarGroup>())
+        {
+            menu.ScrollControlIntoView(group);Application.DoEvents();
+            var page=tabs.SelectedTab;bool expanded=group.Expanded;
+            group.Header.AccessibilityObject.DoDefaultAction();Application.DoEvents();
+            if(group.Expanded==expanded || group.Items.Visible==expanded || tabs.SelectedTab!=page ||
+                (group.Header.AccessibilityObject.State&AccessibleStates.Collapsed)==0)
+                throw new Exception("Collapsing a menu group changed the page or lost accessibility.");
+            group.Header.PerformClick();Application.DoEvents();
+            if(!group.Expanded || (group.Header.AccessibilityObject.State&AccessibleStates.Expanded)==0)
+                throw new Exception("Menu group cannot be reopened.");
+        }
+        foreach(var button in menu.Controls.OfType<SidebarButton>().Concat(menu.Controls.OfType<SidebarGroup>().SelectMany(g=>g.Items.Controls.OfType<SidebarButton>())))
+        {
+            menu.ScrollControlIntoView(button);Application.DoEvents();
+            var rect=menu.RectangleToClient(button.RectangleToScreen(button.ClientRectangle));
+            if(!button.Visible || !menu.ClientRectangle.Contains(rect) || button.Width<140)
+                throw new Exception("Grouped navigation is unreachable: "+button.Text+" "+rect+" "+menu.ClientRectangle);
             button.PerformClick();Application.DoEvents();
-            var picker=Controls.Find("fieldPicker"+name,true).OfType<ComboBox>().SingleOrDefault();
-            if(tabs.SelectedTab!=(picker?.SelectedItem as TabPage??button.Tag as TabPage))
-                throw new Exception("Field Console navigation did not open its section: "+name);
+            if(tabs.SelectedTab!=button.Tag || !button.Selected)
+                throw new Exception("Direct navigation did not select its feature: "+button.Text);
         }
-        foreach(string name in new[]{"Hunt","Settings"})
-        {
-            ((Button)Controls.Find("fieldNav"+name,true).Single()).PerformClick();
-            var picker=(ComboBox)Controls.Find("fieldPicker"+name,true).Single();
-            if(!picker.Visible || picker.Items.Count<2)throw new Exception("A grouped page picker is inaccessible.");
-            // Exercise the same commit action as selecting a native dropdown item.
-            for(int i=0;i<picker.Items.Count;i++)
-            {
-                picker.SelectedIndex=i;
-                typeof(ComboBox).GetMethod("OnSelectionChangeCommitted",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!
-                    .Invoke(picker,[EventArgs.Empty]);
-                if(tabs.SelectedTab!=picker.Items[i])throw new Exception("A grouped page cannot be opened.");
-            }
+        menu.AutoScrollPosition=Point.Empty;
         }
+        var retained=tabs.SelectedTab;
+        foreach(var group in menu.Controls.OfType<SidebarGroup>())group.Expanded=false;
+        PerformLayout();Application.DoEvents();
+        if(tabs.SelectedTab!=retained)throw new Exception("Collapsing all menu groups changed the selected page.");
+        using(var collapsed=new Bitmap(Width,Height)){DrawToBitmap(collapsed,new Rectangle(Point.Empty,Size));collapsed.Save(Path.Combine(AppContext.BaseDirectory,"grouped-menu-collapsed-minimum.png"));}
+        foreach(var group in menu.Controls.OfType<SidebarGroup>())group.Expanded=true;
+        Size=menuWindow;PerformLayout();Application.DoEvents();
         tabs.SelectedIndex=0;PerformLayout();Application.DoEvents();
         var left=Controls.Find("fieldCombatColumn",true).Single();
         var right=Controls.Find("fieldRecoveryColumn",true).Single();

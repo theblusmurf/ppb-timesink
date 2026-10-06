@@ -484,7 +484,7 @@ public sealed partial class HunterForm : Form
             rules.Add(new AvoidRule(name,distance));
         }
         Avoidance.Validate(rules); avoidRules=rules;
-        return WithOverlaySettings(WithManaSettings(WithRangedPullSettings(new Options { Player = player.Text.Trim(), Target = filter.Text.Trim(), HuntRadius = radius.Value, RouteCorridorRadius=routeCorridorRadius.Value, LootPickupRadius=lootPickupRadius.Value, LeaveAreaWhenEmpty=leaveAreaWhenEmpty.Checked, AutoReviveAfterDeath=autoRevive.Checked, AutoRepairAfterDeath=autoRepair.Checked, AutoRepairLowDurability=durabilityRepair.Checked, RepairDurabilityPercent=durabilityThreshold.Value, VisualRevivalDetection=visualRevival.Checked, RevivalDelaySeconds=(int)revivalDelaySeconds.Value, FarmOnArrival=farmOnArrival.Checked, ReviveKey=configuredReviveKey, MeleeRange = (decimal)Targeting.AttackRange(ranged.Checked || archerClass.Checked, archerClass.Checked, (double)melee.Value), Ranged = ranged.Checked || archerClass.Checked, ArcherClass = archerClass.Checked, SkillKeys = keys, AutoDetectSkills=autoSkills.Checked, SkillSeconds = skillSeconds.Value, LootHoldMs = lootHold.Value, AllowedDifficulties = difficultyBoxes.Where(kv => kv.Value.Checked).Select(kv => kv.Key.ToString()).ToArray(), GamekeeperResponseRadius = gamekeeperRadius.Value, LootDuringSkillCooldowns = combatPickup.Checked, AutoPickupNearbyLoot=nearbyLootPickup.Checked, HealerMode=healerMode.Checked, AutoDetectHealingSkills=autoHealingSkills.Checked, HealingSkillKeys=healingKeys, HealChargeMilliseconds=healCharge.Value, PartyHealBelowPercent=partyHealBelow.Value, PartyHealRange=partyHealRange.Value, PrioritizeGamekeeper = prioritizeGamekeeper.Checked, StationaryGamekeeperPriority=stationaryGamekeeperPriority.Checked, ReturnToHuntLocationAfterGamekeeper=returnToHuntLocation.Checked, PrioritizeBreakables=prioritizeBreakables.Checked, AutoHeal = autoHeal.Checked, HealBelowPercent = healBelow.Value, HealDelaySeconds = healDelay.Value, AntiKillSteal=antiKillSteal.Checked, OtherPlayerRadius=playerBuffer.Value, AvoidNames=rules, ClearNearbyEnemies=clearNearby.Checked, NearbyEnemyRadius=nearbyRadius.Value, AutomaticRouting=automaticRouting.Checked,GroupTankName=selectedTankName,GroupMode=groupEnabled.Checked,GroupFollowDistance=groupFollow.Value,GroupAttackRadius=groupAttack.Value,GroupFollowLimit=groupLimit.Value })));
+        return WithOverlaySettings(WithManaSettings(WithRangedPullSettings(new Options { Player = player.Text.Trim(), Target = filter.Text.Trim(), HuntRadius = radius.Value, TurnSpeedDegreesPerSecond=turnSpeedLimit.Value, RouteCorridorRadius=routeCorridorRadius.Value, LootPickupRadius=lootPickupRadius.Value, LeaveAreaWhenEmpty=leaveAreaWhenEmpty.Checked, AutoReviveAfterDeath=autoRevive.Checked, AutoRepairAfterDeath=autoRepair.Checked, AutoRepairLowDurability=durabilityRepair.Checked, RepairDurabilityPercent=durabilityThreshold.Value, VisualRevivalDetection=visualRevival.Checked, RevivalDelaySeconds=(int)revivalDelaySeconds.Value, FarmOnArrival=farmOnArrival.Checked, ReviveKey=configuredReviveKey, MeleeRange = (decimal)Targeting.AttackRange(ranged.Checked || archerClass.Checked, archerClass.Checked, (double)melee.Value), Ranged = ranged.Checked || archerClass.Checked, ArcherClass = archerClass.Checked, SkillKeys = keys, AutoDetectSkills=autoSkills.Checked, SkillSeconds = skillSeconds.Value, LootHoldMs = lootHold.Value, AllowedDifficulties = difficultyBoxes.Where(kv => kv.Value.Checked).Select(kv => kv.Key.ToString()).ToArray(), GamekeeperResponseRadius = gamekeeperRadius.Value, LootDuringSkillCooldowns = combatPickup.Checked, AutoPickupNearbyLoot=nearbyLootPickup.Checked, HealerMode=healerMode.Checked, AutoDetectHealingSkills=autoHealingSkills.Checked, HealingSkillKeys=healingKeys, HealChargeMilliseconds=healCharge.Value, PartyHealBelowPercent=partyHealBelow.Value, PartyHealRange=partyHealRange.Value, PrioritizeGamekeeper = prioritizeGamekeeper.Checked, StationaryGamekeeperPriority=stationaryGamekeeperPriority.Checked, ReturnToHuntLocationAfterGamekeeper=returnToHuntLocation.Checked, PrioritizeBreakables=prioritizeBreakables.Checked, AutoHeal = autoHeal.Checked, HealBelowPercent = healBelow.Value, HealDelaySeconds = healDelay.Value, AntiKillSteal=antiKillSteal.Checked, OtherPlayerRadius=playerBuffer.Value, AvoidNames=rules, ClearNearbyEnemies=clearNearby.Checked, NearbyEnemyRadius=nearbyRadius.Value, AutomaticRouting=automaticRouting.Checked,GroupTankName=selectedTankName,GroupMode=groupEnabled.Checked,GroupFollowDistance=groupFollow.Value,GroupAttackRadius=groupAttack.Value,GroupFollowLimit=groupLimit.Value })));
     }
     async Task Connect()
     {
@@ -960,6 +960,7 @@ public sealed partial class HunterForm : Form
     static (uint,uint,long) TargetIdentity(Entity e)=>(e.Id,e.Generation,e.Address);
     async Task<bool> NavigateTo(Movement drive,Vec goal,Vec anchor,Options options,CancellationToken token,double bodyReach=0,double? boundaryRadius=null,bool watchTurns=false,double arrivalTolerance=0)
     {
+        drive.TurnSpeedDegreesPerSecond=(double)options.TurnSpeedDegreesPerSecond;
         bool previousOwner=navigationInputOwned;navigationInputOwned=true;
         try
         {
@@ -1697,6 +1698,7 @@ public sealed partial class HunterForm : Form
                 o.HuntRadius=o.GroupFollowLimit;
             }
             var drive = movement;
+            drive.TurnSpeedDegreesPerSecond=(double)o.TurnSpeedDegreesPerSecond;
             runCharacter=world.LocalPlayer();
             // Capture the activation point once.  Solo fixed-target combat uses
             // this immutable point as its standing location; only group mode is
@@ -3826,6 +3828,7 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
+
 
 
 

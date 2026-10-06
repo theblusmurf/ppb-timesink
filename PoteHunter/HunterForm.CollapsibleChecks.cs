@@ -92,11 +92,14 @@ public sealed partial class HunterForm
             Save("collapsible-overview-expanded.png");
             for(int i = 0; i < folds.Length; i++) folds[i].Expanded = previous[i];
             Size = MinimumSize; Layout();
+            var tabs=Controls.Find("fieldConsoleShell",true).Single().Controls.Find("orbitalPageContent",true).Single().Controls.OfType<TabControl>().Single();
+            var previousPage=tabs.SelectedTab;tabs.SelectedTab=tabs.TabPages.Cast<TabPage>().Single(p=>p.Text=="Overview");Layout();
             var columns = Find<TableLayoutPanel>("overviewColumns");
             var left = Find<TableLayoutPanel>("overviewMapColumn");
             var right = Find<TableLayoutPanel>("overviewHuntColumn");
             if(left.Right > right.Left || right.Right > columns.ClientSize.Width || left.Width < 320 || right.Width < 200)
                 throw new Exception("Collapsible Overview columns overlap or overflow at minimum size.");
+            tabs.SelectedTab=previousPage;Layout();
             foreach(var fold in folds)
                 if(fold.Header.Width < 270 || fold.Header.Height < 55 || !fold.ClientRectangle.Contains(fold.Header.Bounds))
                     throw new Exception("Fold header clips at minimum size: " + fold.Name);

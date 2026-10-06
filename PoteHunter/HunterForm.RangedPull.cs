@@ -84,6 +84,7 @@ public sealed partial class HunterForm
                 form.settings.Enabled=false;
                 if(form.skillSeconds.Enabled || form.manaReserve.Enabled)
                     throw new Exception("Settings no longer inherit the running-state lock.");
+                if(form.turnSpeedLimit.Enabled)throw new Exception("Turn-speed control bypassed the running-state settings lock.");
                 form.settings.Enabled=true;
                 using(var expanded=new Bitmap(form.Width,form.Height))
                 {
