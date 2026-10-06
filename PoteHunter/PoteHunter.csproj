@@ -39,4 +39,5 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup><EmbeddedResource Include="Resources\ItemGrades\grade_breakpoints.csv.gz" LogicalName="PoteHunter.Resources.ItemGrades.grade_breakpoints.csv.gz" /></ItemGroup>
+  <ItemGroup><None Include="../UPGRADE-DESK.md" Link="UPGRADE-DESK.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
 </Project>

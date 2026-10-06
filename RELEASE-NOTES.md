@@ -1,3 +1,9 @@
+## Release1.119
+
+Replace the weapon/armor grade tooltip with the selected Upgrade Desk design: dark green cards, an explicit best-stat badge, focus-stat metrics, progress bars for every readable stat, regular-gem suggestions and separately labelled upgrade/socket estimates. Choose a focus stat in Overlays > Item grades; Auto and missing-stat fallback use the first actionable plan. Preserve existing grade targets, automatic popup/hotkeys, hover dismissal and passive click-through behavior. Fit the panel to monitor edges and available space at different display scales. Unknown stats receive no invented grade or gem plan.
+
+Reuse the existing item reader, grade table and gem planner. Offline data, passive-window and native-render checks cover weapon, armor, unknown, reached and empty views, focus/profile restoration and display bounds. Existing disconnected UI and behavior checks pass. Settings and profiles are preserved; live hover appearance still requires checking after updating. No game input or installed-app restart was performed during validation.
+
 ## Release1.118
 
 Faster, smoother body turns during melee combat: follow the current target during ordinary combat waits in short cooperative steps, retain acceleration through the attack-facing tolerance, and settle visual facing near one degree. Accumulate fractional mouse corrections instead of forcing a pixel per poll; limit normal corrections to two frames and prevent large catch-up packets after longer pauses. Keep the saved 30–360°/s cap, existing attack/range rules, delayed-heading accounting, held attacks, and stop/focus/health/activity guards. Ranged camera aiming, calibration pulses and forward speed retain their existing behavior.

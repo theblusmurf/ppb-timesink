@@ -10,6 +10,8 @@ public sealed partial class Options
     public string ItemGradeTarget {get;set;}="Auto";
     /// <summary>Optional key that reads the hovered item on demand. "None" or any key from ItemGradeHotkeys.Choices.</summary>
     public string ItemGradeHotkey {get;set;}="None";
+    /// <summary>Focus stat in Upgrade Desk; Auto picks the first actionable stat.</summary>
+    public string ItemGradeFocusStat {get;set;}="Auto";
 }
 
 internal static class ItemGradeHotkeys

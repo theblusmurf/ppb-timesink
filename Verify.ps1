@@ -28,9 +28,11 @@ if (!$result.StartsWith('PASS:')) {
     throw "Unexpected self-test result: $result"
 }
 Write-Output $result
+$deskProcess = Start-Process -FilePath $application -ArgumentList '--item-grade-desk-check',('"'+$output+'"') -WindowStyle Hidden -Wait -PassThru
+if ($deskProcess.ExitCode -ne 0) { throw "Upgrade Desk checks failed. See $(Join-Path $output 'upgrade-desk-error.txt')." }
+Write-Output 'Upgrade Desk data, native rendering and passive window checks passed.'
 $uiProcess = Start-Process -FilePath $application -ArgumentList '--ranged-ui-check' -WindowStyle Hidden -Wait -PassThru
 if ($uiProcess.ExitCode -ne 0) {
     throw "Ranged settings/layout checks failed. See $(Join-Path $output 'ranged-ui-check.json')."
 }
 Write-Output 'Verification passed: all three projects build, offline self-tests pass, and ranged settings/layout checks pass.'
-

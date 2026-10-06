@@ -5,6 +5,7 @@ public sealed partial class HunterForm
     readonly CheckBox itemGradeEnabled=new(){Text="Show stat grades and gem estimates for the hovered item",AutoSize=true,MaximumSize=new Size(680,0),Checked=true};
     readonly CheckBox itemGradeAutoShow=new(){Text="Show automatically when an item tooltip appears",AutoSize=true,MaximumSize=new Size(680,0),Checked=true};
     readonly ComboBox itemGradeTarget=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=90};
+    readonly ComboBox itemGradeFocus=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=215};
     readonly ComboBox itemGradeHotkey=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=120};
     readonly Label itemGradeStatus=new(){AutoSize=true,MaximumSize=new Size(680,0)};
     readonly TextBox itemGradeLastResult=new(){Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Vertical,Width=680,Height=170,Font=new Font("Consolas",9f),WordWrap=false};
@@ -30,6 +31,7 @@ public sealed partial class HunterForm
     {
         if(itemGradeOptionsAdded)throw new InvalidOperationException("Item grade page already exists.");
         itemGradeOptionsAdded=true;
+        itemGradeFocus.Items.AddRange(ItemGradeDesk.FocusChoices);
         itemGradeTarget.Items.Add(ItemGradeLadder.AutomaticName);
         foreach(var grade in ItemGradeLadder.Targets)itemGradeTarget.Items.Add(grade.ToString());
         foreach(string choice in ItemGradeHotkeys.Choices)itemGradeHotkey.Items.Add(choice);
@@ -40,7 +42,7 @@ public sealed partial class HunterForm
         stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
         void Add(Control control){control.Margin=new Padding(3,6,3,6);stack.Controls.Add(control,0,stack.RowCount++);}
         Add(new Label{AutoSize=true,Font=new Font("Segoe UI Semibold",12),Text="Item grades"});
-        Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Connect, then hover a weapon or armor until its tooltip appears. A small box beside the cursor shows stat grades, points needed for your target grade, and gem estimates. Automatic mode lets mouse clicks pass through and keeps the game in focus."});
+        Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Connect, then hover a weapon or armor until its tooltip appears. Upgrade Desk opens beside the item with stat progress, a focus-stat gem plan and upgrade estimates. Automatic mode lets mouse clicks pass through and keeps the game in focus."});
         Add(itemGradeEnabled);
         Add(itemGradeAutoShow);
         var row=new FlowLayoutPanel{AutoSize=true,WrapContents=true};
@@ -48,6 +50,10 @@ public sealed partial class HunterForm
         row.Controls.Add(new Label{AutoSize=true,Text="(Auto: a stat at AAA shows gems to S, every other stat gems to AAA)",Margin=new Padding(6,6,6,0)});
         row.Controls.Add(new Label{AutoSize=true,Text="Optional key to read on demand",Margin=new Padding(18,6,6,0)});row.Controls.Add(itemGradeHotkey);
         Add(row);
+        var focusRow=new FlowLayoutPanel{AutoSize=true,WrapContents=true};
+        focusRow.Controls.Add(new Label{AutoSize=true,Text="Focus stat",Margin=new Padding(0,6,6,0)});focusRow.Controls.Add(itemGradeFocus);
+        focusRow.Controls.Add(new Label{AutoSize=true,Text="If absent on this item, Auto chooses an available stat.",Margin=new Padding(6,6,6,0)});
+        Add(focusRow);
         Add(itemGradeStatus);
         Add(new Label{AutoSize=true,MaximumSize=new Size(680,0),Text="Gem and +10 projections are estimates from the imported table and upgrade assumptions. Existing sockets beyond the two mapped fields are not confirmed."});
         Add(new Label{AutoSize=true,Text="Last reading"});
@@ -69,6 +75,7 @@ public sealed partial class HunterForm
 
         itemGradeEnabled.CheckedChanged+=(_,_)=>ItemGradeSettingsChanged();
         itemGradeAutoShow.CheckedChanged+=(_,_)=>ItemGradeSettingsChanged();
+        itemGradeFocus.SelectedIndexChanged+=(_,_)=>ItemGradeSettingsChanged();
         itemGradeTarget.SelectedIndexChanged+=(_,_)=>ItemGradeSettingsChanged();
         itemGradeHotkey.SelectedIndexChanged+=(_,_)=>ItemGradeSettingsChanged();
         itemGradeHoverTimer.Tick+=(_,_)=>ItemGradeHoverTick();
@@ -84,6 +91,7 @@ public sealed partial class HunterForm
         applyingItemGradeOptions=true;
         try
         {
+            itemGradeFocus.SelectedItem=ItemGradeDesk.FocusChoices.First(c=>c.Key==ItemGradeDesk.NormalizeFocus(options.ItemGradeFocusStat));
             itemGradeEnabled.Checked=options.ItemGradeOverlayEnabled;
             itemGradeAutoShow.Checked=options.ItemGradeAutoShow;
             itemGradeTarget.SelectedItem=ItemGradeLadder.TargetName(ItemGradeLadder.ParseTarget(options.ItemGradeTarget));
@@ -94,6 +102,7 @@ public sealed partial class HunterForm
 
     internal Options WithItemGradeSettings(Options options)
     {
+        options.ItemGradeFocusStat=(itemGradeFocus.SelectedItem as ItemGradeDesk.FocusChoice)?.Key??"Auto";
         options.ItemGradeOverlayEnabled=itemGradeEnabled.Checked;
         options.ItemGradeAutoShow=itemGradeAutoShow.Checked;
         options.ItemGradeTarget=ItemGradeLadder.TargetName(SelectedItemGradeTarget);
@@ -105,7 +114,7 @@ public sealed partial class HunterForm
     {
         if(applyingItemGradeOptions)return;
         if(IsHandleCreated&&!offlinePreviewMode)RegisterItemGradeHotkey();
-        if(!itemGradeEnabled.Checked||!itemGradeAutoShow.Checked)HideItemGradeOverlay();
+        HideItemGradeOverlay(); // Refresh the same hovered item after focus or target changes.
         try{WithItemGradeSettings(Options.Read()).Save();}catch(Exception ex){itemGradeStatus.Text="Could not save item grade settings: "+ex.Message;return;}
         UpdateItemGradeStatus();
     }
@@ -186,7 +195,7 @@ public sealed partial class HunterForm
         var plan=ItemGradePlanner.Plan(ItemGradeTable.Find(reading.Entry!.PrototypeId),reading.Name,reading.Entry.PrototypeId,reading.Stats,target,reading.UpgradeLevel);
         itemGradeLastResult.Text=ItemGradePlanner.Describe(plan);
         string footer="Gem / +10 estimates · sockets beyond two fields unconfirmed";
-        itemGradeOverlay.ShowPlan(plan,footer,cursor,preferLeft:auto);
+        itemGradeOverlay.ShowPlan(plan,footer,cursor,preferLeft:auto,focus:(itemGradeFocus.SelectedItem as ItemGradeDesk.FocusChoice)?.Key??"Auto");
     }
 
     /// <summary>Optional key handler: read the item under the cursor from client memory and show its grades now.</summary>

@@ -7,6 +7,8 @@ static class CommandLine
 {
     public static int? Run(string[] args)
     {
+        if(args.Contains("--item-grade-desk-check"))
+            return args.Length==2 && args[0]=="--item-grade-desk-check" ? ItemGradeDeskChecks.RunNative(args[1]) : 2;
         if(args.Contains("--observe-durability"))
         {
             // A bounded read-only observation. This branch never initializes
