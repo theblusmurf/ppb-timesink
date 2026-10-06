@@ -95,7 +95,7 @@ internal sealed partial class ItemGradeOverlay
         if (plan.Stats.Count == 0) DrawText(g, "No readable stats for this item.", body, DeskMuted, new(22, 240, 250, 70), wrap: true);
         DrawRecipe(g, focused);
         g.DrawLine(line, 22, contentBottom + 9, 548, contentBottom + 9);
-        DrawText(g, "Target: " + plan.TargetLabel + " · Focus stat set in Overlays > Item grades", small, DeskMuted, new(22, contentBottom + 18, 526, 18));
+        DrawText(g, "Target: " + plan.TargetLabel + " · Focus stat set in World & Tools > Item grades", small, DeskMuted, new(22, contentBottom + 18, 526, 18));
         DrawText(g, footer.Length > 0 ? footer : "Read only · no item changes", small, DeskMuted, new(22, contentBottom + 40, 526, 27), wrap: true);
         g.Restore(saved);
     }

@@ -5,7 +5,7 @@ a dark green panel with item identity, an explicitly labelled best-stat badge,
 three focus-stat metrics, every readable stat's grade and target progress, a
 regular-gem plan and a separately labelled AAA upgrade/socket estimate.
 
-Choose the target and **Focus stat** in **Overlays > Item grades**. Auto picks
+Choose the target and **Focus stat** in **World & Tools > Item grades**. Auto picks
 the first stat with an actionable gem plan. A saved stat absent on the current
 item falls back to Auto. Existing target, automatic popup and hotkey choices
 are retained. The last-reading text retains the planner's other gem tiers.
