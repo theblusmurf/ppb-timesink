@@ -362,9 +362,10 @@ public sealed partial class HunterForm
         if(savedNavigationRoutesStatus.IsDisposed)return;
         double defaultRadius=0;
         try { defaultRadius=(double)Options.Read().HuntRadius; } catch { }
-        savedNavigationRoutesStatus.Text=$"Targets: {navigation.RouteTargetLabel}  ·  "+string.Join("  ·  ",navigation.SavedRoutes.Select((route,slot)=>
+        navigation3DTarget.Text="Targets · "+navigation.RouteTargetLabel;
+        savedNavigationRoutesStatus.Text=string.Join(Environment.NewLine,navigation.SavedRoutes.Select((route,slot)=>
             $"{(slot==0?"Primary":$"Alt {slot}")}: {(route==null?"—":$"Z{route.Zone} · {route.Points.Length} pts · {(string.IsNullOrWhiteSpace(route.Character)?"any":route.Character)} · R{(route.HuntRadius>0?route.HuntRadius:defaultRadius):0.#}")}"));
-        if(navigation.UnassignedRouteCount>0)savedNavigationRoutesStatus.Text+=$"  ·  {navigation.UnassignedRouteCount} existing route(s) unassigned";
+        if(navigation.UnassignedRouteCount>0)savedNavigationRoutesStatus.Text+=$"{Environment.NewLine}{navigation.UnassignedRouteCount} existing route(s) unassigned";
         assignUnassignedNavigationRoutes.Visible=navigation.UnassignedRouteCount>0;
         assignUnassignedNavigationRoutes.Enabled=!busy && !working && !navigation.Recording && navigation.CanAssignUnassignedRoutes;
     }

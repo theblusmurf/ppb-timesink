@@ -64,12 +64,38 @@ public sealed partial class HunterForm
         {
             var section=new CollapsibleSection(name,title,"compass",expanded){Width=264,Summary=title=="Map layers"?"Artwork, terrain and route visibility":""};
             section.Content.Padding=new(10,6,10,10);
-            foreach(var control in controls){control.Margin=new(0,3,0,4);control.Dock=DockStyle.Top;control.MaximumSize=new(240,0);section.Content.RowStyles.Add(new(SizeType.AutoSize));section.Content.Controls.Add(control,0,section.Content.RowCount++);}
+            if(string.IsNullOrEmpty(section.Summary))section.RowStyles[0].Height=42;
+            foreach(var control in controls)
+            {
+                control.Margin=new(0,3,0,4);control.Dock=DockStyle.Top;control.MaximumSize=new(240,0);
+                Control row=control;
+                if(control is ComboBox combo)
+                {
+                    // Native owner-drawn combos grow after theming, while an
+                    // AutoSize table cell can keep the old preferred height.
+                    // Let a plain row reserve the actual control height.
+                    var host=new Panel{Name="navigationComboRow"+combo.Name,Dock=DockStyle.Top,
+                        AutoSize=false,Height=combo.PreferredHeight,Margin=control.Margin,MaximumSize=new(240,0)};
+                    combo.Margin=Padding.Empty;host.Controls.Add(combo);
+                    void FitHeight()
+                    {
+                        int height=Math.Max(combo.Height,combo.PreferredHeight);
+                        if(host.Height!=height)host.Height=height;
+                    }
+                    combo.SizeChanged+=(_,_)=>FitHeight();combo.FontChanged+=(_,_)=>FitHeight();
+                    host.Layout+=(_,_)=>FitHeight();FitHeight();row=host;
+                }
+                section.Content.RowStyles.Add(new(SizeType.AutoSize));section.Content.Controls.Add(row,0,section.Content.RowCount++);
+            }
             side.Controls.Add(section);return section;
         }
         Section("navigation3DLayers","Map layers",true,navigation3DMap,navigationMapOpacityLabel,navigationMapOpacity,navigation3DTerrain,navigation3DObjects,navigation3DRoutes,navigation3DAnchors);
-        savedNavigationSlot.Width=235;navigationRecordingStatus.MaximumSize=new(235,0);savedNavigationRoutesStatus.MaximumSize=new(235,0);
-        Section("navigationSavedRoutes","Saved routes",true,navigation3DTarget,savedNavigationSlot,startNavigationRecording,saveNavigationRoute,navigationRecordingStatus,useAlternativeHuntRoutes,savedNavigationRoutesStatus);
+        savedNavigationSlot.Name="savedNavigationSlot";savedNavigationSlot.Width=235;
+        navigationRecordingStatus.MaximumSize=new(235,0);savedNavigationRoutesStatus.MaximumSize=new(235,0);
+        useAlternativeHuntRoutes.Text="Use alternative routes";
+        var alternativesHelp=new Label{Name="navigationAlternativesHelp",AutoSize=true,
+            Text="When the saved spot is occupied.",ForeColor=ImperialTheme.Muted,Font=new Font("Segoe UI",8.5f)};
+        Section("navigationSavedRoutes","Saved routes",true,navigation3DTarget,savedNavigationSlot,startNavigationRecording,saveNavigationRoute,navigationRecordingStatus,useAlternativeHuntRoutes,alternativesHelp,savedNavigationRoutesStatus);
         Section("navigationRouteManagement","Route management",false,saveNavigationSpot,assignUnassignedNavigationRoutes,clearSavedNavigationRoute,clearAllSavedNavigationRoutes);
         Section("navigationOverlayOptions","Overlay options",false,showNavigationOverlay,radar3D,showNavigationRoutes,showRouteOverlay,routes3D,overlay3DTopView,showTreasureChestMarkers,overlay3DStatus,
             new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="MiniMap radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);
@@ -190,7 +216,7 @@ public sealed partial class HunterForm
         var routes=navigation.SavedRoutesForZone(navigation3DScene.Zone).Select(r=>new MapRoute3D(r.Slot,r.Route)).ToArray();
         string signature=navigation.RouteTargetKey+"|"+SelectedSavedNavigationSlot()+"|"+string.Join(";",routes.Select(r=>$"{r.Slot}:{r.Route.SavedUtc.Ticks}:{r.Route.Points.Length}"));
         if(signature!=navigation3DRouteSignature){navigation3DRouteSignature=signature;navigation3DView.SelectedSlot=SelectedSavedNavigationSlot();navigation3DView.SetRoutes(routes);}
-        navigation3DTarget.Text="Targets · "+navigation.RouteTargetLabel;UpdateNavigation3DVisibility();
+        UpdateNavigation3DVisibility();
     }
     void RefreshNavigation3DState()
     {

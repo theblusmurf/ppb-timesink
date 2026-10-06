@@ -1,3 +1,13 @@
+## Release1.127
+
+Fix the Saved routes panel alignment in Navigation.
+
+- Reserve the themed dropdown's actual height so it cannot overlap Start route. Keep all route controls aligned with consistent spacing, and compact section headers that have no summary.
+- Show the selected targets even before a 3D map is loaded. Put each saved route and unassigned-route notice on a separate wrapping line.
+- Use a readable Use alternative routes caption with the occupied-spot explanation underneath and in its tooltip. Preserve the original setting, route actions, hotkeys and recovery behavior.
+
+Validate disconnected native layouts at normal and minimum window sizes, populated/long labels, control/cell bounds, scrolling and collapse/expand behavior. Build and existing offline/UI/installer checks run without game input; leave the active application and live settings untouched.
+
 ## Release1.126
 
 Apply the selected compact Slim Inspector item overlay and add saved tooltip sizing.
