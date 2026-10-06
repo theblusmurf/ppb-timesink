@@ -162,7 +162,7 @@ internal static partial class AutoPatcher
             if (request?.Update?.Version is string failedVersion) AppUpdates.BlockedPatch = failedVersion;
             AppUpdates.PatchStatus = "Automatic patch stopped: " + ex.Message;
             if (log != null) File.AppendAllText(log, DateTime.UtcNow.ToString("O") + " ERROR " + ex.Message + Environment.NewLine);
-            MessageBox.Show(AppUpdates.PatchStatus + "\nUse Setup > Updates to retry manually.\n" + (log ?? ""), "PlayPoteBot patcher");
+            MessageBox.Show(AppUpdates.PatchStatus + "\nUse Settings > Updates to retry manually.\n" + (log ?? ""), "PlayPoteBot patcher");
             return 1;
         }
     }

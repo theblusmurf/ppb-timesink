@@ -1,3 +1,13 @@
+## Release1.116
+
+Add the three selected features from PoteHunter 2.0.45 while preserving PlayPoteBot's custom controls.
+
+- Save, apply, import and export named settings profiles in Settings > Profiles. Switching requires stopped hunting and route recording, and backs up current settings. Preserve custom potions, smart skills, ranged packs, durability thresholds and independent route/loot radii. Keep character identity, global keys and display placement local; retain routes, recovery/login files and logs.
+- Import calibrated MapTool WorldGeometry from Routes > Navigation 3D. Require the connected client hash and zone to match, review marker alignment before saving, and keep the previous map manifest as a backup. Feed decoded collision polygons into the existing route planner alongside protection zones and observed stalls. Reject incompatible or unconfirmed maps; distant geometry is excluded from bounded path searches.
+- Add a read-only hovered weapon/armor grade overlay with gem and +10 estimates. Require linked file and loaded-code checks, validate changing item identities and tooltip records, preserve focus in automatic mode, and reserve existing bot shortcuts. Estimated upgrades and sockets beyond the two mapped fields remain explicitly unconfirmed. Unknown layouts disable this optional reader.
+- Align the five main menu buttons vertically on the left. Move Updates into Settings and preserve the existing Orbital Ops appearance, bindings and public update source.
+- Verify profile round trips/backups, restored custom UI controls, collision identity gates and polygon detours, grade arithmetic/planning, existing behavior and offline window layouts. Live hovered items and user-imported zone maps still require confirmation in the game after upgrading.
+
 ## Release1.115
 
 Rename Radar to MiniMap and recover available player names from the client’s ID-bound name records.

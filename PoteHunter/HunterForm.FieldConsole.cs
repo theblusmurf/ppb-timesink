@@ -56,9 +56,11 @@ public sealed partial class HunterForm
     {
         var banner=Controls.Find("imperialBanner",true).Single();
         var nav=Controls.Find("fieldNavigation",true).Single();
-        if(banner.Height<60 || PointToClient(nav.PointToScreen(Point.Empty)).Y<=PointToClient(tabs.PointToScreen(new Point(0,tabs.Height))).Y ||
+        var rail=Controls.Find("orbitalOperationRail",true).Single();
+        if(banner.Height<60||nav.Parent!=rail||!rail.ClientRectangle.Contains(nav.Bounds)||
+            PointToClient(nav.PointToScreen(new Point(nav.Width,0))).X>PointToClient(tabs.PointToScreen(Point.Empty)).X||
             !banner.Parent!.ClientRectangle.Contains(banner.Bounds))
-            throw new Exception("Bottom navigation overlaps content or banner is clipped.");
+            throw new Exception("Left navigation overlaps content or banner is clipped.");
         if(ImperialTheme.Logo.Value.Width<1)
             throw new Exception("Embedded application branding is unavailable.");
         foreach(string name in new[]{"Overview","Hunt","Routes","Recovery","Settings"})
@@ -112,6 +114,6 @@ public sealed partial class HunterForm
         }
         compactMode.SelectedIndex=originalMode;PerformLayout();Application.DoEvents();
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"field-console-ui-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
-        {Passed=true,Checks=new[]{"all bottom navigation sections accessible","all grouped pages selectable","minimum-size columns and actions fit","unknown/zero/full/over-max vitals","no new game queries or input"}}));
+        {Passed=true,Checks=new[]{"all left navigation sections accessible","all grouped pages selectable","minimum-size columns and actions fit","unknown/zero/full/over-max vitals","no new game queries or input"}}));
     }
 }

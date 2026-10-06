@@ -99,6 +99,7 @@ public sealed partial class HunterForm
                 if(!healbotOptions.HealerMode || !healbotOptions.GroupMode || healbotOptions.GroupTankName!="Preview tank" || !healbotOptions.UseDefensePotions)
                     throw new Exception("Combined healer/group controls did not persist alongside potion settings.");
                 form.CheckCompactControls();
+                form.CheckSelectedFeatureUi(tabs);
                 form.CheckRevivalSetupUi();
                 form.CheckClientRecoveryUi();
                 form.compactMode.SelectedIndex=0;

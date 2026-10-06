@@ -205,8 +205,9 @@ public sealed partial class HunterForm
         var overviewPage=CreateFieldOverview(tabs,setupPage);
         tabs.TabPages.Add(overviewPage);
         var monitors = new[]{monstersPageFor(tabs),lootPage,hotbarPage,groupPage};
+        var featurePages=InitializeSelectedFeaturePages(tabs);
         var advancedPages = new[]{protectionPage}.Concat(packs==null?Array.Empty<TabPage>():new[]{packs}).ToArray();
-        var sections=new[]{("Overview",new[]{overviewPage}),("Hunt",new[]{setupPage,supportPage}),("Routes",new[]{navigationPage}),("Recovery",new[]{setupPage}),("Settings",monitors.Concat(advancedPages).Append(indexPage).ToArray())};
+        var sections=new[]{("Overview",new[]{overviewPage}),("Hunt",new[]{setupPage,supportPage}),("Routes",new[]{navigationPage}),("Recovery",new[]{setupPage}),("Settings",featurePages.Concat(monitors).Concat(advancedPages).Append(indexPage).ToArray())};
         string selectedSection="Overview";
         var navButtons=new List<(Button Button,TabPage[] Pages,ComboBox? Picker)>();
         foreach(var (name,pages) in sections)

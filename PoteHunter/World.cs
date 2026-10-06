@@ -221,6 +221,7 @@ public sealed partial class World : IDisposable
             ConfigureWallet();
             ConfigureDurability();
             ConfigurePlayerNames();
+            ConfigureItemGradeFromClient();
             WriteProfileAudit(true,ProfileStatus);
             ConnectionStage="Connected";
         }
@@ -749,6 +750,7 @@ public sealed partial class World : IDisposable
         ResetWallet();
         ResetDurability();
         ResetPlayerNames();
+        ResetItemGrade();
         windowIdentity = null;
         PlayerName="";
         RestSupported=false;

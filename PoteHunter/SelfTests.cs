@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace PoteHunter;
 
@@ -8,6 +8,9 @@ static class SelfTests
     {
         try
         {
+            SelectedFeatureChecks.Run();
+            ItemGradeTable.SelfTest();ItemGradePlanner.SelfTest();ItemStatKinds.SelfTest();ItemGradeDiscovery.SelfTest();ItemGradeHotkeys.SelfTest();ItemGradeOverlay.SelfTest();
+            MapToolWorldRenderer.SelfTest();
             HuntingSessionLogChecks.Run();
             ClientRecoveryChecks.Run();
             PotionChecks.Run();

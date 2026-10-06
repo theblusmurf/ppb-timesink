@@ -1,0 +1,104 @@
+namespace PoteHunter;
+
+public sealed partial class HunterForm
+{
+    void ApplyProfileSettings(Options o)
+    {
+        if(working||busy||clientRecoveryRunning||navigation.Recording)throw new InvalidOperationException("Stop the bot and route recording before applying a profile.");
+        compactSaveTimer.Stop();busy=true;
+        try
+        {
+            // Input handlers consult busy: changing controls cannot save a half-applied profile or start a hunt.
+            archerClass.Checked=o.ArcherClass;ranged.Checked=o.Ranged||o.ArcherClass;
+            melee.Maximum=ranged.Checked?30m:10m;
+            maintainBuffs.Checked=o.MaintainAreaBuffs;
+            encourageDuration.Value=Math.Clamp((decimal)o.EncourageDurationSeconds,encourageDuration.Minimum,encourageDuration.Maximum);
+            hardenSkinDuration.Value=Math.Clamp((decimal)o.HardenSkinDurationSeconds,hardenSkinDuration.Minimum,hardenSkinDuration.Maximum);
+            greetPlayers.Checked=o.GreetPlayers;
+            reviveKey.Text=o.ReviveKey??"R";
+            revivalDelaySeconds.Value=Math.Clamp(o.RevivalDelaySeconds,0,600);
+            rangedPullCount.Value=Math.Clamp(o.RangedPullCount,2,20);
+            rangedPullTimeout.Value=Math.Clamp(o.RangedPullTimeoutSeconds,3,60);
+            melee.Value=Math.Clamp(o.MeleeRange,melee.Minimum,melee.Maximum);
+            filter.Text=o.Target??"";
+            radius.Value=Math.Clamp((decimal)o.HuntRadius,radius.Minimum,radius.Maximum);
+            routeCorridorRadius.Value=Math.Clamp((decimal)o.RouteCorridorRadius,routeCorridorRadius.Minimum,routeCorridorRadius.Maximum);
+            lootPickupRadius.Value=Math.Clamp((decimal)o.LootPickupRadius,lootPickupRadius.Minimum,lootPickupRadius.Maximum);
+            leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty;
+            autoRevive.Checked=o.AutoReviveAfterDeath;
+            autoRepair.Checked=o.AutoRepairAfterDeath;
+            durabilityRepair.Checked=o.AutoRepairLowDurability;
+            durabilityThreshold.Value=Math.Clamp((decimal)o.RepairDurabilityPercent,durabilityThreshold.Minimum,durabilityThreshold.Maximum);
+            visualRevival.Checked=o.VisualRevivalDetection;
+            farmOnArrival.Checked=o.FarmOnArrival;
+            ranged.Checked=o.Ranged;
+            archerClass.Checked=o.ArcherClass;
+            autoSkills.Checked=o.AutoDetectSkills;
+            skillSeconds.Value=Math.Clamp((decimal)o.SkillSeconds,skillSeconds.Minimum,skillSeconds.Maximum);
+            lootHold.Value=Math.Clamp((decimal)o.LootHoldMs,lootHold.Minimum,lootHold.Maximum);
+            gamekeeperRadius.Value=Math.Clamp((decimal)o.GamekeeperResponseRadius,gamekeeperRadius.Minimum,gamekeeperRadius.Maximum);
+            combatPickup.Checked=o.LootDuringSkillCooldowns;
+            nearbyLootPickup.Checked=o.AutoPickupNearbyLoot;
+            healerMode.Checked=o.HealerMode;
+            autoHealingSkills.Checked=o.AutoDetectHealingSkills;
+            healCharge.Value=Math.Clamp((decimal)o.HealChargeMilliseconds,healCharge.Minimum,healCharge.Maximum);
+            partyHealBelow.Value=Math.Clamp((decimal)o.PartyHealBelowPercent,partyHealBelow.Minimum,partyHealBelow.Maximum);
+            partyHealRange.Value=Math.Clamp((decimal)o.PartyHealRange,partyHealRange.Minimum,partyHealRange.Maximum);
+            prioritizeGamekeeper.Checked=o.PrioritizeGamekeeper;
+            stationaryGamekeeperPriority.Checked=o.StationaryGamekeeperPriority;
+            returnToHuntLocation.Checked=o.ReturnToHuntLocationAfterGamekeeper;
+            prioritizeBreakables.Checked=o.PrioritizeBreakables;
+            autoHeal.Checked=o.AutoHeal;
+            healBelow.Value=Math.Clamp((decimal)o.HealBelowPercent,healBelow.Minimum,healBelow.Maximum);
+            healDelay.Value=Math.Clamp((decimal)o.HealDelaySeconds,healDelay.Minimum,healDelay.Maximum);
+            antiKillSteal.Checked=o.AntiKillSteal;
+            playerBuffer.Value=Math.Clamp((decimal)o.OtherPlayerRadius,playerBuffer.Minimum,playerBuffer.Maximum);
+            clearNearby.Checked=o.ClearNearbyEnemies;
+            nearbyRadius.Value=Math.Clamp((decimal)o.NearbyEnemyRadius,nearbyRadius.Minimum,nearbyRadius.Maximum);
+            automaticRouting.Checked=o.AutomaticRouting;
+            groupEnabled.Checked=o.GroupMode;
+            groupFollow.Value=Math.Clamp((decimal)o.GroupFollowDistance,groupFollow.Minimum,groupFollow.Maximum);
+            groupAttack.Value=Math.Clamp((decimal)o.GroupAttackRadius,groupAttack.Minimum,groupAttack.Maximum);
+            groupLimit.Value=Math.Clamp((decimal)o.GroupFollowLimit,groupLimit.Minimum,groupLimit.Maximum);
+            autoMana.Checked=o.AutoRestoreMana;
+            manaBelow.Value=Math.Clamp((decimal)o.ManaBelowPercent,manaBelow.Minimum,manaBelow.Maximum);
+            manaDelay.Value=Math.Clamp((decimal)o.ManaDelaySeconds,manaDelay.Minimum,manaDelay.Maximum);
+            manaReserve.Value=Math.Clamp(o.ManaReservePercent,manaReserve.Minimum,manaReserve.Maximum);
+            healthSkillCondition.Checked=o.HealthSkillCondition;
+            healthSkillPercent.Value=Math.Clamp((decimal)o.HealthSkillPercent,healthSkillPercent.Minimum,healthSkillPercent.Maximum);
+            smartSkillTargeting.Checked=o.SmartSkillTargeting;
+            centerAreaSkills.Checked=o.CenterAreaSkills;
+            retargetSkillTargets.Checked=o.RetargetSingleTargetSkills;
+            attackPotions.Checked=o.UseAttackPotions;
+            defensePotions.Checked=o.UseDefensePotions;
+            rangedPullEnabled.Checked=o.RangedPullEnabled;
+            experimentalInternalTargeting.Checked=o.ExperimentalInternalTargeting;
+            rangedGatherRadius.Value=Math.Clamp((decimal)o.RangedGatherRadius,rangedGatherRadius.Minimum,rangedGatherRadius.Maximum);
+            rangedMeleeAttackRange.Value=Math.Clamp((decimal)o.RangedMeleeAttackRange,rangedMeleeAttackRange.Minimum,rangedMeleeAttackRange.Maximum);
+            rangedVerticalAimOffset.Value=Math.Clamp((decimal)o.RangedVerticalAimOffset,rangedVerticalAimOffset.Minimum,rangedVerticalAimOffset.Maximum);
+            showNavigationOverlay.Checked=o.ShowNavigationOverlay;
+            showNavigationRoutes.Checked=o.ShowNavigationRoutes;
+            showRouteOverlay.Checked=o.ShowRouteOverlay;
+            showLootTrackerOverlay.Checked=o.ShowLootTrackerOverlay;
+            guideTreasureChests.Checked=o.GuideTreasureChests;
+            showTreasureChestMarkers.Checked=o.ShowTreasureChestMarkers;
+            useAlternativeHuntRoutes.Checked=o.UseAlternativeHuntRoutes;
+            navigation3DMap.Checked=o.Navigation3DMap;
+            navigation3DTerrain.Checked=o.Navigation3DTerrain;
+            navigation3DObjects.Checked=o.Navigation3DObjects;
+            navigation3DRoutes.Checked=o.Navigation3DRoutes;
+            navigation3DAnchors.Checked=o.Navigation3DAnchors;
+            navigationMapOpacity.Value=Math.Clamp(o.Navigation3DMapOpacity,navigationMapOpacity.Minimum,navigationMapOpacity.Maximum);
+            skillKeys.Text=o.SkillKeys??"";
+            healingSkillKeys.Text=o.HealingSkillKeys??"";
+            healthConditionKeys.Text=o.HealthConditionKeys??"";
+            reviveKey.Text=o.ReviveKey??"";
+            foreach(var (kind,box) in difficultyBoxes)box.Checked=o.AllowedDifficulties.Any(x=>x.Equals(kind.ToString(),StringComparison.OrdinalIgnoreCase));
+            avoidRules=o.AvoidNames;avoidGrid.Rows.Clear();foreach(var rule in avoidRules)avoidGrid.Rows.Add(rule.Name,rule.Radius);
+            selectedTankName=o.GroupTankName;
+            ApplyItemGradeSettings(o);RegisterItemGradeHotkey();UpdateItemGradeStatus();
+            navigation.SelectTargetSelection(o.Target);refreshOverview?.Invoke();
+        }
+        finally{compactSaveTimer.Stop();busy=false;}
+    }
+}

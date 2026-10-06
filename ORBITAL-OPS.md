@@ -6,7 +6,7 @@ The Orbital Ops interface uses graphite surfaces, lime accents and clear sans-se
 
 The left control rail keeps the existing hunt controls available across pages. Start and Stop retain their existing behavior and hotkeys. Mode, target selection and recovery switches use the existing saved settings and remain locked when changing them would interrupt an active procedure.
 
-Use the bottom navigation to open Overview, Hunt, Routes, Recovery or Settings. Expand the sections you need; the rest can stay folded. Detailed controls, guided repair/revival setup, the public updater and route management remain available.
+Use the left navigation to open Overview, Hunt, Routes, Recovery or Settings. Expand the sections you need; the rest can stay folded. Open Settings for the Updates button; its page selector also includes Profiles and Item grades. Detailed controls, guided repair/revival setup and route management remain available.
 
 ## Overview and routes
 

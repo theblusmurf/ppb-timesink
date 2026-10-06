@@ -58,8 +58,8 @@ public sealed partial class HunterForm
                         if(!action.Visible || rect.Left<railBounds.Left || rect.Right>railBounds.Right || action.Width<70)
                             throw new Exception("An operation moved outside the left rail: "+action.Name);
                     }
-                    if(PointToClient(nav.PointToScreen(Point.Empty)).Y < mainBounds.Bottom)
-                        throw new Exception("Bottom navigation overlaps the current page.");
+                    if(nav.Parent!=rail||nav.FlowDirection!=FlowDirection.TopDown||!rail.ClientRectangle.Contains(nav.Bounds))
+                        throw new Exception("Left navigation overlaps or leaves the operation rail.");
                     if(section=="Overview")
                     {
                         var telemetry=Find<TableLayoutPanel>("orbitalTelemetry");

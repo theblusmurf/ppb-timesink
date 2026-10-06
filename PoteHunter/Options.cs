@@ -1,8 +1,8 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace PoteHunter;
 
-public sealed class Options
+public sealed partial class Options
 {
     const decimal MinimumMeleeRange = 1.5m;
     public string Player { get; set; } = ""; // Last detected name; never an identity selector.

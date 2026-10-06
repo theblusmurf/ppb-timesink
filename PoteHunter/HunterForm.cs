@@ -432,6 +432,7 @@ public sealed partial class HunterForm : Form
         if (m.Msg == 0x312)
         {
             int id = m.WParam.ToInt32();
+            if(id==ItemGradeHotkeys.Id){if(!offlinePreviewMode&&connected&&Input.GetForegroundWindow()==world.Window)ShowItemGradeUnderCursor();base.WndProc(ref m);return;}
             bool routeKey=id is StartRouteHotkeyId or FinishRouteHotkeyId;
             IntPtr foreground=routeKey ? Input.GetForegroundWindow() : IntPtr.Zero;
             if(!routeKey || foreground==Handle || connected && foreground==world.Window)
@@ -458,7 +459,7 @@ public sealed partial class HunterForm : Form
         options.HardenSkinDurationSeconds=hardenSkinDuration.Value;
         options.GreetPlayers=greetPlayers.Checked;
         options.GreetingRadius=25;
-        return options;
+        return WithItemGradeSettings(options);
     }
     Options CurrentOptionsCore()
     {
@@ -966,6 +967,7 @@ public sealed partial class HunterForm : Form
         if(!goal.Finite || (goal-anchor).Length>activeMovementBoundary)throw new RouteUnavailableException("Destination is beyond the current movement boundary.");
         var self=world.LocalPlayer();navigationPosition=self.Position;
         navigation.Observe(world.NavigationContext(self),self.Position,self.Height);
+        RefreshImportedCollisionObstacles();
         if(!options.AutomaticRouting) {await drive.Approach(world,self.Position,goal-self.Position,token,watchTurns,arrivalTolerance);return false;}
         int version=navigation.RouteVersion;
         Vec waypoint;
@@ -2153,6 +2155,7 @@ public sealed partial class HunterForm : Form
                         throw new InvalidOperationException("Revival changed the map or character; the saved anchor cannot be used here.");
                     runCharacter=detectedCharacter=self;guardSelfId=self.Id;navigationZone=runZone!.Value;navigationPosition=self.Position;
                     navigation.Observe(world.NavigationContext(self),self.Position,self.Height);
+        RefreshImportedCollisionObstacles();
                     deathRecovery.Observe(hp,Environment.TickCount64);deathRecoveryActive=false;
                     encounter.Reset();courtesy.Reset();deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;encounterQuietSince=0;encounterUnknownSince=0;
                     pendingPriorityGamekeeper=null;gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;completionReturnPending=false;stationaryAssistReturnPending=false;
@@ -3333,6 +3336,7 @@ public sealed partial class HunterForm : Form
                 if(hp.Current<lastHp)lastDamageAt=Environment.TickCount64;
                 lastHp=hp.Current;
                 navigation.Observe(world.NavigationContext(self),self.Position,self.Height);
+        RefreshImportedCollisionObstacles();
                 var action=recovery.Update(Environment.TickCount64,self.Position,Movement.FromClientHeading(world.PlayerHeading()),anchor,
                     retreatRadius,avoidZones,navigation.Obstacles([]),hp);
                 if(lastPhase!=action.Phase)

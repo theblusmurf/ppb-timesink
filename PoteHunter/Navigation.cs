@@ -27,6 +27,8 @@ public sealed partial class Navigation
     // Release1.39 wrote a single route. Keep the old filename as a read-only
     // migration source so existing death-recovery routes remain available.
     public static string DefaultSavedRoutePath => Path.Combine(AppContext.BaseDirectory,"navigation-route.json");
+    RouteObstacle[] importedObstacles=[];
+    public void SetImportedObstacles(RouteObstacle[] obstacles){if(ReferenceEquals(importedObstacles,obstacles))return;importedObstacles=obstacles;route.Clear();RouteVersion++;}
     readonly List<LearnedObstacle> blocked=new();
     readonly List<Vec> trail=new();
     readonly List<Vec> recordingTrail=new();
@@ -231,7 +233,7 @@ public sealed partial class Navigation
     {
         blocked.RemoveAll(o=>o.ExpiresUtc<=DateTime.UtcNow);
         return avoid.Select(z=>new RouteObstacle(z.Center,z.Radius+1,z.Reason))
-            .Concat(blocked.Where(o=>Math.Abs(o.Height-height)<2).Select(o=>new RouteObstacle(o.Center,o.Radius,"Observed blocked direction"))).ToList();
+            .Concat(importedObstacles).Concat(blocked.Where(o=>Math.Abs(o.Height-height)<2).Select(o=>new RouteObstacle(o.Center,o.Radius,"Observed blocked direction"))).ToList();
     }
     public bool CanAdvance(Vec from,Vec to,IEnumerable<AvoidZone> avoid) => RoutePlanner.SegmentClear(from,to,Obstacles(avoid));
 

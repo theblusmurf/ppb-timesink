@@ -109,8 +109,7 @@ public sealed partial class HunterForm
         }
         var toggle=new Button{Name="advancedSettingsToggle",Text="+  Advanced settings",AutoSize=true,Anchor=AnchorStyles.Left,Margin=new Padding(0,4,0,8)};
         bool expanded=false;toggle.Click+=(_,_)=>{expanded=!expanded;advanced.Visible=expanded;toggle.Text=expanded?"−  Advanced settings":"+  Advanced settings";};
-        var updates=new Button{Text="Updates",AutoSize=true};updates.Click+=(_,_)=>OpenUpdates();
-        var actions=CompactFlow(toggle,updates);actions.Name="setupActions";CompactAdd(settings,actions);CompactAdd(settings,advanced);
+        var actions=CompactFlow(toggle);actions.Name="setupActions";CompactAdd(settings,actions);CompactAdd(settings,advanced);
         // Retain every bound control and the settings lock; arrange the same
         // cards into independent columns so hidden healer rows leave no gap.
         settings.Controls.Clear();settings.RowStyles.Clear();settings.ColumnStyles.Clear();

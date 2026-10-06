@@ -29,3 +29,9 @@ ui-revival-*.png
 
 # Private calibrated login screens and Windows-encrypted secret
 client-recovery-profile.json*
+
+# Local named profiles and imported maps
+settings-profiles/
+settings.json.backup-*
+maps/*.json
+maps/*.png

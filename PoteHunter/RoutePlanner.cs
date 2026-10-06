@@ -1,6 +1,6 @@
 namespace PoteHunter;
 
-public sealed record RouteObstacle(Vec Center, double Radius, string Reason);
+public sealed record RouteObstacle(Vec Center, double Radius, string Reason, Vec[]? Polygon = null);
 
 public static class RoutePlanner
 {
@@ -16,8 +16,13 @@ public static class RoutePlanner
         ArgumentNullException.ThrowIfNull(obstacles);
         if (!start.Finite || !goal.Finite || !anchor.Finite || !double.IsFinite(huntRadius) || huntRadius <= 0 || maxExpanded <= 0)
             return null;
-        if (obstacles.Any(obstacle => obstacle == null || !obstacle.Center.Finite || !double.IsFinite(obstacle.Radius) || obstacle.Radius < 0))
+        if (obstacles.Any(obstacle => obstacle == null || !obstacle.Center.Finite || !double.IsFinite(obstacle.Radius) || obstacle.Radius < 0 ||
+            obstacle.Polygon is {} polygon && (polygon.Length<3||polygon.Any(point=>!point.Finite))))
             return null;
+        // Every A* point stays inside this boundary. Distant map geometry cannot intersect a valid step.
+        obstacles=obstacles.Where(o=>o.Polygon is {Length:>=3} p
+            ? p.Min(v=>v.X)<=anchor.X+huntRadius&&p.Max(v=>v.X)>=anchor.X-huntRadius&&p.Min(v=>v.Y)<=anchor.Y+huntRadius&&p.Max(v=>v.Y)>=anchor.Y-huntRadius
+            : Math.Abs(o.Center.X-anchor.X)<=huntRadius+o.Radius&&Math.Abs(o.Center.Y-anchor.Y)<=huntRadius+o.Radius).ToArray();
         if (!WithinHunt(start, anchor, huntRadius) || !WithinHunt(goal, anchor, huntRadius) ||
             !PointClear(start, obstacles) || !PointClear(goal, obstacles)) return null;
         if (SegmentClear(start, goal, obstacles)) return [goal];
@@ -86,7 +91,14 @@ public static class RoutePlanner
         double lengthSquared = segment.X * segment.X + segment.Y * segment.Y;
         foreach (var obstacle in obstacles)
         {
-            if (obstacle == null || !obstacle.Center.Finite || !double.IsFinite(obstacle.Radius) || obstacle.Radius < 0) return false;
+            if (obstacle == null || !obstacle.Center.Finite || !double.IsFinite(obstacle.Radius) || obstacle.Radius < 0 ||
+                obstacle.Polygon is { } polygon && (polygon.Length < 3 || polygon.Any(point=>!point.Finite))) return false;
+            if(obstacle.Polygon is {Length:>=3} shape)
+            {
+                if(Inside(a,shape)||Inside(b,shape))return false;
+                for(int i=0;i<shape.Length;i++)if(Intersects(a,b,shape[i],shape[(i+1)%shape.Length]))return false;
+                continue;
+            }
             Vec fromStart = obstacle.Center - a;
             double t = lengthSquared <= 1e-12 ? 0 : Math.Clamp((fromStart.X * segment.X + fromStart.Y * segment.Y) / lengthSquared, 0, 1);
             Vec closest = a + segment * t;
@@ -120,10 +132,41 @@ public static class RoutePlanner
     {
         foreach (var obstacle in obstacles)
         {
+            if(obstacle.Polygon is {Length:>=3} polygon)
+            {
+                if(Inside(point,polygon))return false;
+                continue;
+            }
             Vec delta = point - obstacle.Center;
             if (delta.X * delta.X + delta.Y * delta.Y <= obstacle.Radius * obstacle.Radius) return false;
         }
         return true;
+    }
+
+    static bool Inside(Vec point,IReadOnlyList<Vec> polygon)
+    {
+        bool inside=false;
+        for(int i=0,j=polygon.Count-1;i<polygon.Count;j=i++)
+        {
+            Vec a=polygon[j],b=polygon[i];
+            if(DistanceToSegmentSquared(point,a,b)<=1e-12)return true;
+            if((a.Y>point.Y)!=(b.Y>point.Y)&&point.X<(b.X-a.X)*(point.Y-a.Y)/(b.Y-a.Y)+a.X)inside=!inside;
+        }
+        return inside;
+    }
+    static bool Intersects(Vec a,Vec b,Vec c,Vec d)
+    {
+        static double Cross(Vec u,Vec v,Vec p)=>(v.X-u.X)*(p.Y-u.Y)-(v.Y-u.Y)*(p.X-u.X);
+        double abC=Cross(a,b,c),abD=Cross(a,b,d),cdA=Cross(c,d,a),cdB=Cross(c,d,b);
+        return abC*abD<=1e-12&&cdA*cdB<=1e-12&&
+            Math.Max(Math.Min(a.X,b.X),Math.Min(c.X,d.X))<=Math.Min(Math.Max(a.X,b.X),Math.Max(c.X,d.X))+1e-9&&
+            Math.Max(Math.Min(a.Y,b.Y),Math.Min(c.Y,d.Y))<=Math.Min(Math.Max(a.Y,b.Y),Math.Max(c.Y,d.Y))+1e-9;
+    }
+    static double DistanceToSegmentSquared(Vec point,Vec a,Vec b)
+    {
+        Vec delta=b-a;double length=delta.X*delta.X+delta.Y*delta.Y;
+        double t=length<=1e-12?0:Math.Clamp(((point.X-a.X)*delta.X+(point.Y-a.Y)*delta.Y)/length,0,1);
+        Vec nearest=a+delta*t;double x=point.X-nearest.X,y=point.Y-nearest.Y;return x*x+y*y;
     }
 
     static Vec Position(Vec start, Node node) => new(start.X + node.X, start.Y + node.Y);
@@ -164,5 +207,9 @@ public static class RoutePlanner
         }
         if (SegmentClear(new Vec(-2, 1), new Vec(2, 1), [new RouteObstacle(new Vec(0, 0), 1, "tangent")]))
             throw new Exception("Tangent obstacle contact must be blocked.");
+        Vec[] wallShape=[new(-.25,-2),new(.25,-2),new(.25,2),new(-.25,2)];
+        if(SegmentClear(new Vec(-2,0),new Vec(2,0),[new RouteObstacle(new(0,0),3,"collision wall",wallShape)])||
+            !SegmentClear(new Vec(-2,2.5),new Vec(2,2.5),[new RouteObstacle(new(0,0),3,"collision wall",wallShape)]))
+            throw new Exception("Imported collision footprints did not block crossing while allowing a route around them.");
     }
 }

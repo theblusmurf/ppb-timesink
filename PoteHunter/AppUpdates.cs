@@ -130,7 +130,7 @@ public partial class HunterForm
                 nextPatchCheck=DateTime.UtcNow.AddMinutes(30);
                 var update=await AppUpdates.Check(patchCancellation.Token);
                 if(update!=pendingPatch){pendingPatch=update;stagedPatch=null;}
-                if(!IsDisposed && update!=null)message=$"{update.Version} available · Setup > Updates";
+                if(!IsDisposed && update!=null)message=$"{update.Version} available · Settings > Updates";
             }
             if(IsDisposed || !AppUpdates.AutoPatch || pendingPatch==null ||
                 pendingPatch.Version==AppUpdates.BlockedPatch || !PatchIdle)return;
@@ -155,7 +155,7 @@ public partial class HunterForm
         catch(OperationCanceledException) { }
         catch(Exception ex)
         {
-            if(!IsDisposed)message="Automatic patch deferred: "+ex.Message+" · Setup > Updates";
+            if(!IsDisposed)message="Automatic patch deferred: "+ex.Message+" · Settings > Updates";
             // No repeated downloads/handoffs after a local staging failure.
             if(pendingPatch!=null)AppUpdates.BlockedPatch=pendingPatch.Version;
         }
