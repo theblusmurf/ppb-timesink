@@ -6,7 +6,7 @@ namespace PoteHunter;
 internal static class ItemGradeDesk
 {
     internal sealed record FocusChoice(string Key, string Label) { public override string ToString() => Label; }
-    internal static readonly FocusChoice[] FocusChoices = [new("Auto", "Auto · closest to target grade"),
+    internal static readonly FocusChoice[] FocusChoices = [new("Auto", "Auto · closest target"),
         .. ItemGradeTable.StatOrder.Select(key => new FocusChoice(key, ItemGradeTable.DisplayName(key)))];
     internal static string NormalizeFocus(string? key) => FocusChoices.FirstOrDefault(c => c.Key == key)?.Key ?? "Auto";
     // Compare unfinished targets by percentage, not unlike stat units or gem counts. Stable ties retain tooltip order.
