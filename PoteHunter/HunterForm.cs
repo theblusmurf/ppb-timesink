@@ -2424,6 +2424,7 @@ public sealed partial class HunterForm : Form
                 var defenseCadence=anchorDefenseCadence;
                 long nextOccupancyCheck=0,progressAt=Environment.TickCount64;
                 int progressIndex=-1;double bestDistance=double.PositiveInfinity;
+                var routeTurnRecovery=new SavedRouteTurnRecovery();
                 bool alternatives=!o.GroupMode && o.UseAlternativeHuntRoutes;
                 bool Occupied(int slot)
                 {
@@ -2517,6 +2518,7 @@ public sealed partial class HunterForm : Form
                                 Slot=activeSavedRouteSlot,AfterDeath=afterDeath,UsedSavedRoute=true,Zone=runZone});
                             return;
                         }
+                        routeTurnRecovery.ObserveWaypoint(path,Environment.TickCount64);
                         if(!fallbackCycle.Waiting && defenseCadence.TryBegin(Environment.TickCount64))
                         {
                             long defenseAt=Environment.TickCount64;bool defended;
@@ -2539,7 +2541,32 @@ public sealed partial class HunterForm : Form
                         // waypoints. Resetting the local planner at every point
                         // used to release/repress movement and cause jerky turns.
                         Vec steeringGoal=path.SteeringGoal(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && navigation.CanAdvance(from,to,avoidZones));
-                        await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance,steeringDelta:steeringGoal-current);
+                        try
+                        {
+                            await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance,steeringDelta:steeringGoal-current);
+                        }
+                        catch(TurnUnresponsiveException failure)
+                        {
+                            var retry=await routeTurnRecovery.RetryAsync(path,()=>
+                            {
+                                drive.StopApproach();Input.HoldMouse(false,false,default);Input.HoldMouse(true,false,default);
+                                Input.Release();ReleaseCombatPickup();
+                            },drive.ResetTurnResponse,Input.Delay,()=> (world.PlayerPosition(),world.PlayerHeading()),
+                                ()=>Environment.TickCount64,returnToken,started=>
+                                    TraceLog.Record("saved route turn retry started",new{started.WaypointIndex,
+                                        started.ElapsedMilliseconds,Goal=goal.Value,AfterDeath=afterDeath,
+                                        Retreat=fallbackCycle.Waiting,failure.Position,failure.Forward,failure.Observation,
+                                        MaximumWaypointMilliseconds=SavedRouteTurnRecovery.WaypointAllowanceMilliseconds,
+                                        SettleMilliseconds=SavedRouteTurnRecovery.SettleMilliseconds}));
+                            TraceLog.Record(retry.Ready?"saved route turn retry ready":"saved route turn retry failed",
+                                new{retry.Reason,retry.WaypointIndex,retry.ElapsedMilliseconds,retry.Position,
+                                    retry.ActualHeading,Goal=goal.Value,AfterDeath=afterDeath,Retreat=fallbackCycle.Waiting});
+                            if(!retry.Ready)throw;
+                            // Reuse the same path and progress deadline. The next
+                            // iteration reads the scene and checks fresh geometry;
+                            // this released retry cannot advance a checkpoint.
+                            continue;
+                        }
                         await Input.Delay(25,returnToken);
                     }
                 }

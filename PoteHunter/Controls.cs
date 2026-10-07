@@ -1022,7 +1022,7 @@ public sealed partial class Movement
     public double UnitsPerMs { get; private set; }
     bool advancing;
     Vec progressPosition;
-    long progressAt, lastMotionTrace;
+    long progressAt, lastMotionTrace, lastFaceTrace;
     readonly TurnResponse turnResponse = new();
     public void ResetTurnResponse() { turnResponse.Reset();smoothSteering.Reset();fineFacing=false; }
     public static double Angle(Vec a, Vec b) => Math.Atan2(a.X * b.Y - a.Y * b.X, a.X * b.X + a.Y * b.Y);
@@ -1083,6 +1083,8 @@ public sealed partial class Movement
     public async Task<bool> Face(World world, Vec delta, CancellationToken token,double tolerance=.035,string owner="facing")
     {
         double heading=world.PlayerHeading();
+        long headingSampleAt=Environment.TickCount64;
+        DateTime headingSampleUtc=DateTime.UtcNow;
         Forward = FromClientHeading(heading);
         if (delta.Length < .01) {turnResponse.Reset();return true;}
         double angle = Angle(Forward, delta);
@@ -1095,7 +1097,24 @@ public sealed partial class Movement
         int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64,turnRateBudget,TurnSpeedDegreesPerSecond);
         Vec position=world.PlayerPosition();
         if (pixels != 0) Input.Turn(pixels, token);
-        ObserveTurning(position,heading,pixels,Environment.TickCount64,owner,angle,tolerance,token);
+        long commandCompletedAt=Environment.TickCount64;
+        if(pixels!=0 && commandCompletedAt-lastFaceTrace>=300)
+        {
+            lastFaceTrace=commandCompletedAt;
+            // This heading was read before the guarded input call. A sent
+            // packet is not a post-input heading reading or proof of response.
+            TraceLog.Record("precise facing command",new
+            {
+                Owner=owner is {Length:<=80}?owner:"<invalid owner>",
+                HeadingSampleUtc=headingSampleUtc,HeadingSampleTick=headingSampleAt,
+                PreSendHeading=heading,GoalHeading=Math.Atan2(Math.Sin(heading-angle),Math.Cos(heading-angle)),
+                ErrorRadians=angle,ErrorDegrees=angle*180/Math.PI,ToleranceRadians=tolerance,
+                TurnPixels=pixels,RadiansPerPixel,TurnSpeedDegreesPerSecond,Forward,Position=position,TargetDelta=delta,
+                TurnSent=true,CommandCompletedUtc=DateTime.UtcNow,CommandCompletedTick=commandCompletedAt,
+                HeadingSampleAgeMilliseconds=commandCompletedAt-headingSampleAt
+            });
+        }
+        ObserveTurning(position,heading,pixels,commandCompletedAt,owner,angle,tolerance,token);
         await Input.Delay(TurnFeedbackDelay(pixels), token);
         return false;
     }

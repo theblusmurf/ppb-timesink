@@ -31,6 +31,7 @@ static class SelfTests
             CheckTracking();
             MovementSmoothingChecks.Run().GetAwaiter().GetResult();
             ArrivalPulseGeometryChecks.Run().GetAwaiter().GetResult();
+            SavedRouteTurnRecoveryChecks.Run().GetAwaiter().GetResult();
             SurvivalCombatHandoffChecks.Run().GetAwaiter().GetResult();
             TurnSpeedLimitChecks.Run();
             CombatTurnTrackingChecks.Run().GetAwaiter().GetResult();

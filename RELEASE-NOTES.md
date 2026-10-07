@@ -1,3 +1,13 @@
+## Release1.138
+
+Allow one guarded recovery from a sustained turning fault while following a recorded route, instead of immediately cancelling route startup.
+
+- Release forward movement and mouse buttons before a passive 120 ms pause, reset the steering response once, and read the current position and body heading with ordinary safety checks. Recalculate the same recorded waypoint on the next iteration; a retry does not confirm arrival or permit movement against stale geometry.
+- Limit recovery to one attempt per recorded waypoint within its fixed 20-second allowance. Distance progress, moving aim directions and repeated corrections do not refill that attempt. Preserve route progress, collision, floor, identity, focus, health and cancellation protections. A repeated or late sustained turning fault still stops safely.
+- Record bounded route retry/failure details and sampled precise-facing commands with the measured pre-command body heading, intended pixels and calibration. A heading change alone remains insufficient: wrong-way turns and repeated oscillation cannot renew the existing watchdog.
+
+Validation covers a recoverable route turn, repeated faults, unchanged-waypoint progress, new waypoint ownership, expired deadlines and cancellation before or during the released pause. The observed route failure included a heading change away from the intended goal; it does not prove whether delayed client response or external movement caused that change. Live route recovery after upgrading still requires confirmation. Existing settings, routes, profiles and session logs are preserved.
+
 ## Release1.137
 
 Allow delayed position and safety checks to confirm that a short forward correction has settled without prematurely stopping route startup.
