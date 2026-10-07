@@ -38,6 +38,12 @@ Overlays always use the current game zone, even when the main window is on anoth
 
 Verified scene IDs are 1, 2, 3, 4, 5, 8, 9, 12, 15 and 16. The verified scene aliases are 6 → 3 and 17/18 → 16. Artwork uses the exact displayed zone's verified bounds; sharing terrain does not imply shared artwork. Other zones, missing files or an unverified client build fall back to the original 2D view. A hardware Windows OpenGL pixel format is required; unavailable rendering also falls back to 2D.
 
+Both the original verified client and the October 6 client are supported. The
+newer client moved its map routines but retains the verified terrain format,
+coordinate units and zone assignments. Its local scene files match the prior
+independent references. Updating to this app version restores the main 3D map,
+radar and route overlays that previously reported this client as unavailable.
+
 The scene reader validates all source height values and renders a reduced grid. Available primary buildings and compact object placements are decoded with source transforms. Missing references, invalid/sentinel transforms, vegetation and unverified compound child placements are omitted, with an explicit scene status. Zone 12 has missing object references in the verified installation. Static models currently use neutral materials, without recovered object textures.
 
 Routes are draped over recovered terrain only for display. Segments across missing terrain are split, and anchors at unavailable terrain are omitted. Actual live marker heights come from existing readings. Bridge/walkway surfaces, object collision, navmeshes and walkability have not been verified. These models do not modify movement, combat, loot, revival, repair or route-following decisions.

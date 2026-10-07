@@ -7,6 +7,11 @@ namespace PoteHunter;
 internal static class GameMapLayout
 {
     internal const string VerifiedClientHash="f3a39ea1f3687aca418aba17df295043618014b681eca4ff1db33d4837943c90";
+    // The October 6 client relocates the verified map routines without changing
+    // their terrain format, units or zone dispatch. Keep unknown builds rejected.
+    internal const string VerifiedOctober6ClientHash="6ce827b4ca440f9db35bcdc28ccf2124017605fadce6cb2f9299c356efcc00bf";
+    internal static bool ClientHashSupported(string? hash)
+        =>hash is VerifiedClientHash or VerifiedOctober6ClientHash;
     internal readonly record struct Extent(double MinX,double MinY,double MaxX,double MaxY)
     {
         internal Vec Center=>new((MinX+MaxX)/2,(MinY+MaxY)/2);
@@ -27,7 +32,7 @@ internal static class GameMapLayout
     };
     internal static bool ClientSupported(string path)
     {
-        try{using var stream=File.OpenRead(path);return Convert.ToHexStringLower(SHA256.HashData(stream))==VerifiedClientHash;}
+        try{using var stream=File.OpenRead(path);return ClientHashSupported(Convert.ToHexStringLower(SHA256.HashData(stream)));}
         catch(IOException){return false;}catch(UnauthorizedAccessException){return false;}
     }
     internal static Bitmap? Load(string clientDirectory,int zone)

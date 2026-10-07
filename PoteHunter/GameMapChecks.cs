@@ -13,6 +13,12 @@ internal static class GameMapChecks
     }
     internal static void Run()
     {
+        if(!GameMapLayout.ClientHashSupported(GameMapLayout.VerifiedClientHash) ||
+           !GameMapLayout.ClientHashSupported(GameMapLayout.VerifiedOctober6ClientHash))
+            throw new Exception("A verified map client was rejected");
+        foreach(string? hash in new[]{null,"",new string('0',64),GameMapLayout.VerifiedOctober6ClientHash[..^1],
+                    "0"+GameMapLayout.VerifiedOctober6ClientHash[1..]})
+            if(GameMapLayout.ClientHashSupported(hash))throw new Exception("An unverified map hash was accepted");
         foreach(uint format in new uint[]{0x31545844,0x33545844,0x35545844})
         {
             using var image=DdsMapTile.Decode(Tile(format));
@@ -43,8 +49,9 @@ internal static class GameMapChecks
             using(var image=GameMapLayout.Load(root,8))if(image==null || image.Size!=new Size(512,512))throw new Exception("Map assembly failed");
             File.Delete(Path.Combine(directory,"LargeMap04.dds"));using(var image=GameMapLayout.Load(root,8))if(image!=null)throw new Exception("Partial map accepted");
             string fakeClient=Path.Combine(root,"Client.exe");File.WriteAllText(fakeClient,"unverified client");if(GameMapLayout.ClientSupported(fakeClient))throw new Exception("Unverified client accepted");
+            if(GameMapLayout.ClientSupported(Path.Combine(root,"missing-client.exe")))throw new Exception("Missing client accepted");
         }
         finally{Directory.Delete(root,true);}
-        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"game-map-checks.json"),JsonSerializer.Serialize(new{Passed=true,Checks=new[]{"DXT1/3/5 and BGRA decoding","corrupt/truncated/unsupported tiles rejected","alpha and block order","north-up map axes and zone offsets","all four tiles required","unsupported zone and client rejected"}}));
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"game-map-checks.json"),JsonSerializer.Serialize(new{Passed=true,Checks=new[]{"both verified map builds accepted; altered, truncated and unknown hashes rejected","DXT1/3/5 and BGRA decoding","corrupt/truncated/unsupported tiles rejected","alpha and block order","north-up map axes and zone offsets","all four tiles required","unsupported zone and missing/unverified client rejected"}}));
     }
 }

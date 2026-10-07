@@ -1,3 +1,12 @@
+## Release1.129
+
+Restore local 3D maps for the verified October 6 game client.
+
+- Accept the newly verified client alongside the original map-compatible build. The old single-build check incorrectly marked its main 3D map, radar and route overlays as unavailable.
+- Preserve exact build verification, supported zones, bounded local asset parsing, artwork alignment and the existing 2D fallback. No movement, collision, route-following or gameplay settings change.
+
+Validate the relocated terrain routines, all 18 zone dispatch entries and alternate scene codec locally. Check all ten terrain scenes against independent references, load their objects, and render local maps and passive overlays for zones 8, 9 and 12 on hardware graphics. Build and run the full offline/native UI checks. No game input or live app restart is used; private game assets and diagnostics stay local.
+
 ## Release1.128
 
 Smooth saved-route travel and prioritize Gamekeeper as soon as the actual anchor is reached.
