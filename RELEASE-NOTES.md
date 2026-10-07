@@ -1,3 +1,16 @@
+## Release1.131
+
+Smooth route entry and keep skill targeting stable through each cast.
+
+- Brake precisely at the actual sharp corner, without requiring a second precision stop at its preceding gentle waypoint. Preserve early braking, checked route segments, sharp-corner capture and the final 0.5-unit anchor arrival.
+- Brake at an unvisited initial connector so it cannot be overshot while normal checkpoint passage remains unavailable.
+- Restrict new melee skill targets to the same attack reach used by basic swings. A distant engaged enemy cannot repeatedly replace the stationary swing target before a cast.
+- Reserve a chosen skill target through the next guarded cast attempt, with full target/skill identity checks and a three-second expiry. Continue checking health, range, skill eligibility, pack conditions, priority, focus and cancellation. Self-heals can preempt the reservation.
+- Preserve a verified living Gamekeeper during offensive skill selection when its priority is enabled. Keep highest-health and pack-density selection for ordinary enemies, continuous basic swings, the five-target/80-percent skill gate and 1.5-second offensive spacing.
+- Include target health, distance, generation and selection range in retarget diagnostics so future target changes can be explained.
+
+Validate the captured entry shape in multiple orientations, required corners/connectors/blocked paths, melee skill boundaries, Gamekeeper priority and reservation identity/expiry/cast completion alongside the full offline and native UI checks. Running gameplay is left untouched; live smoothness after upgrading requires confirmation. Local routes, profiles and diagnostic evidence remain private.
+
 ## Release1.130
 
 Implement the selected Session Desk Overview.

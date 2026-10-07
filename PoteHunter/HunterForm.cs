@@ -2652,6 +2652,7 @@ public sealed partial class HunterForm : Form
                 long nextPriorityCheck = 0;
                 bool collectAfterTarget = false;
                 var existingDrops=encounterExistingDrops ?? world.Loot().Select(i=>(i.KeyA,i.KeyB)).ToHashSet();
+                var pendingSkillTarget=new SkillTargetReservation();
                 try
                 {
                 while (true)
@@ -3107,20 +3108,25 @@ public sealed partial class HunterForm : Form
                             bool prioritySelfHeal=CombatSkillPolicy.IsPriorityHeal(slot,o);
                             // Heal on the valid combat target already in reach; do not delay
                             // survival by retargeting to a farther member of the pack.
-                            if(o.SmartSkillTargeting && !prioritySelfHeal)
+                            if(o.SmartSkillTargeting && !prioritySelfHeal && !pendingSkillTarget.Matches(slot,current,Environment.TickCount64))
                             {
                                 var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
                                 if(hp.Known)skillHealth[current.Id]=hp;
+                                double skillRange=Math.Min((double)o.NearbyEnemyRadius,swingWindow);
                                 var skillTarget=SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,skillHealth,pos,
-                                    (double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
+                                    skillRange,o.CenterAreaSkills,o.RetargetSingleTargetSkills,o.PrioritizeGamekeeper);
                                 if(skillTarget!=null && skillTarget.Id!=current.Id)
                                 {
-                                    TraceLog.Record("skill target retarget",new{Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot),Mode="stationary"});
+                                    TraceLog.Record("skill target retarget",new{Skill=slot.Name,Key=key.ToString(),From=current.Id,To=skillTarget.Id,
+                                        FromHealth=hp,ToHealth=skillHealth.GetValueOrDefault(skillTarget.Id),FromDistance=delta.Length,
+                                        ToDistance=(skillTarget.Position-pos).Length,SelectionRange=skillRange,skillTarget.Generation,
+                                        Area=SkillTargeting.IsAreaOrLine(slot),Mode="stationary"});
                                     // Keep the left button held while changing
                                     // the skill target.  The next loop will face
                                     // the new target without dropping the swing.
                                     Input.HoldMouse(false,true,token);
                                     stationaryAttackHeldAt=stationaryNow;
+                                    pendingSkillTarget.Reserve(slot,skillTarget,Environment.TickCount64);
                                     target=skillTarget;lockedTarget=skillTarget;
                                     await Input.Delay(20,token);
                                     continue;
@@ -3128,6 +3134,9 @@ public sealed partial class HunterForm : Form
                             }
                             try
                             {
+                                // Consume the reservation before input. A failed cast, heal,
+                                // or replaced skill must not leave an old focus pinned.
+                                pendingSkillTarget.Clear();
                                 TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,DelayExempt=delayExempt,PrioritySelfHeal=prioritySelfHeal,NextSkillAt=nextCombatSkillAt});
                                 await Input.Key((Keys)key,50,token);
                                 await Input.Delay(80,token);
@@ -3254,23 +3263,31 @@ public sealed partial class HunterForm : Form
                         bool prioritySelfHeal=CombatSkillPolicy.IsPriorityHeal(slot,o);
                         // Heal on the valid combat target already in reach; do not delay
                         // survival by retargeting to a farther member of the pack.
-                        if(o.SmartSkillTargeting && !prioritySelfHeal)
+                        if(o.SmartSkillTargeting && !prioritySelfHeal && !pendingSkillTarget.Matches(slot,current,Environment.TickCount64))
                         {
                             var skillHealth=new Dictionary<uint,Health>(world.HealthSnapshot());
                             if(hp.Known)skillHealth[current.Id]=hp;
-                            var skillTarget = SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,skillHealth,pos,(double)o.NearbyEnemyRadius,o.CenterAreaSkills,o.RetargetSingleTargetSkills);
+                            double skillRange=o.Ranged && !packClearing ? (double)o.NearbyEnemyRadius :
+                                Math.Min((double)o.NearbyEnemyRadius,swingWindow);
+                            var skillTarget = SkillTargeting.Choose(slot,current,encounter.EngagedCandidates,skillHealth,pos,
+                                skillRange,o.CenterAreaSkills,o.RetargetSingleTargetSkills,o.PrioritizeGamekeeper);
                             if (skillTarget != null && skillTarget.Id != current.Id)
                             {
-                                TraceLog.Record("skill target retarget",new {Skill=slot.Name,From=current.Id,To=skillTarget.Id,Area=SkillTargeting.IsAreaOrLine(slot)});
+                                TraceLog.Record("skill target retarget",new {Skill=slot.Name,Key=key.ToString(),From=current.Id,To=skillTarget.Id,
+                                    FromHealth=hp,ToHealth=skillHealth.GetValueOrDefault(skillTarget.Id),FromDistance=delta.Length,
+                                    ToDistance=(skillTarget.Position-pos).Length,SelectionRange=skillRange,skillTarget.Generation,
+                                    Area=SkillTargeting.IsAreaOrLine(slot)});
                                 // Keep the swing active while the selected
                                 // engaged target changes.  Releasing here caused
                                 // intermittent attack gaps between skills.
                                 Input.HoldMouse(false,true,token);
+                                pendingSkillTarget.Reserve(slot,skillTarget,Environment.TickCount64);
                                 target=skillTarget; lockedTarget=skillTarget; await Input.Delay(20,token); continue;
                             }
                         }
                         try
                         {
+                            pendingSkillTarget.Clear();
                             TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, DelayExempt=delayExempt, PrioritySelfHeal=prioritySelfHeal, NextSkillAt=nextCombatSkillAt });
                             // Keep the basic combo held while the skill is selected and right-clicked.
                             await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;

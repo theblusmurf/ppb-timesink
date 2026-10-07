@@ -104,10 +104,12 @@ internal sealed class RecoveryPath
     // A clear, short lookahead avoids turning sideways just to touch the
     // projected route entry. Sharp corners and the final anchor stay exact.
     public bool Final=>index==points.Length-1;
-    // Gentle recorded curves retain continuous movement. Only a sharp bend or
-    // short final adjustment requires precise capture before the next segment.
+    // Capture the actual corner, not both that corner and its preceding sample.
+    // Approach already brakes early from the measured speed when a required
+    // checkpoint becomes current. A mandatory first connector also needs that
+    // braking; it has no incoming segment to prove an overshoot safely.
     public double ArrivalTolerance=>Final?.5:index<points.Length &&
-        (index>0 && !Straight(index-1) || !Straight(index) ||
+        (index==0 || index>0 && !Straight(index-1) ||
          index==points.Length-2 && (points[index+1]-points[index]).Length<=2.5) ? .6 : 0;
     // Several small bends shorten steering lookahead without turning every
     // sample into a stop/aim/pulse/settle cycle. Required corners remain exact.

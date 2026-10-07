@@ -76,6 +76,7 @@ internal static class DeathRecoveryChecks
         if(remotePoint.Next(new(5,0),(_,_)=>true)!=new Vec(0,0))
             throw new Exception("Lookahead skipped a distant required connector.");
         RecoveryArrivalBraking();
+        RecoveryRecordedEntryBraking();
         RecoverySteering();
         RecoveryObservedPassage();
 
@@ -144,8 +145,8 @@ internal static class DeathRecoveryChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"death-recovery-checks.json"),JsonSerializer.Serialize(new{
             Passed=true,HardwareInputEmitted=false,Checks=new[]{"bounded movement-fault death watch","explicit stop/unknown failure/group/disabled revival never enables fault recovery","watch cannot refresh its deadline","zero HP interrupts combat/rest into recovery","unknown HP is not death","disabled revival respected","one log per death","configured delay survives unreadable HP","manual revival still returns","death during return restarts recovery",
                 "successful repair survives living pending-return retries without repeated preparation or repair","new death clears completed recovery phases","unreadable HP preserves completed phases without creating a death","stale episode completions cannot complete a newer death or stopped recovery","failed repair remains incomplete",
-                "waypoints require actual arrival","final anchor tolerance","duplicate plan destinations retain final braking","straight route samples keep continuous movement","sharp corners and short final anchor adjustments brake before capture",
-                "translated dense recorded curve brakes on cumulative curvature","bounded independent steering goal without checkpoint advancement","blocked or unverified steering remains at the checkpoint","steering corridor rejects a connector shortcut","sharp bends, U-turns and nearby loop endpoints cannot be shortcut","rotation/translation invariant steering","exact final anchor retained by steering",
+                "waypoints require actual arrival","final anchor tolerance","duplicate plan destinations retain final braking","straight route samples keep continuous movement","sharp corners and short final anchor adjustments brake before capture","recorded entry brakes at actual corners without duplicate precision stops","mandatory initial connectors retain arrival braking",
+                "translated dense recorded curve keeps bounded continuous steering","bounded independent steering goal without checkpoint advancement","blocked or unverified steering remains at the checkpoint","steering corridor rejects a connector shortcut","sharp bends, U-turns and nearby loop endpoints cannot be shortcut","rotation/translation invariant steering","exact final anchor retained by steering",
                 "body recreation with identity validation","occupied primary and alternatives","character/map/floor compatibility",
                 "no fallback oscillation","recorded route required for combined revival/return","spot-only alternatives excluded during recovery","saved route preserved through hunting and respawn"}
         },new JsonSerializerOptions{WriteIndented=true}));
@@ -176,6 +177,48 @@ internal static class DeathRecoveryChecks
             adjustment.Next(new(0,12),(_,_)=>false)!=preciseAnchor || !adjustment.Final || adjustment.ArrivalTolerance!=.5 ||
             adjustment.Next(new(.39,12))!=preciseAnchor || adjustment.Next(new(.4,12))!=null)
             throw new Exception("A near-end activation-anchor adjustment bypassed braking or loosened its final tolerance.");
+    }
+
+    static void RecoveryRecordedEntryBraking()
+    {
+        // Neutralize the observed route entry. Its almost straight sample before
+        // the 21/32-degree corners formerly requested a separate precise stop.
+        Vec[] entry=[new(0,0),new(-.3975,-1.42109375),new(-.93,-3.3228125),
+            new(-1.4553125,-5.08203125),new(-2.603125,-6.55359375),new(-4.33625,-7.1753125)];
+        Vec continuation=entry[^1]-entry[^2];
+        Vec following=entry[^1]+Movement.Rotate(continuation,.1035);
+        Vec destination=following+continuation*5;
+        Vec[] checkpoints=[..entry,following,following+continuation*2];
+        foreach(double angle in new[]{0.0,.73,-1.2,Math.PI})
+        {
+            Vec Transform(Vec value)=>Movement.Rotate(value,angle)+new Vec(20,-7);
+            var path=new RecoveryPath(checkpoints.Select(Transform),Transform(destination));
+            for(int expected=1;expected<=5;expected++)
+            {
+                Vec before=Transform(entry[expected-1]);
+                if(path.Next(before,(_,_)=>false)!=Transform(entry[expected]) || path.Index!=expected)
+                    throw new Exception("Recorded entry progression lost a required checkpoint.");
+                bool actualCorner=expected is 3 or 4;
+                if(path.ArrivalTolerance!=(actualCorner?.6:0))
+                    throw new Exception("Recorded entry added a precision stop before its real corner or removed real-corner braking.");
+                if(expected is 2 or 3 && path.SteeringGoal(before,(_,_)=>true)!=Transform(entry[expected]))
+                    throw new Exception("Smoother entry steering looked through an uncaptured sharp corner.");
+            }
+
+            var corner=new RecoveryPath(checkpoints.Select(Transform),Transform(destination));
+            for(int at=0;at<3;at++)corner.Next(Transform(entry[at]),(_,_)=>false);
+            Vec incoming=entry[3]-entry[2];
+            Vec overshot=entry[3]+incoming/incoming.Length*1.5;
+            if(corner.Next(Transform(overshot),(_,_)=>true)!=Transform(entry[3]) || corner.ArrivalTolerance!=.6)
+                throw new Exception("Recorded entry accepted a missed real corner as straight-route passage.");
+
+            var initial=new RecoveryPath([Transform(new(0,3)),Transform(new(0,7))],Transform(new(0,11)));
+            Vec origin=Transform(new(0,0));
+            if(initial.Next(origin,(_,_)=>false)!=Transform(new(0,3)) || initial.ArrivalTolerance!=.6 ||
+                initial.SteeringGoal(origin,(_,_)=>true)!=Transform(new(0,3)) ||
+                initial.Next(Transform(new(0,4.5)),(_,_)=>true)!=Transform(new(0,3)))
+                throw new Exception("An unvisited initial connector lost braking or borrowed later checkpoint passage.");
+        }
     }
 
     static void CompletedRecoveryPhases()
