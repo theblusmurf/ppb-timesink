@@ -1,3 +1,14 @@
+## Release1.135
+
+Keep optional diagnostic file failures from cancelling a hunt, and retain enough local detail to identify a failed operation.
+
+- Isolate live-status replacement, calibration trace appends and chest-sighting persistence from hunting. Retry Windows access, sharing and lock errors at most twice with 15 ms total delay. Preserve the last complete status file and in-memory chest sightings when a write fails; retry dirty chest sightings on later observations.
+- Keep bounded local failure details with the operation, path, exception type, HResult, stack and status-update stage. Show a diagnostic persistence warning until that operation succeeds. Limit the private audit to two one-megabyte files, throttle repeated audit entries, and retain recent failures in memory if its own write fails.
+- Leave required settings, client identity, health, focus and input failures under the existing stop guards. Record their original exception details before the status-update stop/reconnect path; a failed required save during connection remains disconnected.
+- Describe an automatic-profile reconnect as a verified automatic client layout rather than claiming the client was updated.
+
+Validation includes real Windows sharing locks, atomic snapshot preservation and later recovery, append locks, denied and read-only paths, bounded retries and audit history, dirty chest retries, non-I/O exception propagation, critical callback faults, truthful reconnect text, and the full offline/native UI checks. The captured access-denied stop did not identify its exact failing path; this release prevents optional persistence failures from stopping hunting and improves diagnosis without asserting that the original cause is proved. Running gameplay, the bounded review, routes, profiles and settings are left untouched. Live behavior after upgrading still requires confirmation.
+
 ## Release1.134
 
 Resume owned combat promptly after a settled return to the anchor, then restore the saved facing when the pack clears.

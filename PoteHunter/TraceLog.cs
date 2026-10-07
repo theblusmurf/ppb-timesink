@@ -7,6 +7,6 @@ static class TraceLog
     internal static void RecordAt(string stage,object details,DateTime timeUtc)
     {
         HuntingSessionLog.Current?.RecordRecovery(stage,details);
-        File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "calibration-trace.jsonl"), System.Text.Json.JsonSerializer.Serialize(new { TimeUtc = timeUtc, Stage = stage, Details = details }) + Environment.NewLine);
+        DiagnosticIo.TryAppend("append calibration trace", Path.Combine(AppContext.BaseDirectory, "calibration-trace.jsonl"), System.Text.Json.JsonSerializer.Serialize(new { TimeUtc = timeUtc, Stage = stage, Details = details }) + Environment.NewLine);
     }
 }

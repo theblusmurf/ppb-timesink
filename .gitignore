@@ -8,6 +8,9 @@ artifacts/
 !/packaging/settings.json
 *.log
 *.jsonl
+diagnostic-errors.jsonl.1
+*.diagnostic-tmp
+*.diagnostic-backup
 navigation-route.json
 navigation-routes.json
 repair-profile.json

@@ -498,8 +498,17 @@ public sealed partial class HunterForm : Form
         busy = true; connected = false; movement = null; connect.Enabled = false; message = "Reading active creaturesâ€¦";
         player.Text="";
         WriteState(new { TimeUtc=DateTime.UtcNow, Connected=false, Working=false, Calibrated=false, Status=message });
-        try { var options = CurrentOptions(); options.Save(); await Task.Run(world.Connect); WindowsClientInput.ValidateReady(); connected = true; UpdateDetectedCharacter(world.LocalPlayer()); message = (world.AutomaticProfile ? "Updated client detected automatically. " : "Connected. ") + "Press F8 or Start to calibrate and hunt."; }
-        catch (Exception ex) { message = ex.Message; }
+        try
+        {
+            SaveRequiredSettings("save connection settings");
+            await Task.Run(world.Connect);
+            WindowsClientInput.ValidateReady();
+            connected = true;
+            UpdateDetectedCharacter(world.LocalPlayer());
+            DiagnosticIo.RecordSuccess("connect");
+            message = ConnectionStatus(world.AutomaticProfile);
+        }
+        catch (Exception ex) { connected = false; DiagnosticIo.RecordFailure("connect", null, ex); message = ex.Message; }
         finally { busy = false; connect.Enabled = true; }
         if (!connected) {player.Text=""; WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message });}
         if (connected)
@@ -561,20 +570,31 @@ public sealed partial class HunterForm : Form
         }
         bool nameChanged=player.Text!=self.Name;
         detectedCharacter=self;player.Text=self.Name;
-        if(nameChanged)CurrentOptions().Save();
+        if(nameChanged)SaveRequiredSettings("save detected character settings");
     }
+    internal static string ConnectionStatus(bool automaticProfile)
+        => (automaticProfile ? "Connected using a verified automatic client layout. " : "Connected. ") + "Press F8 or Start to calibrate and hunt.";
+
+    void SaveRequiredSettings(string operation)
+    {
+        try { CurrentOptions().Save(); DiagnosticIo.RecordSuccess(operation); }
+        catch (Exception ex) { DiagnosticIo.RecordFailure(operation, Options.PathName, ex); throw; }
+    }
+
     void Tick()
     {
-        status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError) + (HuntingSessionLog.Current?.LastError is string logError ? " · Session log: "+logError : "");
+        status.Text = DisplayMessage + (recordingError == null ? "" : " Â· Data recording: " + recordingError) + (HuntingSessionLog.Current?.LastError is string logError ? " · Session log: "+logError : "") + (DiagnosticIo.StatusSummary is string diagnosticWarning ? " · Diagnostics: " + diagnosticWarning : "");
         lootTracker.ObserveActivity(working && connected && activeGuardOptions!=null);
         if(!connected){latestDurability=new(false,"",[],DateTime.UtcNow,"Client disconnected");durabilityStatus.Text="Durability unavailable: Client disconnected";ClearPlayerRecognition();HuntingSessionLog.Current?.ObservationGap("Client disconnected");lootTracker.ObserveWallet(new(false,0,"",DateTime.UtcNow,"Client disconnected"));return;}
         if(busy)return;
+        string tickOperation = "validate client and input";
         try
         {
             if(working && !world.ClientProcessAlive && TryQueueClientRecovery())return;
             if (working && !Input.Allowed()) Stop("Stopped: switched away from the game. Recalibrate before starting again.");
             int beforeZone=world.ActiveZone();
             Entity self;
+            tickOperation = "poll client and local character";
             try { entities=world.Poll();self=world.LocalPlayer();recoveryReadFailureAt=0; }
             catch(InvalidOperationException) when(working && deathRecovery.Pending && !deathReturnInProgress && cancel?.IsCancellationRequested==false)
             {
@@ -585,7 +605,9 @@ public sealed partial class HunterForm : Form
                 message="Waiting for the character to reappear after death";
                 return;
             }
+            tickOperation = "identify character and required settings";
             UpdateDetectedCharacter(self);
+            tickOperation = "read wallet, durability and health";
             lootTracker.ObserveWallet(world.ReadWallet());
             RefreshDurabilityStatus();
             Vec pos = self.Position;
@@ -594,7 +616,9 @@ public sealed partial class HunterForm : Form
             navigationZone=world.ActiveZone(); navigationPosition=pos;
             navigation3DPlayerHeight=self.Height;navigation3DPlayerHeading=self.Heading;navigation3DPlayerSeen=Environment.TickCount64;
             ObserveLoggedHealth(self,health.GetValueOrDefault(self.Id),navigationZone);
+            tickOperation = "observe optional chest sightings";
             chestCatalog.Observe(navigationZone,entities.Where(entity=>Targeting.IsChest(entity) && !health.GetValueOrDefault(entity.Id).Dead));
+            tickOperation = "update navigation and combat observations";
             lootTracker.ObserveZone(navigationZone);
             if(beforeZone!=navigationZone) {ClearPlayerRecognition();navigation.Clear();if(working)Stop("Map zone changed; stopped.");return;}
             navigation.Observe(world.NavigationContext(self),pos,self.Height);
@@ -649,6 +673,7 @@ public sealed partial class HunterForm : Form
             }
             if (lootTop!=null) { var top=lootList.Items.Cast<ListViewItem>().FirstOrDefault(r=>(r.Tag as string)==lootTop); if (top!=null) lootList.TopItem=top; }
             lootList.EndUpdate();
+            tickOperation = "read hotbar and skill guards";
             currentHotbar = world.Hotbar(); UpdateSkillKeys(currentHotbar); UpdateHealingSkillKeys(currentHotbar); hotbarPage.Text = $"Hotbar Â· {currentHotbar.Page}";
             ObserveBuffs(activeGuardOptions??CurrentOptions(),currentHotbar);
             supportSettings.Enabled=!working;
@@ -676,6 +701,7 @@ public sealed partial class HunterForm : Form
                 lastEvidence = Environment.TickCount64;
                 RecordObservations(self, level, health);
                 var targetState=world.TargetState();
+                tickOperation = "compose live diagnostic snapshot";
                 WriteState(new { TimeUtc = DateTime.UtcNow, Connected = true, Working = working, Calibrated = movement != null, Player = self.Name, PlayerHP = selfHealth, PlayerMP = selfMana, ManaRecoveryStatus=manaRecoveryStatus, CameraSupported=world.CameraSupported, CameraStatus=world.CameraStatus, TargetState=new {targetState.Available,targetState.Status,TargetIds=targetState.Ids.Select(id=>$"0x{id:X8}").ToArray()}, Level = level, Position = pos, Hotbar = currentHotbar, DetectedHealingItems = currentHotbar.Slots.Where(RecoveryItems.Recognized), DetectedManaItems=currentHotbar.Slots.Where(ManaRecovery.Recognized), Radar=new{Enabled=showNavigationOverlay.Checked,Visible=navigationOverlay is {Visible:true},RoutesVisible=showNavigationRoutes.Checked,Size=(int)navigationOverlaySize.Value}, LootTrackerOverlay=new{Enabled=showLootTrackerOverlay.Checked,Visible=lootTrackerOverlay is {Visible:true},Position=lootTrackerOverlay?.Location}, LootTracker=lootTracker.Snapshot(), Healer = HealerState(), Recording = new { Enabled = true, ObjectCount = entities.Count, Error = recordingError }, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot(), Gamekeepers=entities.Where(Targeting.IsGamekeeper).Select(e=>new {
                     e.Id,e.Position,HP=health.GetValueOrDefault(e.Id),Distance=(e.Position-pos).Length,
                     AnchorDistance=(e.Position-(activeHuntAnchor ?? pos)).Length,
@@ -683,8 +709,17 @@ public sealed partial class HunterForm : Form
                     Protection=TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos)
                 }), LockedTarget = lockedTarget == null ? null : new { lockedTarget.Name, lockedTarget.DisplayName, lockedTarget.Id, lockedTarget.Generation, lockedTarget.PriorityLootObject }, Status = message, GroundLoot = groundLoot.OrderBy(i => (i.Position-pos).Length).Take(20), PriorityObjects = entities.Where(e => e.PriorityLootObject).OrderBy(e => (e.Position-pos).Length).Select(e => new { e.DisplayName, e.Name, e.Id, e.Model, e.Position, HP = health.GetValueOrDefault(e.Id), Allowed = Targeting.Eligible(e, health.GetValueOrDefault(e.Id), Threat.Unknown, filter.Text, allowedColors) && TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos)==null, Distance = (e.Position-pos).Length }), Monsters = entities.Where(e => e.Monster).OrderBy(e => (e.Position - pos).Length).Select(e => new { e.Name, e.Id, e.Position, HP = health.GetValueOrDefault(e.Id), Difficulty = world.Difficulty(e, level).ToString(), Distance = (e.Position - pos).Length }) });
             }
+            DiagnosticIo.RecordSuccess("status update");
         }
-        catch (Exception ex) { ClearPlayerRecognition();connected = false; player.Text=""; nextCharacterReconnect=Environment.TickCount64+3000; if(!TryQueueClientRecovery())Stop(ex.Message); WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message }); }
+        catch (Exception ex)
+        {
+            ex.Data["TickOperation"] = tickOperation;
+            DiagnosticIo.RecordFailure("status update", null, ex);
+            ClearPlayerRecognition(); connected = false; player.Text = "";
+            nextCharacterReconnect = Environment.TickCount64 + 3000;
+            if (!TryQueueClientRecovery()) Stop(ex.Message);
+            WriteState(new { TimeUtc = DateTime.UtcNow, Connected = false, Working = false, Calibrated = false, Status = message });
+        }
     }
     void RecordObservations(Entity self, int level, Dictionary<uint, Health> health)
     {
@@ -784,11 +819,12 @@ public sealed partial class HunterForm : Form
         state["InputBackend"]=WindowsClientInput.Backend;
         state["InputCompatibilityEnabled"]=WindowsClientInput.Enabled;
         state["SessionLog"]=JsonSerializer.SerializeToNode(new {Path=HuntingSessionLog.Current?.FilePath,Error=HuntingSessionLog.Current?.LastError});
+        state["DiagnosticPersistence"]=JsonSerializer.SerializeToNode(DiagnosticIo.Snapshot());
         state["Hotkeys"]=JsonSerializer.SerializeToNode(new { Ready=hotkeys, Failure=hotkeyFailure, Registrations=hotkeyRegistrations });
         state["Status"]=DisplayMessage;
         state["TargetSearch"]=working ? JsonSerializer.SerializeToNode(targetSearch) : null;
         state["HuntingArea"]=JsonSerializer.SerializeToNode(new {Mode=(activeGuardOptions?.GroupMode ?? groupEnabled.Checked)?"Group":(activeGuardOptions?.LeaveAreaWhenEmpty ?? leaveAreaWhenEmpty.Checked)?"Fixed with outside trips":"Fixed",Center=activeHuntAnchor,Radius=activeGuardOptions?.HuntRadius ?? radius.Value,OutsideSearchRadius=(activeGuardOptions?.HuntRadius ?? radius.Value)*2,OutsideTrip=working && activeExcursion?.OutsideTrip==true,ReturnPending=working && completionReturnPending,CompletionRadius=working?activeCompletionBoundary:(double?)null});
-        File.WriteAllText(path + ".tmp", state.ToJsonString(new JsonSerializerOptions { WriteIndented = true })); File.Move(path + ".tmp", path, true);
+        DiagnosticIo.TryAtomicWrite("write live status", path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
     void UpdateItemDescriptions()
     {
@@ -4156,7 +4192,6 @@ public sealed partial class HunterForm : Form
         return true;
     }
 }
-
 
 
 

@@ -8,6 +8,7 @@ static class SelfTests
     {
         try
         {
+            DiagnosticIoChecks.Run();
             SelectedFeatureChecks.Run();
             ItemGradeTable.SelfTest();ItemGradePlanner.SelfTest();ItemStatKinds.SelfTest();ItemGradeDiscovery.SelfTest();ItemGradeHotkeys.SelfTest();ItemGradeOverlay.SelfTest();
             MapToolWorldRenderer.SelfTest();
