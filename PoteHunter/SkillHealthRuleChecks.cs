@@ -52,7 +52,68 @@ public static class SkillHealthRuleChecks
         Check(!saved.HealthSkillCondition && saved.HealthSkillPercent==75 && saved.HealthConditionKeys=="2","settings roundtrip");
         Check(JsonSerializer.Deserialize<Options>("{}")!.HealthSkillPercent==50,"older settings default");
         CheckCombatSelection();
-        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-health-rule-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,LiveGameTested=false,Checks=new[]{"name detection and exclusions","inclusive unrounded 50% boundary","character HP in combat","recipient HP in healer mode","missing/dead HP","cooldown lock and retry preserved","other attacks continue","post-selection activation recheck","manual key and configurable threshold","settings roundtrip","priority heal with one or three enemies and healthy packs","priority before attacks and shared timers","offensive pack rules retained","valid target and extra-key exclusions"}},new JsonSerializerOptions{WriteIndented=true}));
+        CheckActivationGuard().GetAwaiter().GetResult();
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-health-rule-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,LiveGameTested=false,Checks=new[]{"name detection and exclusions","inclusive unrounded 50% boundary","character HP in combat","recipient HP in healer mode","missing/dead HP","cooldown lock and retry preserved","other attacks continue","post-selection activation recheck","manual key and configurable threshold","settings roundtrip","priority heal with one or three enemies and healthy packs","priority before attacks and shared timers","offensive pack rules retained","valid target and extra-key exclusions","delayed combat invalidation prevents delegated activation while basic swing remains held","fresh guard on every activation and retry","null guard preserves self-heal and ranged activation path","cancellation before guarded activation emits no input"}},new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static async Task CheckActivationGuard()
+    {
+        static void Check(bool result,string reason){if(!result)throw new Exception("Skill activation guard: "+reason);}
+        int activations=0,guards=0,withheld=0;
+        bool basicHeld=true,liveIdentity=true,livingTarget=true,inRange=true,aligned=true,packReady=true,focused=true;
+        Func<bool> guard=()=>{guards++;return liveIdentity&&livingTarget&&inRange&&aligned&&packReady&&focused;};
+        Task<bool> Activate(Func<bool>? admission)
+        {
+            Check(basicHeld,"guard released basic swing before activation");
+            if(admission?.Invoke()==false)return Task.FromResult(false);
+            activations++;return Task.FromResult(true);
+        }
+        void Withheld(){withheld++;}
+
+        // Model a successful selection followed by a target/facing change in
+        // the key-selection delay. The wrapper passes this same gate through
+        // to the input owner; real preflight ordering is checked by Controls.
+        foreach(int changed in Enumerable.Range(0,6))
+        {
+            liveIdentity=livingTarget=inRange=aligned=packReady=focused=true;
+            Check(guard(),"initial selection unexpectedly ineligible");
+            var selectionDelay=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            async Task<bool> SelectThenActivate()
+            {
+                await selectionDelay.Task;
+                return await SkillHealthRule.ActivateGuardedAsync(guard,Activate,Withheld);
+            }
+            Task<bool> pending=SelectThenActivate();
+            switch(changed)
+            {
+                case 0:liveIdentity=false;break;
+                case 1:livingTarget=false;break;
+                case 2:inRange=false;break;
+                case 3:aligned=false;break;
+                case 4:packReady=false;break;
+                case 5:focused=false;break;
+            }
+            Check(!pending.IsCompleted&&activations==0&&basicHeld,"activation escaped the pending key-selection delay");
+            selectionDelay.SetResult();
+            Check(!await pending&&activations==0&&basicHeld,
+                "delayed invalidation emitted an activation or released basic swing");
+        }
+        Check(withheld==6&&guards==12,"blocked activation failed to run the latest guard exactly once");
+        liveIdentity=livingTarget=inRange=aligned=packReady=focused=true;
+        Check(await SkillHealthRule.ActivateGuardedAsync(guard,Activate,Withheld)&&activations==1&&basicHeld,
+            "valid activation blocked or released basic swing");
+        aligned=false;
+        Check(!await SkillHealthRule.ActivateGuardedAsync(guard,Activate,Withheld)&&activations==1&&basicHeld,
+            "fallback retry reused initial activation readiness");
+        Check(await SkillHealthRule.ActivateGuardedAsync(null,Activate,Withheld)&&activations==2,
+            "null self-heal/ranged guard required offensive facing");
+        bool cancelled=false;
+        try
+        {
+            await SkillHealthRule.ActivateGuardedAsync(()=>throw new OperationCanceledException(),Activate,Withheld);
+        }
+        catch(OperationCanceledException){cancelled=true;}
+        Check(cancelled&&activations==2&&basicHeld,"cancelled gate emitted activation or released basic swing");
     }
 
     static void CheckCombatSelection()

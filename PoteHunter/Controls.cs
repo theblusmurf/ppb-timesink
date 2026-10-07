@@ -587,7 +587,7 @@ public static class Input
         }
         finally {Preflight=null;PickupHoldProvider=null;Release();selfTestSink=null;Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;}
     }
-    public static async Task CastSkill(SkillUseKind use,int chargeMilliseconds,CancellationToken token,Action? onInputStarted=null)
+    public static async Task<bool> CastSkill(SkillUseKind use,int chargeMilliseconds,CancellationToken token,Action? onInputStarted=null,Func<bool>? admissionGuard=null)
     {
         // Older clients do not expose a use-kind for ordinary active skills.
         // Treat that missing metadata as the short instance activation rather
@@ -602,9 +602,10 @@ public static class Input
         };
         try
         {
-            HoldMouse(true,true,token);
+            if(!TryHoldMouse(true,true,token,admissionGuard))return false;
             onInputStarted?.Invoke();
             await Delay(duration,token);
+            return true;
         }
         finally {HoldMouse(true,false,token);}
     }
@@ -634,14 +635,127 @@ public static class Input
             await CastSkill(SkillUseKind.Unknown,1000,default);
             if(packets.Count!=unknownBefore+2 || packets[^2].Value.Mouse.Flags!=8 || packets[^1].Value.Mouse.Flags!=16)
                 throw new Exception("Unknown skill type did not use the safe short activation.");
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-type-input-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,Checks=new[]{"instance uses short click despite charge setting","chant uses short click","cast uses charge","one mouse down/up per activation","no party F-key inputs","unknown skill metadata uses safe short activation"}}));
+            await CheckSkillAdmission();
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"skill-type-input-checks.json"),System.Text.Json.JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,Checks=new[]{"instance uses short click despite charge setting","chant uses short click","cast uses charge","one mouse down/up per activation","no party F-key inputs","unknown skill metadata uses safe short activation","final admission follows scene preflight","withheld activation preserves basic swing and suppresses started/cooldown events","valid and null guards activate once","guard and preflight cancellation/focus loss release held input"}}));
         }
         finally{Preflight=null;Release();selfTestSink=null;Allowed=savedAllowed;Preflight=savedPreflight;}
     }
-    public static void HoldMouse(bool right, bool down, CancellationToken token)
+    static async Task CheckSkillAdmission()
+    {
+        static void Require(bool result,string reason){if(!result)throw new Exception("Skill admission input: "+reason);}
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
+        var savedSink=selfTestSink;var savedDown=selfTestDown;var packets=new List<Packet>();
+        int Count(uint flags)=>packets.Count(p=>p.Type==0 && p.Value.Mouse.Flags==flags);
+        void Arm()
+        {
+            Preflight=null;Allowed=()=>true;Release();packets.Clear();
+            HoldMouse(false,true,default);packets.Clear();
+        }
+        try
+        {
+            selfTestSink=packets.Add;selfTestDown=_=>false;PickupHoldProvider=null;
+            Arm();bool aligned=true,preflightSeen=false;int guardCalls=0,started=0,cooldownEvents=0,withheld=0;
+            Preflight=()=>{preflightSeen=true;aligned=false;};
+            Func<bool> admission=()=>
+            {
+                guardCalls++;Require(preflightSeen && BasicAttackHeld,"final guard preceded preflight or released the basic swing");
+                return aligned;
+            };
+            bool activated=await SkillHealthRule.ActivateGuardedAsync(admission,
+                admit=>CastSkill(SkillUseKind.Instance,1000,default,()=>started++,admit),()=>withheld++);
+            if(activated)cooldownEvents++;
+            Require(!activated && guardCalls==1 && withheld==1 && started==0 && cooldownEvents==0 &&
+                packets.Count==0 && BasicAttackHeld && !RightButtonHeld,
+                "preflight alignment change sent skill input, recorded activation, or released the basic swing");
+            activated=await SkillHealthRule.ActivateGuardedAsync(admission,
+                admit=>CastSkill(SkillUseKind.Instance,1000,default,()=>started++,admit),()=>withheld++);
+            Require(!activated && guardCalls==2 && withheld==2 && started==0 && packets.Count==0 && BasicAttackHeld,
+                "fallback activation reused earlier admission or interrupted the basic swing");
+
+            Arm();preflightSeen=false;guardCalls=started=0;Preflight=()=>preflightSeen=true;
+            Require(await CastSkill(SkillUseKind.Instance,1000,default,()=>started++,()=>
+                {
+                    guardCalls++;Require(preflightSeen && Count(8)==0 && BasicAttackHeld,"admission followed mouse-down or preceded preflight");
+                    return true;
+                }) && guardCalls==1 && started==1 && Count(8)==1 && Count(16)==1 && Count(4)==0 && BasicAttackHeld,
+                "valid admission did not emit one skill activation while preserving the swing");
+            Arm();started=0;
+            Require(await CastSkill(SkillUseKind.Instance,1000,default,()=>started++) && started==1 &&
+                Count(8)==1 && Count(16)==1 && Count(4)==0 && BasicAttackHeld,
+                "legacy null admission changed activation or basic swing behavior");
+
+            Arm();started=guardCalls=0;bool cancelled=false;
+            try {await CastSkill(SkillUseKind.Instance,1000,new CancellationToken(true),()=>started++,()=>{guardCalls++;return true;});}
+            catch(OperationCanceledException){cancelled=true;}
+            Require(cancelled && started==0 && guardCalls==0 && Count(8)==0 && !BasicAttackHeld && !RightButtonHeld,
+                "cancelled entry sent skill input or retained held buttons");
+            Arm();cancelled=false;
+            try {await CastSkill(SkillUseKind.Instance,1000,default,()=>started++,()=>throw new OperationCanceledException());}
+            catch(OperationCanceledException){cancelled=true;}
+            Require(cancelled && started==0 && Count(8)==0 && !BasicAttackHeld && !RightButtonHeld,
+                "cancelled admission sent skill input or retained held buttons");
+            using(var cancellation=new CancellationTokenSource())
+            {
+                Arm();started=guardCalls=0;cancelled=false;Preflight=cancellation.Cancel;
+                try {await CastSkill(SkillUseKind.Instance,1000,cancellation.Token,()=>started++,()=>{guardCalls++;return true;});}
+                catch(OperationCanceledException){cancelled=true;}
+                Require(cancelled && started==0 && guardCalls==0 && Count(8)==0 && !BasicAttackHeld && !RightButtonHeld,
+                    "cancellation during preflight escaped final admission safety");
+            }
+            using(var cancellation=new CancellationTokenSource())
+            {
+                Arm();started=0;cancelled=false;
+                try {await CastSkill(SkillUseKind.Instance,1000,cancellation.Token,()=>started++,()=>{cancellation.Cancel();return true;});}
+                catch(OperationCanceledException){cancelled=true;}
+                Require(cancelled && started==0 && Count(8)==0 && !BasicAttackHeld && !RightButtonHeld,
+                    "cancellation during admission escaped the final cheap safety check");
+            }
+            Arm();started=guardCalls=0;cancelled=false;Preflight=()=>Allowed=()=>false;
+            try {await CastSkill(SkillUseKind.Instance,1000,default,()=>started++,()=>{guardCalls++;return true;});}
+            catch(OperationCanceledException){cancelled=true;}
+            Require(cancelled && started==0 && guardCalls==0 && Count(8)==0 && !BasicAttackHeld && !RightButtonHeld,
+                "focus loss during preflight escaped final admission safety");
+            Arm();started=0;cancelled=false;
+            try {await CastSkill(SkillUseKind.Instance,1000,default,()=>started++,()=>{Allowed=()=>false;return true;});}
+            catch(OperationCanceledException){cancelled=true;}
+            Require(cancelled && started==0 && Count(8)==0 && !BasicAttackHeld && !RightButtonHeld,
+                "focus loss during admission escaped the final cheap safety check");
+            using(var cancellation=new CancellationTokenSource())
+            {
+                Arm();started=0;cancelled=false;
+                try {await CastSkill(SkillUseKind.Instance,1000,cancellation.Token,()=>{started++;cancellation.Cancel();},()=>true);}
+                catch(OperationCanceledException){cancelled=true;}
+                Require(cancelled && started==1 && Count(8)==1 && Count(16)==1 && Count(4)==1 && !BasicAttackHeld && !RightButtonHeld,
+                    "cancellation after activation duplicated input or failed held-button cleanup");
+            }
+        }
+        finally
+        {
+            Preflight=null;PickupHoldProvider=null;selfTestSink=packets.Add;Release();
+            Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;selfTestSink=savedSink;selfTestDown=savedDown;
+        }
+    }
+    public static void HoldMouse(bool right, bool down, CancellationToken token)=>TryHoldMouse(right,down,token);
+    static bool TryHoldMouse(bool right,bool down,CancellationToken token,Func<bool>? admissionGuard=null)
     {
         if (down) Check(token);
+        // Scene preflight may refresh a moving target or the player heading.
+        // Admission belongs after that work, directly before the mouse-down.
+        if(down && admissionGuard!=null)
+        {
+            try
+            {
+                CheckSafety(token);
+                bool admitted=admissionGuard();
+                // The final guard can read the scene. Renew cheap stop/focus
+                // checks afterwards without running another scene preflight.
+                CheckSafety(token);
+                if(!admitted)return false;
+            }
+            catch {Release();throw;}
+        }
         buttons.Set(right, down);
+        return true;
     }
     public static void Aim(int deltaX, int deltaY, CancellationToken token)
     {

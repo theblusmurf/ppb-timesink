@@ -1,14 +1,15 @@
 namespace PoteHunter;
 
-internal enum StationaryReturnDefenseOutcome { Unavailable, Yielded, BudgetExpired }
+internal enum StationaryReturnDefenseOutcome { Unavailable, Yielded, NoProgress, DurationExpired }
 
 // Return intent, recovery episode, and repair completion belong to the caller.
-// This helper only lends a short interval to an already in-range enemy; it has
-// no movement, loot, route completion, repair, or revival operation.
+// This helper lends one continuous engagement to an already in-range enemy;
+// it has no movement, loot, route completion, repair, or revival operation.
 internal static class StationaryReturnDefense
 {
     public const double AnchorRadius=1.5;
-    public const int DefaultBudgetMilliseconds=1000;
+    public const int DefaultNoProgressMilliseconds=15000;
+    public const int MaximumDurationMilliseconds=120000;
     public const int PollMilliseconds=50;
 
     // ContextVerified must be renewed by the live caller on every observation:
@@ -33,20 +34,24 @@ internal static class StationaryReturnDefense
     static bool SameTarget(Entity expected,Entity? actual)=>actual!=null && expected.Id==actual.Id &&
         expected.Address==actual.Address && expected.Generation==actual.Generation;
 
-    // Injected attack may aim/hold the existing basic swing, but must not chase
-    // or take an assist step. Each await uses the caller's normal input safety
-    // checks. No detached timeout/input task survives a completed invocation.
+    // Injected attack may aim/hold the existing basic swing and use the normal
+    // guarded skill rotation, but must not chase, assist, or select a different
+    // ordinary target. Each await uses the caller's normal input safety checks.
+    // No detached timeout/input task survives a completed invocation.
     public static async Task<StationaryReturnDefenseOutcome> RunAsync(Func<Observation> observe,Action stopMovement,
         Func<Observation,CancellationToken,Task> attack,Action releaseAttack,
         Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token,
-        int budgetMilliseconds=DefaultBudgetMilliseconds)
+        int noProgressMilliseconds=DefaultNoProgressMilliseconds,
+        int hardDurationMilliseconds=MaximumDurationMilliseconds)
     {
-        if(budgetMilliseconds is <1 or >10000)throw new ArgumentOutOfRangeException(nameof(budgetMilliseconds));
+        if(noProgressMilliseconds is <1 or >MaximumDurationMilliseconds)throw new ArgumentOutOfRangeException(nameof(noProgressMilliseconds));
+        if(hardDurationMilliseconds is <1 or >MaximumDurationMilliseconds)throw new ArgumentOutOfRangeException(nameof(hardDurationMilliseconds));
         token.ThrowIfCancellationRequested();
         var initial=observe();
         if(!CanDefend(initial))return StationaryReturnDefenseOutcome.Unavailable;
         var target=initial.Target!;
-        long started=clock(),previous=started;
+        long started=clock(),previous=started,progressAt=started;
+        int bestHealth=initial.TargetHealth.Current;
         if(started<0)throw new InvalidOperationException("Stationary defense clock is unavailable.");
         try
         {
@@ -57,18 +62,31 @@ internal static class StationaryReturnDefense
                 long now=clock();
                 if(now<previous)throw new InvalidOperationException("Stationary defense clock moved backward.");
                 previous=now;
-                long remaining=budgetMilliseconds-(now-started);
-                if(remaining<=0)return StationaryReturnDefenseOutcome.BudgetExpired;
                 var current=observe();
                 if(!CanDefend(current) || current.Anchor!=initial.Anchor || !SameTarget(target,current.Target))return StationaryReturnDefenseOutcome.Yielded;
+                now=clock();
+                if(now<previous)throw new InvalidOperationException("Stationary defense clock moved backward.");
+                previous=now;
+                // Only a new lowest observed HP proves progress toward ending
+                // this engagement. Regeneration and a drop back to an older
+                // reading must not renew the no-progress allowance.
+                if(current.TargetHealth.Current<bestHealth)
+                {
+                    bestHealth=current.TargetHealth.Current;progressAt=now;
+                }
+                if(now-started>=hardDurationMilliseconds)return StationaryReturnDefenseOutcome.DurationExpired;
+                if(now-progressAt>=noProgressMilliseconds)return StationaryReturnDefenseOutcome.NoProgress;
                 // Revalidate after the stop and every delay. Normal incoming
                 // damage does not revoke a living character's defense.
                 await attack(current,token);
                 now=clock();
                 if(now<previous)throw new InvalidOperationException("Stationary defense clock moved backward.");
                 previous=now;
-                remaining=budgetMilliseconds-(now-started);
-                if(remaining<=0)return StationaryReturnDefenseOutcome.BudgetExpired;
+                long remaining=Math.Min(hardDurationMilliseconds-(now-started),noProgressMilliseconds-(now-progressAt));
+                // Reobserve HP before deciding a deadline reached inside a
+                // guarded attack/skill callback; never issue another attack
+                // until that fresh observation and the bounds pass.
+                if(remaining<=0)continue;
                 await delay((int)Math.Min(PollMilliseconds,remaining),token);
             }
         }

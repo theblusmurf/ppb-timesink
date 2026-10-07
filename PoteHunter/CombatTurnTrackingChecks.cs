@@ -8,6 +8,7 @@ internal static class CombatTurnTrackingChecks
 
     internal static async Task Run()
     {
+        CheckSkillFacing();
         Require(CombatTurnTracking.Allowed(true,true,true,false,false,false,false,false),"ordinary melee tracking blocked");
         for(int blocked=0;blocked<8;blocked++)
         {
@@ -82,8 +83,67 @@ internal static class CombatTurnTrackingChecks
             Passed=true,HardwareInputEmitted=false,Fixed120DegreeTurnAt150=fixedTurn,Delayed32msFeedbackAt150=delayed,
             Checks=new[]{"16ms cooperative combat waits","original wait deadlines","slow reads without catch-up","cancellation before/during waits",
                 "target and exclusive-activity guards","fine one-degree settling with partial delayed feedback and both sensitivity signs",
-                "sub-pixel accumulation","speed cap and fast-poll bound","long pause burst bound"}
+                "sub-pixel accumulation","speed cap and fast-poll bound","long pause burst bound",
+                "fresh offensive body-facing confirmation","observed 26.76-degree retarget error rejected","finite usable direction required",
+                "refreshed moving target and player direction","two-degree inclusive tolerance without jitter starvation",
+                "priority self-heal and ranged-facing exemptions"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static void CheckSkillFacing()
+    {
+        Require(CombatTurnTracking.SkillFacingRequired(true,false),"offensive melee facing exemption");
+        Require(!CombatTurnTracking.SkillFacingRequired(true,true),"priority self-heal waited for offensive facing");
+        Require(!CombatTurnTracking.SkillFacingRequired(false,false)&&!CombatTurnTracking.SkillFacingRequired(false,true),
+            "ranged optical facing replaced by body-facing gate");
+
+        static Vec Direction(double angle)=>Movement.Rotate(new Vec(0,-1),angle);
+        bool Ready(double heading,Vec delta)=>CombatTurnTracking.FacingReady(heading,delta,out _);
+        Require(Ready(0,Direction(0)),"aligned melee direction rejected");
+        foreach(double sign in new[]{-1d,1d})
+        {
+            Require(Ready(0,Direction(sign*(CombatTurnTracking.SkillFacingTolerance-1e-9))),"inside two-degree boundary rejected");
+            Require(!Ready(0,Direction(sign*(CombatTurnTracking.SkillFacingTolerance+1e-9))),"outside two-degree boundary admitted");
+            Require(!Ready(0,Direction(sign*26.76*Math.PI/180)),"observed retarget angle admitted a skill");
+        }
+        Require(Ready(0,new(Math.Sin(.035),-Math.Cos(.035))),"inclusive two-degree boundary rejected");
+        foreach(double jitter in new[]{.017,-.018,.022,-.032,.030,0d})
+            Require(Ready(0,Direction(jitter)),"harmless angular jitter required consecutive settling reads");
+        Require(!Ready(0,Direction(.036)),"fresh jitter beyond tolerance kept old readiness");
+        Require(Ready(Math.PI-1e-4,Movement.FromClientHeading(-Math.PI+1e-4)),"wrapped client heading rejected");
+        foreach(double invalid in new[]{double.NaN,double.PositiveInfinity,double.NegativeInfinity})
+        {
+            Require(!Ready(invalid,new(0,-1)),"nonfinite heading admitted a skill");
+            Require(!Ready(0,new(invalid,-1))&&!Ready(0,new(0,invalid)),"nonfinite target direction admitted a skill");
+        }
+        Require(!Ready(0,new(0,0))&&!Ready(0,new(0,-.009))&&!Ready(0,new(double.MaxValue,double.MaxValue)),
+            "missing or overflowing direction admitted a skill");
+        Require(Ready(0,new(0,-.01)),"usable minimum direction rejected");
+
+        var drive=new Movement();
+        var player=new Entity(1,1,"Synthetic",new(10,10),0,0);
+        int samples=0;
+        Entity ReadPlayer(){samples++;return player;}
+        Vec oldTarget=player.Position+new Vec(0,-3);
+        Vec retargeted=player.Position+Direction(26.76*Math.PI/180)*3;
+        Require(drive.CombatSkillFacingReady(ReadPlayer,oldTarget,out _),"initial aligned sample unavailable");
+        Require(!drive.CombatSkillFacingReady(ReadPlayer,retargeted,out double retargetError)&&
+            Math.Abs(retargetError*180/Math.PI-26.76)<1e-9,"old target facing reused after retarget");
+        player=player with{Heading=-26.76*Math.PI/180};
+        Require(drive.CombatSkillFacingReady(ReadPlayer,retargeted,out double alignedError)&&Math.Abs(alignedError)<1e-9,
+            "fresh aligned heading ignored while cached facing was mismatched");
+        player=player with{Heading=0};
+        Require(!drive.CombatSkillFacingReady(ReadPlayer,retargeted,out _),"stale aligned heading admitted another activation");
+        Vec refreshedTarget=player.Position+new Vec(3,0);
+        Require(!drive.CombatSkillFacingReady(ReadPlayer,refreshedTarget,out double movedError)&&Math.Abs(movedError-Math.PI/2)<1e-9,
+            "moving target direction reused its old readiness");
+        Require(drive.CombatSkillFacingReady(ReadPlayer,oldTarget,out _),"fresh original direction failed to restore readiness");
+        player=player with{Position=player.Position+new Vec(2,0)};
+        Require(!drive.CombatSkillFacingReady(ReadPlayer,oldTarget,out _),"stale player position admitted a skill");
+        Require(samples==7,"facing gate failed to take exactly one fresh player sample per activation");
+        player=player with{Heading=double.NaN};
+        Require(!drive.CombatSkillFacingReady(ReadPlayer,oldTarget,out double invalidError)&&double.IsNaN(invalidError),
+            "invalid fresh player observation retained earlier readiness");
     }
 
     internal readonly record struct TurnResult(int Elapsed,double LargestDegrees);

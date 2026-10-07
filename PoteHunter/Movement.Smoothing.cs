@@ -136,12 +136,13 @@ internal static class AnchorArrival
     public static async Task<bool> ReturnAsync(Func<Vec> position,Vec anchor,double tolerance,
         Func<CancellationToken,Task> approach,Action stop,Func<CancellationToken,Task> face,
         Func<int,CancellationToken,Task> delay,Func<long> clock,CancellationToken token,
-        Func<CancellationToken,Task<bool>>? defend=null,bool extendOnProgress=false)
+        Func<CancellationToken,Task<bool>>? defend=null,bool extendOnProgress=false,
+        AnchorReturnDefenseCadence? defenseSchedule=null,double turnSpeedDegreesPerSecond=90)
     {
         if(!anchor.Finite || !double.IsFinite(tolerance) || tolerance<=0)throw new ArgumentOutOfRangeException(nameof(anchor));
         long startedAt=clock(),deadline=startedAt+15000,hardDeadline=startedAt+120000;
         double bestDistance=double.PositiveInfinity;
-        var defenseCadence=new AnchorReturnDefenseCadence();
+        var defenseCadence=defenseSchedule ?? new AnchorReturnDefenseCadence();
         try
         {
             while(clock()<deadline && clock()<hardDeadline)
@@ -160,7 +161,7 @@ internal static class AnchorArrival
                     {
                         long defenseAt=clock();bool defended;
                         try {defended=await defend(token);}
-                        finally {defenseCadence.Complete(clock());}
+                        finally {defenseCadence.Complete(clock(),turnSpeedDegreesPerSecond);}
                         if(defended)
                         {
                             deadline=Math.Min(hardDeadline,deadline+Math.Max(0,clock()-defenseAt));

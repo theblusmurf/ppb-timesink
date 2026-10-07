@@ -190,12 +190,13 @@ public static class GamekeeperPriority
     }
 }
 
-// One instance belongs to one saved-anchor return invocation. Reserving a
-// defense slice prevents repeated callbacks from lending the same interval;
-// completing it guarantees a movement opportunity before another slice.
+// The caller retains one instance through retries for the same anchor and
+// recovery episode. Reserving an engagement prevents overlapping defense;
+// completing it allows a whole turn-speed-aware arrival correction before
+// another engagement. Reset only when the anchor/episode changes or arrives.
 internal sealed class AnchorReturnDefenseCadence
 {
-    public const int ApproachOpportunityMilliseconds=500;
+    public const int ApproachOpportunityMilliseconds=4000;
     long nextDefenseAt,lastObservation=-1;
     bool defending;
 
@@ -210,36 +211,54 @@ internal sealed class AnchorReturnDefenseCadence
         if(defending || now<nextDefenseAt)return false;
         defending=true;return true;
     }
-    public void Complete(long now)
+    public void Complete(long now,double turnSpeedDegreesPerSecond=90)
     {
+        int opportunity=FacingRestore.TimeoutMilliseconds(turnSpeedDegreesPerSecond);
         ObserveClock(now);
-        if(!defending)throw new InvalidOperationException("Anchor defense slice was not reserved.");
+        if(!defending)throw new InvalidOperationException("Anchor defense engagement was not reserved.");
         defending=false;
-        nextDefenseAt=now>long.MaxValue-ApproachOpportunityMilliseconds?long.MaxValue:now+ApproachOpportunityMilliseconds;
+        nextDefenseAt=now>long.MaxValue-opportunity?long.MaxValue:now+opportunity;
     }
+    public void Reset(){nextDefenseAt=0;lastObservation=-1;defending=false;}
 
     internal static void Checks()
     {
         var cadence=new AnchorReturnDefenseCadence();
         if(!cadence.TryBegin(0) || cadence.TryBegin(0) || cadence.TryBegin(50))
-            throw new Exception("Repeated anchor-defense requests reserved overlapping slices.");
+            throw new Exception("Repeated anchor-defense requests reserved overlapping engagements.");
         cadence.Complete(1000);int approachUpdates=0;
-        for(long now=1000;now<1500;now+=25)
+        for(long now=1000;now<5000;now+=25)
         {
             if(cadence.TryBegin(now))throw new Exception("Continuous nearby targets starved the anchor approach opportunity.");
             approachUpdates++;
         }
-        if(approachUpdates!=20 || !cadence.TryBegin(1500) || cadence.TryBegin(1500))
-            throw new Exception("Anchor defense did not reopen at its bounded 500-ms cadence.");
-        cadence.Complete(2500);
-        if(cadence.TryBegin(2999) || !cadence.TryBegin(3000))
-            throw new Exception("A later defense slice reset the movement opportunity before it elapsed.");
-        cadence.Complete(3000);
+        if(approachUpdates!=160 || !cadence.TryBegin(5000) || cadence.TryBegin(5000))
+            throw new Exception("Anchor defense did not leave a full 90-degree-per-second correction opportunity.");
+        cadence.Complete(6000,30);
+        if(cadence.TryBegin(13999) || !cadence.TryBegin(14000))
+            throw new Exception("A slow half-turn could not finish before renewed defense.");
+        cadence.Complete(14000,360);
+        if(cadence.TryBegin(16499) || !cadence.TryBegin(16500))
+            throw new Exception("A later engagement reset the rate-aware movement opportunity before it elapsed.");
+        cadence.Complete(16500);
         bool rollbackRejected=false,unreservedRejected=false,negativeRejected=false;
-        try{cadence.TryBegin(2999);}catch(InvalidOperationException){rollbackRejected=true;}
-        try{cadence.Complete(3000);}catch(InvalidOperationException){unreservedRejected=true;}
+        try{cadence.TryBegin(16499);}catch(InvalidOperationException){rollbackRejected=true;}
+        try{cadence.Complete(16500);}catch(InvalidOperationException){unreservedRejected=true;}
         try{new AnchorReturnDefenseCadence().TryBegin(-1);}catch(InvalidOperationException){negativeRejected=true;}
         if(!rollbackRejected || !unreservedRejected || !negativeRejected || !new AnchorReturnDefenseCadence().TryBegin(0))
             throw new Exception("Anchor defense accepted an invalid clock/lifecycle or leaked cadence into a fresh return.");
+        foreach(double invalid in new[]{double.NaN,double.PositiveInfinity,29.9,360.1})
+        {
+            var invalidCadence=new AnchorReturnDefenseCadence();invalidCadence.TryBegin(0);bool rejected=false;
+            try{invalidCadence.Complete(0,invalid);}catch(ArgumentOutOfRangeException){rejected=true;}
+            if(!rejected || invalidCadence.TryBegin(0))throw new Exception("Invalid turn speed completed or reopened a reserved defense.");
+        }
+        cadence.Reset();
+        if(!cadence.TryBegin(0))throw new Exception("Changed anchor/recovery episode retained the old correction deadline.");
+        cadence.Reset();
+        if(!cadence.TryBegin(1))throw new Exception("Reset retained an overlapping engagement reservation.");
+        cadence.Complete(long.MaxValue-1);
+        if(cadence.TryBegin(long.MaxValue-1) || !cadence.TryBegin(long.MaxValue))
+            throw new Exception("Correction deadline overflow reopened defense before its bound.");
     }
 }

@@ -1854,6 +1854,70 @@ public sealed partial class HunterForm : Form
                         lootReturnPending,stationaryAssistReturnPending,startupReturnPending});
                 }
             }
+            long nextSkillFacingTrace=0;
+            var anchorDefenseCadence=new AnchorReturnDefenseCadence();
+            bool CombatSkillReady(HotbarSlot slot,Entity expected,double range,bool bodyMode,string mode)
+            {
+                // Survival skills retain their existing HP/MP checks and never
+                // wait for pack size or body facing.
+                if(CombatSkillPolicy.IsPriorityHeal(slot,o))return true;
+                var live=world.Find(expected.Id);
+                if(live==null || TargetIdentity(live)!=TargetIdentity(expected) || !live.Position.Finite ||
+                    lockedTarget==null || TargetIdentity(lockedTarget)!=TargetIdentity(expected))return false;
+                var health=world.TargetHealth(live.Id);var self=world.LocalPlayer();
+                if(!health.Known || health.Dead || TargetGuardReason(live,health,self.Position,o)!=null ||
+                    bodyMode && !Targeting.StationarySwingInRange((live.Position-self.Position).Length,range,Input.BasicAttackHeld) ||
+                    !CombatSkillGroup(live,health,self.Position,o).Ready)return false;
+                if(!CombatTurnTracking.SkillFacingRequired(bodyMode,false) ||
+                    drive.CombatSkillFacingReady(world,live.Position,out double error))return true;
+                long now=Environment.TickCount64;
+                if(now>=nextSkillFacingTrace)
+                {
+                    nextSkillFacingTrace=now+1000;
+                    TraceLog.Record("offensive skill waiting for facing",new{slot.Key,slot.Name,live.Id,
+                        ErrorDegrees=error*180/Math.PI,Mode=mode,BasicAttackHeld=Input.BasicAttackHeld});
+                }
+                return false;
+            }
+            async Task UseCombatSkill(HotbarSlot slot,Entity expected,int index,double range,bool bodyMode,string mode,CancellationToken castToken,Action? attackRearmed=null)
+            {
+                bool delayExempt=SkillHealthRule.Applies(slot,o),prioritySelfHeal=CombatSkillPolicy.IsPriorityHeal(slot,o);
+                bool ActivationReady()=>CombatSkillReady(slot,expected,range,bodyMode,mode);
+                try
+                {
+                    var live=world.Find(expected.Id) ?? expected;var hp=world.TargetHealth(expected.Id);
+                    var group=CombatSkillGroup(live,hp,world.PlayerPosition(),o);
+                    TraceLog.Record("skill input",new{slot.Key,slot.Name,expected.Id,Distance=(live.Position-world.PlayerPosition()).Length,
+                        RemainingBefore=slot.RemainingCooldown,Mode=mode,PackTargets=group.InRangeTargets,
+                        HighestHealthPercent=group.HighestHealthPercent,DelayExempt=delayExempt,PrioritySelfHeal=prioritySelfHeal,NextSkillAt=nextCombatSkillAt});
+                    await Input.Key((Keys)slot.Key[0],50,castToken);await Input.Delay(80,castToken);
+                    if(!await CastHealthCheckedSkill(slot,o,castToken,ActivationReady))return;
+                    Input.HoldMouse(false,true,castToken);
+                    if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                    await Input.Delay(150,castToken);
+                    var after=CheckedHotbar().Slot(slot.Key[0]);bool fallbackRelease=false;
+                    if(slot.HasCooldown && after.Ready && ActivationReady())
+                    {
+                        fallbackRelease=true;
+                        Input.HoldMouse(false,false,castToken);await Input.Delay(35,castToken);
+                        if(!await CastHealthCheckedSkill(slot,o,castToken,ActivationReady))return;
+                        if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
+                        Input.HoldMouse(false,true,castToken);attackRearmed?.Invoke();await Input.Delay(100,castToken);
+                        after=CheckedHotbar().Slot(slot.Key[0]);
+                    }
+                    bool cooldownStarted=after.RemainingCooldown>0 || after.Locked;
+                    TraceLog.Record("skill cooldown observed",new{slot.Key,after.Name,Remaining=after.RemainingCooldown,
+                        after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,DelayExempt=delayExempt,Mode=mode});
+                    skillDue[slot.Key[0]]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
+                    skillCursor=(index+1)%Math.Max(1,o.SkillKeys.Length);
+                }
+                finally
+                {
+                    bool wasHeld=Input.BasicAttackHeld;
+                    ResumeBasicAttackAfterSkill(expected,o,castToken,mode);
+                    if(!wasHeld && Input.BasicAttackHeld)attackRearmed?.Invoke();
+                }
+            }
             async Task<bool> DefendDuringAnchorReturn(CancellationToken defenseToken)
             {
                 Input.CheckSafety(defenseToken);
@@ -1862,13 +1926,15 @@ public sealed partial class HunterForm : Form
                 var health=world.HealthSnapshot();var position=world.PlayerPosition();int level=world.PlayerLevel();
                 ObserveEncounter(o,health,position,level);
                 double swingRange=Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,Targeting.MeleeAttackRange+1.0);
-                var candidate=entities.Where(e=>e.Monster && !e.PriorityLootObject &&
+                var candidates=entities.Where(e=>e.Monster && !e.PriorityLootObject &&
                     (Targeting.IsStationaryHuntTargetId(e.Id) || o.PrioritizeGamekeeper && Targeting.IsGamekeeper(e)) &&
                     health.GetValueOrDefault(e.Id) is {Known:true,Dead:false} && (e.Position-position).Length<=swingRange &&
                     (encounter.IsEngaged(e) || courtesy.StartedHere(e) || MatchesRequestedTarget(e,o,level)) &&
                     TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,o)==null)
-                    .OrderBy(e=>o.PrioritizeGamekeeper && Targeting.IsGamekeeper(e)?0:1)
-                    .ThenByDescending(e=>health.GetValueOrDefault(e.Id).Current).FirstOrDefault();
+                    .ToArray();
+                var priority=PriorityGamekeeper(o);
+                var candidate=priority==null ? candidates.OrderByDescending(e=>health.GetValueOrDefault(e.Id).Current).FirstOrDefault() :
+                    candidates.FirstOrDefault(e=>TargetIdentity(e)==TargetIdentity(priority));
                 if(candidate==null)return false;
                 long episode=deathRecovery.Episode;Vec defenseAnchor=anchor;
                 StationaryReturnDefense.Observation ObserveDefense()
@@ -1876,13 +1942,15 @@ public sealed partial class HunterForm : Form
                     RefreshGuardScene();var liveHealth=world.HealthSnapshot();var self=world.LocalPlayer();
                     var current=entities.FirstOrDefault(e=>TargetIdentity(e)==TargetIdentity(candidate));
                     bool ambiguous=entities.Any(e=>e.Id==candidate.Id && TargetIdentity(e)!=TargetIdentity(candidate));
-                    // A new Gamekeeper relinquishes this borrowed farming slice;
+                    // A new Gamekeeper relinquishes this borrowed engagement;
                     // route arrival still owns travel until the actual anchor.
                     bool priorityChanged=GamekeeperPriority.ShouldYield(current,PriorityGamekeeper(o));
                     ObserveEncounter(o,liveHealth,self.Position,level);
                     return new(self.Position,anchor,liveHealth.GetValueOrDefault(self.Id),current,
                         liveHealth.GetValueOrDefault(candidate.Id),swingRange,
-                        !ambiguous && !priorityChanged && deathRecovery.Episode==episode && anchor==defenseAnchor && StationaryReturnContext(),
+                        !ambiguous && !priorityChanged && deathRecovery.Episode==episode && anchor==defenseAnchor && StationaryReturnContext() &&
+                        (!o.UseAlternativeHuntRoutes || !RecoveryRouting.Occupied(anchor,savedHuntHeight,
+                            activeRouteProfile is {HuntRadius:>0} route ? route.HuntRadius:(double)o.HuntRadius,entities,guardSelfId)),
                         current!=null && (encounter.IsEngaged(current) || courtesy.StartedHere(current) || MatchesRequestedTarget(current,o,level)) &&
                         TargetGuardReason(current,liveHealth.GetValueOrDefault(current.Id),self.Position,o)==null);
                 }
@@ -1901,34 +1969,46 @@ public sealed partial class HunterForm : Form
                     ReturnPending=deathRecovery.Pending,Episode=episode});
                 try
                 {
+                    long defenseStartedAt=Environment.TickCount64;
+                    int defenseBaselineHp=-1;long defenseHeldAt=defenseStartedAt;
                     var outcome=await StationaryReturnDefense.RunAsync(ObserveDefense,()=>drive.StopApproach(),async (sample,ct)=>
                     {
                         var current=sample.Target!;lockedTarget=current;
-                        Input.HoldMouse(false,true,ct);
+                        if(Targeting.StationaryAttackNeedsRearm(sample.TargetHealth.Current,Input.BasicAttackHeld,Environment.TickCount64,
+                            ref defenseBaselineHp,ref defenseHeldAt))
+                        {
+                            if(Input.BasicAttackHeld){Input.HoldMouse(false,false,ct);await Input.Delay(35,ct);}
+                            Input.HoldMouse(false,true,ct);defenseHeldAt=Environment.TickCount64;
+                        }
                         courtesy.MarkAttack(current);encounter.MarkAttack(current,sample.TargetHealth);encounterHasAttack=true;
                         encounter.NoteAttack(sample.Position,Encounter.CollateralReach((double)o.MeleeRange));encounterQuietSince=0;
+                        message=$"Defending {current.DisplayName} near saved anchor; return remains pending";
                         try {await drive.Face(world,current.Position-world.PlayerPosition(),ct,.035);}
                         catch(TurnUnresponsiveException) {drive.ResetTurnResponse();}
-                        // Reuse survival rules without casting offensive skills,
-                        // chasing, resting, or repeating completed repair stages.
                         await TryHeal(drive,o,ct);
                         var bar=CheckedHotbar();long now=Environment.TickCount64;
-                        int healIndex=CombatSkillPolicy.Choose(o.SkillKeys,skillCursor,bar,skillDue,now,SkillConditionHealth(o),o,
-                            default,targetReady:true,offensiveReady:false,delayReady:false,
-                            eligible:slot=>CombatSkillPolicy.IsPriorityHeal(slot,o) && ManaSkillAllowed(slot,o));
-                        if(healIndex>=0)
+                        if(o.AutoDetectSkills)
                         {
-                            char key=o.SkillKeys[healIndex];var slot=bar.Slot(key);
-                            await Input.Key((Keys)key,50,ct);await Input.Delay(80,ct);
-                            if(await CastHealthCheckedSkill(slot,o,ct))
+                            string detected=AttackKeys(SkillRotation.DetectKeys(bar),bar,o.MaintainAreaBuffs);
+                            if(detected!=o.SkillKeys){o.SkillKeys=detected;skillCursor=0;foreach(char key in detected)skillDue.TryAdd(key,0);}
+                        }
+                        var group=CombatSkillGroup(current,sample.TargetHealth,world.PlayerPosition(),o);
+                        int index=CombatSkillPolicy.Choose(o.SkillKeys,skillCursor,bar,skillDue,now,SkillConditionHealth(o),o,group,
+                            targetReady:true,offensiveReady:now-defenseStartedAt>=1200,delayReady:now>=nextCombatSkillAt,
+                            eligible:slot=>(!RangedPullEnabled(o) || !SkillRotation.IsRangedSkill(slot.Name)) && ManaSkillAllowed(slot,o));
+                        if(index>=0)
+                        {
+                            var slot=bar.Slot(o.SkillKeys[index]);
+                            if(CombatSkillReady(slot,current,swingRange,true,"anchor defense"))
                             {
-                                Input.HoldMouse(false,true,ct);await Input.Delay(150,ct);
-                                var after=CheckedHotbar().Slot(key);
-                                skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,after.RemainingCooldown>0 || after.Locked,o.SkillSeconds);
-                                skillCursor=(healIndex+1)%Math.Max(1,o.SkillKeys.Length);
+                                await UseCombatSkill(slot,current,index,swingRange,true,"anchor defense",ct,
+                                    ()=>defenseHeldAt=Environment.TickCount64);
                             }
                         }
+                        await CombatFacingWait(drive,current,o,50,ct);
                     },()=>Input.HoldMouse(false,false,default),Input.Delay,()=>Environment.TickCount64,defenseToken);
+                    TraceLog.Record("continuous anchor defense ended",new{candidate.Id,Outcome=outcome.ToString(),
+                        ElapsedMilliseconds=Environment.TickCount64-defenseStartedAt,Position=world.PlayerPosition(),Anchor=anchor});
                     return outcome!=StationaryReturnDefenseOutcome.Unavailable;
                 }
                 catch(StationaryReturnYieldException){return true;}
@@ -2037,9 +2117,10 @@ public sealed partial class HunterForm : Form
                                 await Input.Delay(100,ct);
                             }
                         },()=>drive.StopApproach(),ct=>RestoreHuntFacing(ct,3),Input.Delay,()=>Environment.TickCount64,returnToken,
-                        defend:DefendDuringAnchorReturn,extendOnProgress:true);
+                        defend:DefendDuringAnchorReturn,extendOnProgress:true,defenseSchedule:anchorDefenseCadence,turnSpeedDegreesPerSecond:drive.TurnSpeedDegreesPerSecond);
                     if(!arrived)throw new AnchorReturnException("Gamekeeper return could not settle at the saved anchor; stopped rather than resume away from it.");
                     gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;
+                    anchorDefenseCadence.Reset();
                     TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
                     return true;
                 }
@@ -2058,9 +2139,9 @@ public sealed partial class HunterForm : Form
                         async ct=>{await NavigateTo(drive,anchor,anchor,o,ct,
                             boundaryRadius:(double)o.LootPickupRadius,arrivalTolerance:NearbyLootPickup.AnchorArrivalTolerance);},
                         ()=>drive.StopApproach(),RestoreLootFacing,Input.Delay,()=>Environment.TickCount64,returnToken,
-                        defend:DefendDuringAnchorReturn);
+                        defend:DefendDuringAnchorReturn,defenseSchedule:anchorDefenseCadence,turnSpeedDegreesPerSecond:drive.TurnSpeedDegreesPerSecond);
                     if(!arrived)throw new AnchorReturnException("Loot return could not settle at the saved anchor; stopped rather than resume away from it.");
-                    lootReturnPending=false;
+                    lootReturnPending=false;anchorDefenseCadence.Reset();
                     TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
                 }
                 finally{returningFromPriority=false;drive.StopApproach();}
@@ -2082,12 +2163,13 @@ public sealed partial class HunterForm : Form
                                 boundaryRadius:Math.Max((double)o.HuntRadius,activeCompletionBoundary),arrivalTolerance:arrivalTolerance);}
                             catch(RouteUnavailableException ex) {drive.StopApproach();TraceLog.Record("stationary assist return route retry",new {Reason=ex.Message,Anchor=anchor});}
                         },()=>drive.StopApproach(),RestoreSavedHuntFacing,Input.Delay,()=>Environment.TickCount64,returnToken,
-                        defend:DefendDuringAnchorReturn);
+                        defend:DefendDuringAnchorReturn,defenseSchedule:anchorDefenseCadence,turnSpeedDegreesPerSecond:drive.TurnSpeedDegreesPerSecond);
                     if(!arrived)
                     {
                         TraceLog.Record("stationary assist return still pending",new {Position=world.PlayerPosition(),Anchor=anchor});
                         return false;
                     }
+                    anchorDefenseCadence.Reset();
                     TraceLog.Record("returned to saved hunt point after stationary melee assist",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
                     return true;
                 }
@@ -2100,7 +2182,7 @@ public sealed partial class HunterForm : Form
                 deathReturnInProgress=true;returningFromPriority=true;
                 Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();drive.ResetTurnResponse();
                 RecoveryPath? path=null;
-                var defenseCadence=new AnchorReturnDefenseCadence();
+                var defenseCadence=anchorDefenseCadence;
                 long nextOccupancyCheck=0,progressAt=Environment.TickCount64;
                 int progressIndex=-1;double bestDistance=double.PositiveInfinity;
                 bool alternatives=!o.GroupMode && o.UseAlternativeHuntRoutes;
@@ -2114,6 +2196,7 @@ public sealed partial class HunterForm : Form
                 void Activate(int slot)
                 {
                     var route=navigation.GetSavedRoute(slot)!;
+                    anchorDefenseCadence.Reset();
                     bool original=slot==originalSavedPoint.Slot;
                     anchor=activationLocation=gamekeeperReturnLocation=original?originalSavedPoint.Location:route.Anchor;
                     savedHuntHeading=gamekeeperReturnHeading=original?originalSavedPoint.Heading:route.Heading;
@@ -2185,7 +2268,7 @@ public sealed partial class HunterForm : Form
                             await RestoreSavedHuntFacing(returnToken);
                             RefreshGuardScene();if(ChooseDestination())continue;
                             if((world.PlayerPosition()-anchor).Length>.5){ResetPath();continue;}
-                            fallbackCycle.Arrived(activeSavedRouteSlot);
+                            fallbackCycle.Arrived(activeSavedRouteSlot);anchorDefenseCadence.Reset();
                             message=savedFacingDeferredForPriority?"Saved anchor reached; prioritizing Gamekeeper":"Returned to saved anchor and facing";
                             TraceLog.Record("saved hunt anchor reached",new{Position=world.PlayerPosition(),Anchor=anchor,Heading=gamekeeperReturnHeading,
                                 FacingRestored=!savedFacingDeferredForPriority,PriorityGamekeeper=savedFacingDeferredForPriority,
@@ -2196,7 +2279,7 @@ public sealed partial class HunterForm : Form
                         {
                             long defenseAt=Environment.TickCount64;bool defended;
                             try {defended=await DefendDuringAnchorReturn(returnToken);}
-                            finally {defenseCadence.Complete(Environment.TickCount64);}
+                            finally {defenseCadence.Complete(Environment.TickCount64,drive.TurnSpeedDegreesPerSecond);}
                             if(defended)
                             {
                                 progressAt+=Math.Max(0,Environment.TickCount64-defenseAt);
@@ -2295,6 +2378,7 @@ public sealed partial class HunterForm : Form
                     long recoveryEpisode=deathRecovery.Episode;
                     if(!deathRecovery.PostRevivalPrepared)
                     {
+                    anchorDefenseCadence.Reset();
                     encounter.Reset();courtesy.Reset();deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;encounterQuietSince=0;encounterUnknownSince=0;
                     pendingPriorityGamekeeper=null;gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;completionReturnPending=false;stationaryAssistReturnPending=false;
                     gamekeeperReturnLocation=anchor;gamekeeperReturnHeading=savedHuntHeading;
@@ -2342,9 +2426,9 @@ public sealed partial class HunterForm : Form
                     faultDeathWatch.Reset();anchorAdjustmentRetryAt=Environment.TickCount64+500;
                     TraceLog.Record("near anchor fault watch resumed stationary defense",new{Position=world.PlayerPosition(),Anchor=anchor});
                 }
-                if(Environment.TickCount64<anchorAdjustmentRetryAt)
+                if(Environment.TickCount64<anchorAdjustmentRetryAt && anchorDefenseCadence.TryBegin(Environment.TickCount64))
                 {
-                    await DefendDuringAnchorReturn(token);await Input.Delay(50,token);continue;
+                    try {await DefendDuringAnchorReturn(token);} finally {anchorDefenseCadence.Complete(Environment.TickCount64,drive.TurnSpeedDegreesPerSecond);} await Input.Delay(50,token);continue;
                 }
                 if(faultDeathWatch.Active)
                 {
@@ -3132,48 +3216,15 @@ public sealed partial class HunterForm : Form
                                     continue;
                                 }
                             }
-                            try
+                            if(!CombatSkillReady(slot,current,swingWindow,true,"stationary"))
                             {
-                                // Consume the reservation before input. A failed cast, heal,
-                                // or replaced skill must not leave an old focus pinned.
-                                pendingSkillTarget.Clear();
-                                TraceLog.Record("skill input",new{Key=key.ToString(),slot.Name,target.Id,Distance=delta.Length,RemainingBefore=slot.RemainingCooldown,Mode="stationary",PackTargets=stationarySkillGroup.InRangeTargets,HighestHealthPercent=stationarySkillGroup.HighestHealthPercent,DelayExempt=delayExempt,PrioritySelfHeal=prioritySelfHeal,NextSkillAt=nextCombatSkillAt});
-                                await Input.Key((Keys)key,50,token);
-                                await Input.Delay(80,token);
-                                if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                // Skills use the right button, but some client
-                                // builds clear the left-button state while the
-                                // animation starts. Reassert the swing before
-                                // waiting for cooldown telemetry.
-                                Input.HoldMouse(false,true,token);
-                                if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
-                                await Input.Delay(150,token);
-                                var after=CheckedHotbar().Slot(key);
-                                bool fallbackRelease=false;
-                                if(slot.HasCooldown && after.Ready)
-                                {
-                                    // If the client ignored the skill while the
-                                    // left button was held, retry once with a short
-                                    // release, then restore the continuous swing.
-                                    fallbackRelease=true;
-                                    Input.HoldMouse(false,false,token);
-                                    await Input.Delay(35,token);
-                                    if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                    if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
-                                    Input.HoldMouse(false,true,token);
-                                    stationaryAttackHeldAt=Environment.TickCount64;
-                                    await Input.Delay(100,token);
-                                    after=CheckedHotbar().Slot(key);
-                                }
-                                bool cooldownStarted=after.RemainingCooldown>0 || after.Locked;
-                                TraceLog.Record("skill cooldown observed",new{Key=key.ToString(),after.Name,Remaining=after.RemainingCooldown,after.Locked,CooldownStarted=cooldownStarted,FallbackRelease=fallbackRelease,DelayExempt=delayExempt,Mode="stationary"});
-                                skillDue[key]=Environment.TickCount64+SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
-                                skillCursor=(stationaryReadyIndex+1)%Math.Max(1,o.SkillKeys.Length);
+                                if(!prioritySelfHeal && !pendingSkillTarget.Matches(slot,current,Environment.TickCount64))
+                                    pendingSkillTarget.Reserve(slot,current,Environment.TickCount64);
+                                await CombatFacingWait(drive,current,o,50,token);continue;
                             }
-                            finally
-                            {
-                                ResumeBasicAttackAfterSkill(current,o,token,"stationary");
-                            }
+                            pendingSkillTarget.Clear();
+                            await UseCombatSkill(slot,current,stationaryReadyIndex,swingWindow,true,"stationary",token,
+                                ()=>stationaryAttackHeldAt=Environment.TickCount64);
                         }
                         else
                         {
@@ -3285,35 +3336,15 @@ public sealed partial class HunterForm : Form
                                 target=skillTarget; lockedTarget=skillTarget; await Input.Delay(20,token); continue;
                             }
                         }
-                        try
+                        bool bodyMode=!o.Ranged || packClearing;
+                        if(!CombatSkillReady(slot,current,swingWindow,bodyMode,"combat"))
                         {
-                            pendingSkillTarget.Clear();
-                            TraceLog.Record("skill input", new { Key = key.ToString(), slot.Name, target.Id, Distance = delta.Length, RemainingBefore = slot.RemainingCooldown, PackTargets=combatSkillGroup.InRangeTargets, HighestHealthPercent=combatSkillGroup.HighestHealthPercent, DelayExempt=delayExempt, PrioritySelfHeal=prioritySelfHeal, NextSkillAt=nextCombatSkillAt });
-                            // Keep the basic combo held while the skill is selected and right-clicked.
-                            await Input.Key((Keys)key, 50, token); await Input.Delay(80, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                            Input.HoldMouse(false,true,token);
-                            if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
-                            await Input.Delay(150, token);
-                            var after = CheckedHotbar().Slot(key);
-                            bool fallbackRelease = false;
-                            if (slot.HasCooldown && after.Ready)
-                            {
-                                // Some skills cannot start during a held basic attack. Retry once with a short release.
-                                fallbackRelease = true;
-                                Input.HoldMouse(false, false, token); await Input.Delay(35, token); if(!await CastHealthCheckedSkill(slot,o,token))continue;
-                                if(!delayExempt)nextCombatSkillAt=Environment.TickCount64+SkillGroupStatus.DelayMilliseconds;
-                                Input.HoldMouse(false, true, token); await Input.Delay(100, token);
-                                after = CheckedHotbar().Slot(key);
-                            }
-                            bool cooldownStarted = after.RemainingCooldown > 0 || after.Locked;
-                            TraceLog.Record("skill cooldown observed", new { Key = key.ToString(), after.Name, Remaining = after.RemainingCooldown, after.Locked, FallbackRelease = fallbackRelease, CooldownStarted = cooldownStarted, DelayExempt = delayExempt });
-                            skillDue[key] = Environment.TickCount64 + SkillRotation.RetryDelayMilliseconds(slot,cooldownStarted,o.SkillSeconds);
-                            skillCursor = (readyIndex + 1) % o.SkillKeys.Length;
+                            if(!prioritySelfHeal && !pendingSkillTarget.Matches(slot,current,Environment.TickCount64))
+                                pendingSkillTarget.Reserve(slot,current,Environment.TickCount64);
+                            await CombatFacingWait(drive,current,o,50,token);continue;
                         }
-                        finally
-                        {
-                            ResumeBasicAttackAfterSkill(current,o,token,"combat");
-                        }
+                        pendingSkillTarget.Clear();
+                        await UseCombatSkill(slot,current,readyIndex,swingWindow,bodyMode,"combat",token);
                     }
                     else
                     {

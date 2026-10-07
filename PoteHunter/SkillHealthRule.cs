@@ -35,6 +35,15 @@ public static class SkillHealthRule
     public static bool CanActivate(HotbarSlot expected,HotbarSlot current,Health character,Options options)=>
         current.Kind==SlotKind.Skill && current.Id==expected.Id && current.Name==expected.Name && current.Key==expected.Key &&
         current.SkillUse==expected.SkillUse && current.SkillTarget==expected.SkillTarget && current.Ready && Allows(current,character,options);
+
+    internal static async Task<bool> ActivateGuardedAsync(Func<bool>? activationGuard,Func<Func<bool>?,Task<bool>> activate,Action? withheld=null)
+    {
+        // The input delegate owns the final guard after its safety preflight.
+        // A refused mouse-down is an unperformed activation for its caller.
+        bool activated=await activate(activationGuard);
+        if(!activated)withheld?.Invoke();
+        return activated;
+    }
 }
 
 public static class CombatSkillPolicy
@@ -111,7 +120,7 @@ public sealed partial class HunterForm
         }
     }
 
-    async Task<bool> CastHealthCheckedSkill(HotbarSlot expected,Options options,CancellationToken token)
+    async Task<bool> CastHealthCheckedSkill(HotbarSlot expected,Options options,CancellationToken token,Func<bool>? activationGuard=null)
     {
         // Recheck after selecting a key and before every activation/retry. A
         // potion or ally may have healed us during the intervening key delay.
@@ -122,9 +131,17 @@ public sealed partial class HunterForm
             TraceLog.Record("skill activation withheld",new{expected.Key,expected.Name,hp.Current,hp.Maximum,HealthSource=options.HealerMode?"Healing target":"Character",Threshold=options.HealthSkillPercent,Condition=SkillHealthRule.Applies(expected,options),current.Ready});
             return false;
         }
-        if(CombatSkillPolicy.IsPriorityHeal(current,options))
-            TraceLog.Record("self-heal activation requested",new{current.Key,current.Name,hp.Current,hp.Maximum,Threshold=options.HealthSkillPercent,Target=lockedTarget?.Id});
-        await Input.CastSkill(current.SkillUse,(int)options.HealChargeMilliseconds,token);
-        return true;
+        // Key selection may have taken long enough for the target, its range,
+        // pack eligibility or facing to change. Admit each activation only
+        // after input preflight, including a fallback retry, without releasing
+        // the basic-attack hold when the final combat gate refuses it.
+        return await SkillHealthRule.ActivateGuardedAsync(activationGuard,admit=>
+        {
+            return Input.CastSkill(current.SkillUse,(int)options.HealChargeMilliseconds,token,()=>
+            {
+                if(CombatSkillPolicy.IsPriorityHeal(current,options))
+                    TraceLog.Record("self-heal activation requested",new{current.Key,current.Name,hp.Current,hp.Maximum,Threshold=options.HealthSkillPercent,Target=lockedTarget?.Id});
+            },admit);
+        },()=>TraceLog.Record("skill activation withheld by combat gate",new{expected.Key,expected.Name,Target=lockedTarget?.Id}));
     }
 }

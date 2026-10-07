@@ -390,6 +390,69 @@ internal static class MovementSmoothingChecks
         catch(OperationCanceledException){defenseCancelled=true;}
         Require(defenseCancelled && stops>0,"cancelled defense retained movement ownership");
 
+        // A route retry shares the completed engagement's correction window.
+        // Recreating cadence here would attack again before a supported 30°/s
+        // half-turn (six seconds plus measured feedback) can reach the anchor.
+        var sharedReturnCadence=new AnchorReturnDefenseCadence();
+        clock=0;stops=faces=moves=defenses=0;pos=new(.868,0);
+        bool sharedReturnFailed=false;long sharedDefenseEndedAt=-1;
+        Task<bool> SharedReturnDefense(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();defenses++;
+            Require(defenses==1,"a fresh engagement stole the previous slow-turn correction window on retry");
+            clock+=1000;sharedDefenseEndedAt=clock;return Task.FromResult(true);
+        }
+        Task SharedReturnDelay(int milliseconds,CancellationToken token)
+        {
+            Require(milliseconds is 20 or 120,"anchor return exceeded its bounded poll/settle intervals");
+            return Delay(milliseconds,token);
+        }
+        try
+        {
+            await AnchorArrival.ReturnAsync(()=>pos,default,.5,
+                _=>{moves++;throw new AnchorReturnException("Synthetic arrival correction needs a retry");},
+                ()=>stops++,_=>{faces++;return Task.CompletedTask;},SharedReturnDelay,()=>clock,default,
+                SharedReturnDefense,defenseSchedule:sharedReturnCadence,turnSpeedDegreesPerSecond:30);
+        }
+        catch(AnchorReturnException){sharedReturnFailed=true;}
+        Require(sharedReturnFailed && defenses==1 && moves==1 && faces==0 && stops>=2 &&
+            sharedDefenseEndedAt==1000 && clock==1020 && pos.Length>.5,
+            "the interrupted correction lost its completed defense clock, ownership, or pending physical arrival");
+
+        long sharedRetryStartedAt=clock;int retryApproaches=0;
+        bool sharedRetryArrived=await AnchorArrival.ReturnAsync(()=>pos,default,.5,
+            token=>
+            {
+                token.ThrowIfCancellationRequested();retryApproaches++;moves++;
+                Require(clock<sharedDefenseEndedAt+8000 && defenses==1,
+                    "a retry restarted defense or exceeded the prior slow-turn correction opportunity");
+                clock+=500; // Synthetic measured 30°/s turn feedback, without hardware input.
+                if(clock-sharedRetryStartedAt>=6000)pos=new(.1,0);
+                return Task.CompletedTask;
+            },()=>stops++,token=>{token.ThrowIfCancellationRequested();faces++;return Task.CompletedTask;},
+            SharedReturnDelay,()=>clock,default,SharedReturnDefense,
+            defenseSchedule:sharedReturnCadence,turnSpeedDegreesPerSecond:30);
+        Require(sharedRetryArrived && defenses==1 && retryApproaches==12 && moves==13 && faces==1 &&
+            clock==7500 && clock-sharedRetryStartedAt>=6000 && clock<sharedDefenseEndedAt+8000 &&
+            clock-sharedRetryStartedAt<15000 && pos.Length<=.5,
+            "shared retry could not complete its slow half-turn, settle, restore facing, and confirm actual arrival");
+
+        clock=sharedDefenseEndedAt+7999;
+        Require(!sharedReturnCadence.TryBegin(clock),
+            "separate return invocations shortened the original eight-second correction deadline");
+        clock=sharedDefenseEndedAt+8000;
+        long sharedSettledStartedAt=clock;
+        bool sharedSettledReturn=await AnchorArrival.ReturnAsync(()=>pos,default,.5,
+            _=>throw new Exception("An arrived retry must not restart movement"),()=>stops++,
+            _=>{faces++;return Task.CompletedTask;},SharedReturnDelay,()=>clock,default,
+            _=>throw new Exception("An arrived retry must bypass an eligible defense opportunity"),
+            defenseSchedule:sharedReturnCadence,turnSpeedDegreesPerSecond:30);
+        Require(sharedSettledReturn && defenses==1 && faces==2 && clock==9240 && clock-sharedSettledStartedAt==240,
+            "a settled arrival failed to bypass shared defense or its two bounded settlement observations");
+        Require(sharedReturnCadence.TryBegin(clock),
+            "settled arrival consumed or renewed the expired shared defense opportunity");
+        sharedReturnCadence.Complete(clock,30);
+
         var pressure=new CombatPressure();pressure.Observe(new(100,100),0);
         for(int attempt=1;attempt<=20;attempt++)
         {
@@ -431,7 +494,9 @@ internal static class MovementSmoothingChecks
                 "progress-aware facing hard total bound and unavailable-error guard",
                 "recorded sub-frame steps excluded from speed training","frame-sized pulse and filtered speed gain",
                 "frame-quantized precise arrival","recorded post-facing drift rejected","settle then face then recheck",
-                "blocked/cancelled/focus-lost return releases movement","anchor arrival precedes defense; bounded slices leave approach time",
+                "blocked/cancelled/focus-lost return releases movement","anchor arrival precedes defense; bounded engagements leave approach time",
+                "shared return retries retain eight-second slow-turn correction opportunity",
+                "slow retry settles actual anchor before new defense; exact correction clock boundaries",
                 "persistent damage quiet period","stationary defense family/range/protection gates"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }

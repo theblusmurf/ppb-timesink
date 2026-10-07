@@ -1,3 +1,16 @@
+## Release1.132
+
+Keep near-anchor combat continuous while the saved return remains pending.
+
+- Replace the one-second return-defense slices with one guarded engagement. Keep the same living, approved enemy until it dies, leaves reach, Gamekeeper priority changes, or a safety check requires yielding. Preserve return intent and completed repair.
+- Use the normal offensive skill rotation during near-anchor defense, including the five-target/80-percent pack requirement and 1.5-second offensive spacing. Preserve priority self-heals, health conditions and mana-reserve exemptions.
+- Recheck the live target, range, pack conditions and body facing immediately before every melee skill activation and fallback. Keep the basic swing held while aiming. Ranged targeting keeps its existing camera behavior.
+- Preserve the no-damage swing watchdog across withheld and ordinary skill attempts. Reset its input timestamp only when the basic attack is actually released and rearmed; observed damage still renews progress.
+- Retain a shared turn-speed-aware arrival opportunity across return retries, so new enemies cannot repeatedly interrupt the final anchor correction. Reset it for a changed destination, new revival or confirmed arrival.
+- Bound each defensive engagement by 15 seconds without a new lowest target HP and 120 seconds overall. Renew character, target, floor, focus, protection, destination occupancy and Gamekeeper checks throughout; release input on every exit.
+
+Validate the recorded .868-unit anchor/1.8-unit enemy geometry with a 40-second continuous engagement, target invalidation and cleanup, no-progress/regeneration/deadline handling, shared retry scheduling, delayed skill activation and fresh facing alongside the full offline and native UI checks. These are offline checks; live behavior after upgrading requires confirmation. Running gameplay, local profiles/settings and private evidence are left untouched.
+
 ## Release1.131
 
 Smooth route entry and keep skill targeting stable through each cast.
