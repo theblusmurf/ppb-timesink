@@ -97,7 +97,8 @@ public sealed partial class HunterForm
             var columns = Find<TableLayoutPanel>("overviewColumns");
             var left = Find<TableLayoutPanel>("overviewMapColumn");
             var right = Find<TableLayoutPanel>("overviewHuntColumn");
-            if(left.Right > right.Left || right.Right > columns.ClientSize.Width || left.Width < 320 || right.Width < 200)
+            bool stacked = columns.ColumnCount == 1;
+            if((stacked ? left.Bottom > right.Top : left.Right > right.Left) || right.Right > columns.ClientSize.Width || left.Width < 320 || right.Width < 200)
                 throw new Exception("Collapsible Overview columns overlap or overflow at minimum size.");
             tabs.SelectedTab=previousPage;Layout();
             foreach(var fold in folds)

@@ -63,21 +63,14 @@ public sealed partial class HunterForm
                     if(section=="Overview")
                     {
                         var telemetry=Find<TableLayoutPanel>("orbitalTelemetry");
-                        var targetHeading=telemetry.RectangleToClient(Find<Label>("orbitalTargetHeading").RectangleToScreen(Find<Label>("orbitalTargetHeading").ClientRectangle));
-                        foreach(string name in new[]{"orbitalActiveTime","orbitalTrackedKills"})
+                        foreach(string name in new[]{"overviewResourceGold","orbitalActiveTime","orbitalTrackedKills"})
                         {
-                            var value=Find<Label>(name);var valueBounds=telemetry.RectangleToClient(value.RectangleToScreen(value.ClientRectangle));
-                            if(!telemetry.ClientRectangle.Contains(valueBounds) || valueBounds.Bottom>targetHeading.Top)
-                                throw new Exception("A telemetry value clips into the target roster at "+size+": "+name);
+                            var value=Find<Label>(name);var bounds=telemetry.RectangleToClient(value.RectangleToScreen(value.ClientRectangle));
+                            if(!value.Visible || value.Height < value.Font.Height || !value.Parent!.ClientRectangle.Contains(value.Bounds) || !telemetry.ClientRectangle.Contains(bounds))
+                                throw new Exception($"Session Desk metric clips: {name}; value={value.Bounds}; font={value.Font.Height}; card={value.Parent!.ClientRectangle}; rows={string.Join(',', ((TableLayoutPanel)value.Parent).RowStyles.Cast<RowStyle>().Select(s=>s.Height))}");
                         }
-                        if(Find<OrbitalScanner>("overviewRouteMap").Height<320*DeviceDpi/96)
-                            throw new Exception("The route scanner collapsed below its readable canvas height.");
-                        foreach(string family in new[]{"Mimic","Pulkhan","Tribal","Tower"})
-                        {
-                            var caption=Find<Label>("orbitalTargetLabel"+family);var portrait=caption.Parent!;
-                            if(!portrait.ClientRectangle.Contains(caption.Bounds) || !portrait.Parent!.ClientRectangle.Contains(portrait.Bounds))
-                                throw new Exception("A target-family caption clips outside its roster row: "+family);
-                        }
+                        if(Find<OrbitalScanner>("overviewRouteMap").Height<140*DeviceDpi/96)
+                            throw new Exception("The compact route snapshot lost its readable canvas.");
                     }
                 }
             }
@@ -87,7 +80,7 @@ public sealed partial class HunterForm
             if(Find<Label>("orbitalPageTitle").Text!="The Endless Pursuit")throw new Exception("The requested philosophical Overview headline was lost.");
             var scanner=Find<OrbitalScanner>("overviewRouteMap");
             foreach(string name in new[]{"overviewAnchor","overviewMapLegend","overviewRouteTarget"})
-                if(Find<Label>(name).Width<Find<TableLayoutPanel>("overviewMapColumn").ClientSize.Width-12)
+                if(Find<Label>(name).Width<Find<TableLayoutPanel>("deskRouteSnapshot").ClientSize.Width-40)
                     throw new Exception("A scanner note retained a stale width constraint: "+name);
             Find<Button>("fieldNavFarming").PerformClick();Layout();
             var railScroll=Find<Panel>("orbitalRailScroll");
@@ -100,7 +93,7 @@ public sealed partial class HunterForm
             railScroll.AutoScrollPosition=Point.Empty;Layout();
             if(scanner.PlayerKnown || scanner.RouteCount!=0 || !scanner.ReadingStatus.StartsWith("Connect"))
                 throw new Exception("The disconnected scanner invented live coordinates or routes.");
-            if(Find<Label>("orbitalSessionGold").Text!="—" || Find<Label>("orbitalGoldRate").Text!="— gold / active hour")
+            if(Find<Label>("overviewResourceGold").Text!="—" || Find<Label>("orbitalGoldRate").Text!="— / active hour")
                 throw new Exception("Unknown wallet values were presented as known telemetry.");
             Find<Button>("fieldNavOverview").PerformClick();Layout();
             Capture("orbital-ops-overview.png");
@@ -144,6 +137,12 @@ public sealed partial class HunterForm
             fixture.SetReadings(false,null,[(0,primary)],new Vec(12,12),0,[],10,null,35);
             if(fixture.PlayerKnown || fixture.RouteCount!=0)throw new Exception("Disconnect retained a live scanner marker.");
             CheckOrbitalAcceptedPoll(fixture);
+            fixture.CompactSnapshot=true;fixture.Size=new Size(640,145);
+            fixture.SetReadings(true,8,[(0,primary),(1,alternative)],new Vec(15,20),.6,[],10,primary.Anchor,35);
+            using(var compact=new Bitmap(fixture.Width,fixture.Height))
+            {fixture.DrawToBitmap(compact,new Rectangle(Point.Empty,fixture.Size));compact.Save(Path.Combine(AppContext.BaseDirectory,"session-desk-route-synthetic.png"));}
+            fixture.SetReadings(false,null,[],null,0,[],10,null,35);
+            if(fixture.PlayerKnown || fixture.RouteCount!=0)throw new Exception("Compact snapshot retained readings after disconnect.");
             using(var gold=new Bitmap(28,28))
             {
                 using var g=Graphics.FromImage(gold);g.Clear(Color.Transparent);CrownfireControls.Glyph(g,"Gold",new RectangleF(0,0,28,28),ImperialTheme.Accent);

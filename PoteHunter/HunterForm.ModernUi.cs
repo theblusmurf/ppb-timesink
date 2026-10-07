@@ -218,7 +218,7 @@ public sealed partial class HunterForm
         overlayPage.Controls.Add(overlayBody);tabs.TabPages.Add(overlayPage);
         var navigation=BuildGroupedNavigation(nav,tabs,overviewPage,farming,setupPage,packs,featurePages,indexPage,overlayPage,
             (title)=>{pageTitle.Text=title=="Overview"?"The Endless Pursuit":title;
-                pageSubtitle.Text=title=="Overview"?"Current-zone routes, player readings and session resources.":
+                pageSubtitle.Text=title=="Overview"?"Session Desk · earnings, resources and route controls.":
                     title=="Farming"?"Your targets, automatic actions and saved routes.":
                     title=="Death recovery"?"Revival, return routes and recovery settings.":
                     subtitles.GetValueOrDefault(tabs.SelectedTab?.Text??"","Your settings and live details.");pageSubtitle.AutoEllipsis=true;});

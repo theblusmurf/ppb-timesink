@@ -36,16 +36,17 @@ internal static class CrownfireControls
             g.DrawPath(edge,shape);
             var textBounds=new Rectangle(9,2,Math.Max(1,button.Width-18),Math.Max(1,button.Height-4));
             string icon=button.Name.StartsWith("fieldNav")?button.Text:
-                button.Name.StartsWith("overviewTarget")?button.Text:
+                button.Name.StartsWith("overviewTarget") || button.Name.StartsWith("deskTarget")?button.Text:
                 button.Text.StartsWith("Start")?"Play":button.Text.StartsWith("Stop")?"Stop":
                 button.Text=="Connect"?"Connect":button.Name.StartsWith("overviewRoute")?"Route":"";
             Color ink=button.Enabled?button.ForeColor:ImperialTheme.Muted;
-            bool target=button.Name.StartsWith("overviewTarget");
+            bool target=button.Name.StartsWith("overviewTarget") || button.Name.StartsWith("deskTarget");
+            float portraitSize=button.Name.StartsWith("deskTarget")?32:48;
             if(icon.Length>0)
             {
-                var rect=target?new RectangleF((button.Width-48)/2f,5,48,48):new RectangleF(10,(button.Height-19)/2f,19,19);
+                var rect=target?new RectangleF((button.Width-portraitSize)/2f,5,portraitSize,portraitSize):new RectangleF(10,(button.Height-19)/2f,19,19);
                 if(target)ImperialTheme.DrawTarget(g,icon,rect);else Glyph(g,icon,rect,ink);
-                if(target)textBounds=new(4,53,button.Width-8,button.Height-55);
+                if(target)textBounds=new(4,(int)portraitSize+5,button.Width-8,button.Height-(int)portraitSize-7);
                 else {textBounds.X+=26;textBounds.Width=Math.Max(1,textBounds.Width-26);}
             }
             var flags=TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.NoPrefix;

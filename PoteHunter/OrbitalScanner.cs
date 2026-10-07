@@ -15,6 +15,7 @@ internal sealed class OrbitalScanner : Control
     internal bool PlayerKnown => player.HasValue;
     internal Vec? PlayerPosition => player;
     internal int RouteCount => routes.Length;
+    internal bool CompactSnapshot;
     internal IReadOnlyList<RectangleF> LastLabelBounds { get; private set; } = [];
     internal string ReadingStatus { get; private set; } = "Connect the game to read your current zone.";
 
@@ -58,6 +59,7 @@ internal sealed class OrbitalScanner : Control
         var g = e.Graphics; g.Clear(BackColor); g.SmoothingMode = SmoothingMode.AntiAlias;
         LastLabelBounds = [];
         if (Width < 80 || Height < 80) return;
+        if(CompactSnapshot) { DrawSnapshot(g); return; }
         float dpi = DeviceDpi / 96f;
         float diameter = Math.Max(1, Math.Min(Width - 42 * dpi, Height - 74 * dpi));
         var center = new PointF(Width / 2f, (Height - 22 * dpi) / 2f);
@@ -199,6 +201,66 @@ internal sealed class OrbitalScanner : Control
         TextRenderer.DrawText(g, "N", small, new Point((int)(center.X - 4 * dpi), (int)(center.Y - radius - 18 * dpi)), ImperialTheme.Muted);
         TextRenderer.DrawText(g, "S", small, new Point((int)(center.X - 4 * dpi), (int)(center.Y + radius + 3 * dpi)), ImperialTheme.Muted);
         TextRenderer.DrawText(g, ReadingStatus, small, new Rectangle(4, Height - (int)(23 * dpi), Width - 8, (int)(20 * dpi)), ImperialTheme.Muted,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+
+    void DrawSnapshot(Graphics g)
+    {
+        float dpi = DeviceDpi / 96f;
+        var canvas = new RectangleF(10 * dpi, 8 * dpi, Width - 20 * dpi, Height - 38 * dpi);
+        using var grid = new Pen(Color.FromArgb(45, 58, 63), .7f * dpi);
+        for(float x = canvas.Left; x <= canvas.Right; x += 28 * dpi) g.DrawLine(grid, x, canvas.Top, x, canvas.Bottom);
+        for(float y = canvas.Top; y <= canvas.Bottom; y += 28 * dpi) g.DrawLine(grid, canvas.Left, y, canvas.Right, y);
+        var points = routes.SelectMany(r => r.Route.Points.Append(r.Route.Anchor)).ToList();
+        if(player is Vec current) points.Add(current);
+        using var small = new Font("Segoe UI", 8.5f);
+        if(points.Count == 0)
+        {
+            TextRenderer.DrawText(g, connected ? "No saved route in this zone" : "Connect to view your route", small,
+                Rectangle.Round(canvas), ImperialTheme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+        else
+        {
+            float inset = 12 * dpi;
+            double minX = points.Min(p => p.X), maxX = points.Max(p => p.X), minY = points.Min(p => p.Y), maxY = points.Max(p => p.Y);
+            double width = Math.Max(30, maxX - minX + corridor * 2), height = Math.Max(30, maxY - minY + corridor * 2);
+            float scale = (float)Math.Min((canvas.Width - inset * 2) / width, (canvas.Height - inset * 2) / height);
+            PointF Project(Vec p) => new(canvas.Left + canvas.Width / 2 + (float)(p.X - (minX + maxX) / 2) * scale,
+                canvas.Top + canvas.Height / 2 - (float)(p.Y - (minY + maxY) / 2) * scale);
+            var saved = g.Save(); g.SetClip(canvas);
+            if(farmingAnchor is Vec home)
+            {
+                var at = Project(home); float r = (float)farmingRadius * scale;
+                using var area = new Pen(Color.FromArgb(90, 140, 191, 150), dpi) { DashStyle = DashStyle.Dash };
+                g.DrawEllipse(area, at.X - r, at.Y - r, r * 2, r * 2);
+            }
+            Color[] colors = [ImperialTheme.Accent, ImperialTheme.RouteBlue, ImperialTheme.RouteRose];
+            foreach(var (slot, route) in routes)
+            {
+                var color = colors[Math.Clamp(slot, 0, 2)]; var path = route.Points.Select(Project).ToArray();
+                using var line = new Pen(color, 2 * dpi) { LineJoin = LineJoin.Round, DashStyle = slot > 0 ? DashStyle.Dash : DashStyle.Solid };
+                if(path.Length > 1)
+                {
+                    if(RecoveryTravel.Recorded(route))
+                    {
+                        using var corridorFill = new Pen(Color.FromArgb(22, color), Math.Max(dpi, (float)corridor * 2 * scale));
+                        g.DrawLines(corridorFill, path);
+                    }
+                    g.DrawLines(line, path);
+                }
+                var at = Project(route.Anchor); using var marker = new SolidBrush(color);
+                g.FillEllipse(marker, at.X - 4 * dpi, at.Y - 4 * dpi, 8 * dpi, 8 * dpi);
+            }
+            if(player is Vec self)
+            {
+                var at = Project(self); using var marker = new SolidBrush(Color.White);
+                g.FillEllipse(marker, at.X - 4 * dpi, at.Y - 4 * dpi, 8 * dpi, 8 * dpi);
+                var forward = Movement.FromClientHeading(heading); using var facing = new Pen(Color.White, 2 * dpi);
+                g.DrawLine(facing, at, new PointF(at.X + (float)forward.X * 14 * dpi, at.Y - (float)forward.Y * 14 * dpi));
+            }
+            g.Restore(saved);
+        }
+        TextRenderer.DrawText(g, ReadingStatus, small, new Rectangle(4, Height - (int)(24 * dpi), Width - 8, (int)(22 * dpi)), ImperialTheme.Muted,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 }

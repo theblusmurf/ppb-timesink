@@ -10,7 +10,9 @@ Use the left navigation to open Overview, Hunt, Routes, Recovery or Settings. Ex
 
 ## Overview and routes
 
-The circular overview scanner displays current saved-route and player information. Its presentation does not change route following, movement, target selection or the navigation radius. Missing or disconnected readings remain explicitly unavailable. Routes retains the existing 2D/3D navigation tools and passive overlays.
+Overview uses the selected Session Desk arrangement: hunt mode and target filter at the top, then net gold, active time and tracked kills. The five-row resource ledger sits beside a compact route snapshot with target-family shortcuts. Six collapsible configuration sections share the existing Farming settings. Columns adapt to the available window width and expanded sections remain scrollable. The main navigation and Farming page remain available.
+
+The compact route snapshot displays current saved-route and accepted player readings. Its presentation does not change route following, movement, target selection or the navigation radius. Missing or disconnected readings remain explicitly unavailable. Routes retains the existing 2D/3D navigation tools and passive overlays.
 
 Session information comes from the existing loot tracker. Gold is the wallet's net change from the session baseline, including spending; an unavailable wallet is shown as unavailable. Metals and gems remain detected item totals. Rates use the existing session timer.
 

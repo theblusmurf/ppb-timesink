@@ -118,6 +118,7 @@ public sealed partial class HunterForm
             FieldVitalMeter.Read("HP","").Text!="HP unknown")throw new Exception("Unknown/disconnected vitals were shown as known.");
         CheckFieldOverview(tabs);
         CheckOrbitalUi(tabs);
+        CheckSessionDesk(tabs);
         int originalMode=compactMode.SelectedIndex;
         compactMode.SelectedIndex=3;PerformLayout();Application.DoEvents();
         if(!tankPicker.Visible || !healingSkillKeys.Visible || autoRevive.Visible)

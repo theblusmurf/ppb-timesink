@@ -69,8 +69,8 @@ public sealed partial class HunterForm
                 throw new Exception("Overview healer state differs from detailed settings.");
             compactMode.SelectedIndex = 0; refreshOverview?.Invoke();
             foreach(string name in new[] { "Gold", "Silvin", "Mithril", "Iternium", "Fehu", "Gems" })
-                if(!Find<Label>("overviewResource"+name).Text.StartsWith(LootTrackerSnapshot.DisplayName(name)+"\n")) throw new Exception("Overview resource missing: "+name);
-            if(Find<Label>("overviewResourceGold").Text!="Gold (net)\n—")throw new Exception("Unavailable Overview wallet was shown as earnings");
+                if(Find<Label>("overviewResource"+name).Text != lootTracker.Snapshot().AmountText(name)) throw new Exception("Overview resource differs from tracker: "+name);
+            if(Find<Label>("overviewResourceGold").Text!="—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
             if(Text!="PlayPoteBot · Orbital Ops")throw new Exception("PlayPoteBot title branding was lost.");
             Find<CollapsibleSection>("overviewFoldRecovery").Expanded = true;
@@ -121,6 +121,7 @@ public sealed partial class HunterForm
         columns.Controls.Add(left, 0, 0); columns.Controls.Add(right, 1, 0);
         CompactAdd(body, columns);
         var updates = new List<Action>();
+        var overviewActions = new Dictionary<Control, Action>();
         bool syncing = false;
         bool CanEdit(Control source, bool combatOnly = false) => !working && !busy && !clientRecoveryRunning && source.Enabled && (!combatOnly || !healerMode.Checked);
         void OpenSetup(Control? control = null)
@@ -131,7 +132,7 @@ public sealed partial class HunterForm
         Button Link(string text, Action action, string name = "")
         {
             var button = new Button { Name = name, Text = text, AutoSize = true, Margin = new Padding(0, 3, 6, 3) };
-            button.Click += (_, _) => action(); return button;
+            button.Click += (_, _) => action(); overviewActions[button] = action; return button;
         }
         CheckBox Toggle(string name, string text, CheckBox source, bool combatOnly = false)
         {
@@ -229,11 +230,12 @@ public sealed partial class HunterForm
         {
             int selectedSlot = slot;
             var button = new Button { Name = "overviewRoute" + slot, Dock = DockStyle.Top, Height = 35, Margin = new Padding(0, 0, 0, 5), TextAlign = ContentAlignment.MiddleLeft };
-            button.Click += (_, _) =>
+            Action selectRoute = () =>
             {
                 if(CanEdit(savedNavigationSlot)) savedNavigationSlot.SelectedIndex = selectedSlot;
                 refreshOverview?.Invoke();
             };
+            button.Click += (_, _) => selectRoute(); overviewActions[button] = selectRoute;
             CompactAdd(routes.Content, button); routeButtons.Add(button);
         }
         savedNavigationSlot.SelectedIndexChanged += (_, _) => refreshOverview?.Invoke();
@@ -257,7 +259,8 @@ public sealed partial class HunterForm
         {
             targetButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
             var button = new Button { Name = "overviewTarget" + family, Text = family, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 6, 0), AccessibleDescription = "Select only the " + family + " target filter" };
-            button.Click += (_, _) => { if(CanEdit(filter, true)) { filter.Text = family; QueueCompactSave(); } refreshOverview?.Invoke(); };
+            Action selectTarget = () => { if(CanEdit(filter, true)) { filter.Text = family; QueueCompactSave(); } refreshOverview?.Invoke(); };
+            button.Click += (_, _) => selectTarget(); overviewActions[button] = selectTarget;
             targetPresets.Add((family, button)); targetButtons.Controls.Add(button);
         }
         CompactAdd(targets.Content, targetButtons);
@@ -344,8 +347,10 @@ public sealed partial class HunterForm
         }
         CompactAdd(session, resources);
         priorityHint.SetToolTip(session, "Gold is actual wallet change from the session baseline, including costs and other income. Other resources are detected-drop estimates. Rates use active farming time.");
-        ApplyOrbitalOverview(page, body, columns, left, right, anchor, routeMap, session, sessionHeader, resources,
+        PrepareFarmingControls(sessionHeader,
             folds, mode, targetFilter, mapOptions, foldToolbar, sessionInfo);
+        ApplySessionDesk(page, body, columns, left, right, anchor, routeMap, session, sessionHeader,
+            folds, mode, targetFilter, targetButtons, mapOptions, overviewActions, resourceLabels);
         string NumberText(decimal value) => value.ToString("0.#", CultureInfo.InvariantCulture);
         refreshOverview = () =>
         {
@@ -403,8 +408,9 @@ public sealed partial class HunterForm
                 refreshOrbitalTelemetry?.Invoke(snapshot);
                 string duration = $"{(int)snapshot.RateElapsed.TotalHours:00}:{snapshot.RateElapsed.Minutes:00}:{snapshot.RateElapsed.Seconds:00}";
                 sessionInfo.Text = $"Active time  {duration}     ·     Gold / hour  {snapshot.RateText("Gold")}     ·     Net wallet gold";
-                foreach(var (name, label) in resourceLabels) label.Text = LootTrackerSnapshot.DisplayName(name) + "\n" + snapshot.AmountText(name);
+                foreach(var (name, label) in resourceLabels) label.Text = snapshot.AmountText(name);
                 priorityHint.SetToolTip(resourceLabels["Gold"], snapshot.Wallet.Known ? $"Wallet {snapshot.Wallet.Current:N0} · Baseline {snapshot.Wallet.Baseline:N0} · {snapshot.Wallet.Status}" : snapshot.Wallet.Status);
+                refreshSessionDesk?.Invoke();
             }
             finally { syncing = false; }
         };

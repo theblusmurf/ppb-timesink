@@ -1,3 +1,14 @@
+## Release1.130
+
+Implement the selected Session Desk Overview.
+
+- Put operating mode, target filter and Gamekeeper priority above net gold, active time and tracked kills.
+- Place the five-row resource ledger beside a compact current-zone route snapshot, with loot details/reset actions and target-family shortcuts.
+- Add six accessible collapsed configuration sections with live summaries. Adapt the columns to the window width and keep expanded controls reachable through scrolling.
+- Share the existing guarded Farming settings and tracker readings. Preserve the main navigation, hotkeys, reset confirmations, gameplay behavior, settings format and verified local 3D maps. Unknown wallet and player readings remain unknown.
+
+Validate disconnected native rendering, two-way Overview/Farming bindings, target route selection, numeric/slider values, protected-state mutation guards, accessible folding and minimum/constrained window bounds alongside the existing offline/UI/package checks. No game input, live settings change or running-app replacement is performed.
+
 ## Release1.129
 
 Restore local 3D maps for the verified October 6 game client.
