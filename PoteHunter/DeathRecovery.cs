@@ -91,6 +91,7 @@ internal sealed class RecoveryPath
     const int MaximumLookaheadSegments=4;
     readonly Vec[] points;
     int index;
+    Vec? previousPosition;
     public int Index=>index;
     public RecoveryPath(IEnumerable<Vec> waypoints,Vec anchor)
     {
@@ -103,17 +104,13 @@ internal sealed class RecoveryPath
     // A clear, short lookahead avoids turning sideways just to touch the
     // projected route entry. Sharp corners and the final anchor stay exact.
     public bool Final=>index==points.Length-1;
-    // Straight recorded samples use continuous movement. A required bend or
-    // short final adjustment must release W and approach within its capture
-    // distance, rather than overshoot and turn back while enemies hit us.
+    // Gentle recorded curves retain continuous movement. Only a sharp bend or
+    // short final adjustment requires precise capture before the next segment.
     public double ArrivalTolerance=>Final?.5:index<points.Length &&
         (index>0 && !Straight(index-1) || !Straight(index) ||
-         CumulativeCurve(index) ||
          index==points.Length-2 && (points[index+1]-points[index]).Length<=2.5) ? .6 : 0;
-    // Several small bends can form a substantial curve even when no single
-    // recorded sample exceeds the sharp-corner threshold. Brake before that
-    // short curve, rather than steering at successive near-side samples while
-    // still carrying a full-speed turn toward the preceding one.
+    // Several small bends shorten steering lookahead without turning every
+    // sample into a stop/aim/pulse/settle cycle. Required corners remain exact.
     public double UpcomingCurvatureDegrees=>index<points.Length?Curvature(index):0;
     bool CumulativeCurve(int at)=>Curvature(at)>=CurveBrakingDegrees;
     double Curvature(int at)
@@ -145,17 +142,47 @@ internal sealed class RecoveryPath
     public Vec? Next(Vec current,Func<Vec,Vec,bool>? clear=null)
     {
         if(!current.Finite)throw new RouteUnavailableException("Character position is unavailable during recovery.");
+        Vec? before=previousPosition;previousPosition=current;
         // Intermediate waypoints are sampled closely together. Never advance
         // merely because one frame of movement was sent to the client.
         while(index<points.Length && (points[index]-current).Length<=(index==points.Length-1?.5:.6))index++;
         // Advance only locally, with an independently checked segment. Never
         // search globally for a closer point on a loop or skip a sharp bend.
         if(clear!=null)
+        {
+            // A delayed client position can cross a straight sample by more
+            // than its proximity window. Require an observed forward crossing
+            // inside the local route corridor, rather than turning back toward
+            // a checkpoint already passed. New paths have no crossing history.
+            if(before is Vec observed && PassedCheckpoint(observed,current,clear))index++;
             while(index<points.Length-1 && (points[index]-current).Length<=1.25 &&
                 (points[index+1]-current).Length<=4 &&
                 (index==0 || Straight(index-1)) && Straight(index) && !CumulativeCurve(index) && clear(current,points[index+1]))index++;
+        }
         return index<points.Length?points[index]:null;
     }
+
+    bool PassedCheckpoint(Vec before,Vec current,Func<Vec,Vec,bool> clear)
+    {
+        if(index<=0 || index>=points.Length-1 || ArrivalTolerance>0)return false;
+        Vec checkpoint=points[index],incoming=checkpoint-points[index-1],outgoing=points[index+1]-checkpoint;
+        if(incoming.Length<=.0001 || outgoing.Length<=.0001)return false;
+        Vec direction=incoming/incoming.Length;
+        double beforeAlong=Dot(before-checkpoint,direction),afterAlong=Dot(current-checkpoint,direction);
+        // Bounded local observations cannot identify a remote connector, a
+        // return leg on a loop, a sideways crossing, or a backwards step as
+        // forward route progress. The next checkpoint must still lie ahead.
+        if(beforeAlong>0 || beforeAlong<-SteeringLookaheadUnits || afterAlong<=0 || afterAlong>2.5 ||
+            (points[index+1]-current).Length>4 || Dot(points[index+1]-current,direction)<=0 ||
+            (before-checkpoint-direction*beforeAlong).Length>SteeringCorridorUnits ||
+            (current-checkpoint-direction*afterAlong).Length>SteeringCorridorUnits)return false;
+        Vec onward=outgoing/outgoing.Length;
+        double onwardAlong=Dot(current-checkpoint,onward);
+        if(onwardAlong<0 || (current-checkpoint-onward*onwardAlong).Length>SteeringCorridorUnits)return false;
+        return clear(before,current) && clear(checkpoint,current) && clear(current,points[index+1]);
+    }
+
+    static double Dot(Vec a,Vec b)=>a.X*b.X+a.Y*b.Y;
 
     // Steering is separate from checkpoint progression. Call Next first and
     // keep its checkpoint for arrival, progress and blocked-route checks. This
@@ -167,16 +194,25 @@ internal sealed class RecoveryPath
             throw new RouteUnavailableException("A live route checkpoint is required for steering.");
         Vec checkpoint=points[index];
         double distance=(checkpoint-current).Length;
-        if(clear==null || ArrivalTolerance>0 || distance>=SteeringLookaheadUnits ||
+        double lookahead=Math.Clamp(SteeringLookaheadUnits/(1+UpcomingCurvatureDegrees/90),1.75,SteeringLookaheadUnits);
+        if(clear==null || index==0 || ArrivalTolerance>0 || distance>=lookahead ||
             !clear(current,checkpoint))return checkpoint;
-        double remaining=SteeringLookaheadUnits-distance;
+        // The chord corridor below bounds the lookahead after the checkpoint.
+        // Independently require the current position inside the original
+        // incoming segment: shortening the chord must not turn an off-route
+        // connector into permission to skip its required entry point.
+        Vec incoming=checkpoint-points[index-1];double square=Dot(incoming,incoming);
+        if(square<=.0001)return checkpoint;
+        double progress=Math.Clamp(Dot(current-points[index-1],incoming)/square,0,1);
+        if((current-(points[index-1]+incoming*progress)).Length>SteeringCorridorUnits)return checkpoint;
+        double remaining=lookahead-distance;
         Vec accepted=checkpoint,previous=checkpoint;
         var corridor=new List<Vec>{current,checkpoint};
         for(int next=index+1;next<points.Length-1 && next<=index+MaximumLookaheadSegments && remaining>.01;next++)
         {
             // Do not look through a required corner, a U-turn, or the final
             // anchor. The controller must capture those checkpoints exactly.
-            if(!Straight(next-1) || !Straight(next) || CumulativeCurve(next))break;
+            if(!Straight(next-1) || !Straight(next))break;
             Vec delta=points[next]-previous;double length=delta.Length;
             if(length<=.0001){previous=points[next];continue;}
             double step=Math.Min(remaining,length);

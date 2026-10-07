@@ -1857,7 +1857,7 @@ public sealed partial class HunterForm : Form
             async Task<bool> DefendDuringAnchorReturn(CancellationToken defenseToken)
             {
                 Input.CheckSafety(defenseToken);
-                if(!StationaryReturnContext())return false;
+                if(!StationaryReturnContext() || (world.PlayerPosition()-anchor).Length<=NearbyLootPickup.AnchorArrivalTolerance)return false;
                 RefreshGuardScene();
                 var health=world.HealthSnapshot();var position=world.PlayerPosition();int level=world.PlayerLevel();
                 ObserveEncounter(o,health,position,level);
@@ -1876,10 +1876,13 @@ public sealed partial class HunterForm : Form
                     RefreshGuardScene();var liveHealth=world.HealthSnapshot();var self=world.LocalPlayer();
                     var current=entities.FirstOrDefault(e=>TargetIdentity(e)==TargetIdentity(candidate));
                     bool ambiguous=entities.Any(e=>e.Id==candidate.Id && TargetIdentity(e)!=TargetIdentity(candidate));
+                    // A new Gamekeeper relinquishes this borrowed farming slice;
+                    // route arrival still owns travel until the actual anchor.
+                    bool priorityChanged=GamekeeperPriority.ShouldYield(current,PriorityGamekeeper(o));
                     ObserveEncounter(o,liveHealth,self.Position,level);
                     return new(self.Position,anchor,liveHealth.GetValueOrDefault(self.Id),current,
                         liveHealth.GetValueOrDefault(candidate.Id),swingRange,
-                        !ambiguous && deathRecovery.Episode==episode && anchor==defenseAnchor && StationaryReturnContext(),
+                        !ambiguous && !priorityChanged && deathRecovery.Episode==episode && anchor==defenseAnchor && StationaryReturnContext(),
                         current!=null && (encounter.IsEngaged(current) || courtesy.StartedHere(current) || MatchesRequestedTarget(current,o,level)) &&
                         TargetGuardReason(current,liveHealth.GetValueOrDefault(current.Id),self.Position,o)==null);
                 }
@@ -1937,13 +1940,38 @@ public sealed partial class HunterForm : Form
                 }
             }
 
+            bool savedFacingDeferredForPriority=false;
+            bool HandOffArrivedGamekeeper()
+            {
+                if(!activeFarmOnArrival || !o.PrioritizeGamekeeper || o.GroupMode || o.HealerMode)return false;
+                RefreshGuardScene();
+                var self=world.LocalPlayer();var health=world.HealthSnapshot();
+                var priority=PriorityGamekeeper(o);
+                bool context=!o.GroupMode && !o.HealerMode && !repairInProgress &&
+                    (!deathRecovery.Pending || deathRecovery.RepairCompleted) && runCharacter!=null &&
+                    LocalCharacter.Same(runCharacter,self) && world.ActiveZone()==runZone &&
+                    double.IsFinite(self.Height) && double.IsFinite(savedHuntHeight) && self.Height>0 && savedHuntHeight>0 &&
+                    Math.Abs(self.Height-savedHuntHeight)<2 && Avoidance.BlockedPoint(self.Position,avoidZones)==null &&
+                    (!o.UseAlternativeHuntRoutes || !RecoveryRouting.Occupied(anchor,savedHuntHeight,activeRouteProfile is {HuntRadius:>0} route ? route.HuntRadius:(double)o.HuntRadius,entities,guardSelfId));
+                if(!GamekeeperPriority.ShouldHandOffAtAnchor(activeFarmOnArrival,o.PrioritizeGamekeeper,context,
+                    self.Position,anchor,health.GetValueOrDefault(self.Id),priority,
+                    priority==null?default:health.GetValueOrDefault(priority.Id)))return false;
+                pendingPriorityGamekeeper=priority;
+                RememberGamekeeperReturn(self.Position);gamekeeperDefeated=false;
+                savedFacingDeferredForPriority=true;
+                TraceLog.Record("anchor arrival handed off to Gamekeeper",new{priority!.Id,priority.DisplayName,
+                    Position=self.Position,Anchor=anchor,SavedHeading=gamekeeperReturnHeading,
+                    ReturnPending=gamekeeperReturnPending,RecoveryPending=deathRecovery.Pending});
+                return true;
+            }
             Task RestoreSavedHuntFacing(CancellationToken restoreToken)=>RestoreHuntFacing(restoreToken,1);
             Task RestoreLootFacing(CancellationToken restoreToken)=>RestoreHuntFacing(restoreToken,3);
             async Task RestoreHuntFacing(CancellationToken restoreToken,int attempts)
             {
+                savedFacingDeferredForPriority=false;
                 if(!double.IsFinite(gamekeeperReturnHeading))return;
                 Vec desiredForward=Movement.FromClientHeading(gamekeeperReturnHeading);
-                int observations=await FacingRestore.RunAsync(ct=>drive.Face(world,desiredForward,ct),drive.ResetTurnResponse,
+                int observations=await FacingRestore.RunAsync(ct=>HandOffArrivedGamekeeper()?Task.FromResult(true):drive.Face(world,desiredForward,ct),drive.ResetTurnResponse,
                     ()=>drive.StopApproach(),Input.Delay,()=>Environment.TickCount64,
                     ()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward),restoreToken,attempts,
                     attempt=>TraceLog.Record("saved facing retry",new{Attempt=attempt,Position=world.PlayerPosition(),Heading=gamekeeperReturnHeading}),
@@ -1955,7 +1983,8 @@ public sealed partial class HunterForm : Form
                     deadlineFailure:()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward,
                         "Saved facing did not settle within its turn-speed allowance."),
                     errorRadians:()=>Movement.Angle(Movement.FromClientHeading(world.PlayerHeading()),desiredForward));
-                TraceLog.Record("restored saved hunt facing",new {Heading=gamekeeperReturnHeading,Position=world.PlayerPosition(),Attempts=observations,Zone=runZone});
+                if(!savedFacingDeferredForPriority)
+                    TraceLog.Record("restored saved hunt facing",new {Heading=gamekeeperReturnHeading,Position=world.PlayerPosition(),Attempts=observations,Zone=runZone});
             }
             var fallbackCycle=new RecoveryFallbackCycle(activeSavedRouteSlot);
             var recoveryReference=activeRouteProfile;
@@ -2071,6 +2100,7 @@ public sealed partial class HunterForm : Form
                 deathReturnInProgress=true;returningFromPriority=true;
                 Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();drive.ResetTurnResponse();
                 RecoveryPath? path=null;
+                var defenseCadence=new AnchorReturnDefenseCadence();
                 long nextOccupancyCheck=0,progressAt=Environment.TickCount64;
                 int progressIndex=-1;double bestDistance=double.PositiveInfinity;
                 bool alternatives=!o.GroupMode && o.UseAlternativeHuntRoutes;
@@ -2127,13 +2157,8 @@ public sealed partial class HunterForm : Form
                                 plan.Points.Select(p=>(p-anchor).Length+2).DefaultIfEmpty(0).Max()));
                             navigation.BeginGoal(fallbackCycle.Waiting?"retreat on saved route to revival point":"follow saved return route");
                         }
-                        long defenseAt=Environment.TickCount64;
-                        if(!fallbackCycle.Waiting && await DefendDuringAnchorReturn(returnToken))
-                        {
-                            // Fighting in place is not failed route progress.
-                            progressAt+=Math.Max(0,Environment.TickCount64-defenseAt);
-                            await Input.Delay(20,returnToken);continue;
-                        }
+                        // Finish an arrived route before lending another defense
+                        // slice. Repeated nearby spawns cannot postpone arrival.
                         Vec? goal=path.Next(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && navigation.CanAdvance(from,to,avoidZones));
                         if(goal==null)
                         {
@@ -2155,13 +2180,28 @@ public sealed partial class HunterForm : Form
                             var arrivedBody=world.LocalPlayer();
                             if(!RecoveryRouting.Compatible(activeRouteProfile!,runZone!.Value,runCharacter.Name,arrivedBody.Height))
                                 throw new RouteUnavailableException("Saved anchor position reached on a different or unreadable floor; route arrival was not confirmed.");
+                            await Input.Delay(120,returnToken);
+                            if(!AnchorArrival.Settled(current,world.PlayerPosition(),anchor,NearbyLootPickup.AnchorArrivalTolerance)){ResetPath();continue;}
                             await RestoreSavedHuntFacing(returnToken);
                             RefreshGuardScene();if(ChooseDestination())continue;
                             if((world.PlayerPosition()-anchor).Length>.5){ResetPath();continue;}
                             fallbackCycle.Arrived(activeSavedRouteSlot);
-                            message="Returned to saved anchor and facing";
-                            TraceLog.Record("saved hunt anchor reached",new{Position=world.PlayerPosition(),Anchor=anchor,Heading=gamekeeperReturnHeading,Slot=activeSavedRouteSlot,AfterDeath=afterDeath,UsedSavedRoute=true,Zone=runZone});
+                            message=savedFacingDeferredForPriority?"Saved anchor reached; prioritizing Gamekeeper":"Returned to saved anchor and facing";
+                            TraceLog.Record("saved hunt anchor reached",new{Position=world.PlayerPosition(),Anchor=anchor,Heading=gamekeeperReturnHeading,
+                                FacingRestored=!savedFacingDeferredForPriority,PriorityGamekeeper=savedFacingDeferredForPriority,
+                                Slot=activeSavedRouteSlot,AfterDeath=afterDeath,UsedSavedRoute=true,Zone=runZone});
                             return;
+                        }
+                        if(!fallbackCycle.Waiting && defenseCadence.TryBegin(Environment.TickCount64))
+                        {
+                            long defenseAt=Environment.TickCount64;bool defended;
+                            try {defended=await DefendDuringAnchorReturn(returnToken);}
+                            finally {defenseCadence.Complete(Environment.TickCount64);}
+                            if(defended)
+                            {
+                                progressAt+=Math.Max(0,Environment.TickCount64-defenseAt);
+                                await Input.Delay(20,returnToken);continue;
+                            }
                         }
                         double distance=(goal.Value-current).Length;
                         if(path.Index!=progressIndex || distance<bestDistance-.15){progressIndex=path.Index;bestDistance=distance;progressAt=now;}

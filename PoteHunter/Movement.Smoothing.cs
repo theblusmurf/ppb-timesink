@@ -141,23 +141,12 @@ internal static class AnchorArrival
         if(!anchor.Finite || !double.IsFinite(tolerance) || tolerance<=0)throw new ArgumentOutOfRangeException(nameof(anchor));
         long startedAt=clock(),deadline=startedAt+15000,hardDeadline=startedAt+120000;
         double bestDistance=double.PositiveInfinity;
+        var defenseCadence=new AnchorReturnDefenseCadence();
         try
         {
             while(clock()<deadline && clock()<hardDeadline)
             {
                 token.ThrowIfCancellationRequested();
-                if(defend!=null)
-                {
-                    long defenseAt=clock();
-                    // The injected stationary defense owns/relinquishes its
-                    // attack input. It must not leave attack held when it
-                    // returns false and this controller resumes aiming.
-                    if(await defend(token))
-                    {
-                        deadline=Math.Min(hardDeadline,deadline+Math.Max(0,clock()-defenseAt));
-                        stop();await delay(20,token);continue;
-                    }
-                }
                 Vec before=position();
                 if(!before.Finite)throw new InvalidOperationException("Anchor return position is unavailable.");
                 double distance=(before-anchor).Length;
@@ -165,8 +154,19 @@ internal static class AnchorArrival
                 {
                     bestDistance=distance;deadline=Math.Min(hardDeadline,clock()+15000);
                 }
-                if((before-anchor).Length>tolerance)
+                if(distance>tolerance)
                 {
+                    if(defend!=null && defenseCadence.TryBegin(clock()))
+                    {
+                        long defenseAt=clock();bool defended;
+                        try {defended=await defend(token);}
+                        finally {defenseCadence.Complete(clock());}
+                        if(defended)
+                        {
+                            deadline=Math.Min(hardDeadline,deadline+Math.Max(0,clock()-defenseAt));
+                            stop();await delay(20,token);continue;
+                        }
+                    }
                     await approach(token);await delay(20,token);continue;
                 }
                 stop();await delay(120,token);

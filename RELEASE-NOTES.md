@@ -1,3 +1,14 @@
+## Release1.128
+
+Smooth saved-route travel and prioritize Gamekeeper as soon as the actual anchor is reached.
+
+- Advance a crossed straight waypoint only when consecutive measured positions prove local forward passage inside the saved corridor and all checked segments are clear. This avoids turning back toward an already-passed sample. Keep sharp corners, final connectors and the exact 0.5-unit anchor arrival.
+- Follow gentle curves continuously with shorter bounded steering lookahead, instead of stopping and correcting at every accumulated bend. Preserve collision, corridor, movement-progress and turn-response checks.
+- Finish confirmed anchor arrival before another farm-target defense slice. Leave 500 milliseconds for approach between bounded defense slices so repeated nearby spawns cannot indefinitely postpone the last step.
+- Hand an approved living Gamekeeper to normal priority targeting before restoring saved facing. Keep the original anchor/direction for the return after its defeat; retain completed revival/repair progress and ordinary engagements. Respect disabled farming/priority, occupied alternatives, identity, floor and target protections.
+
+Validate crossed-waypoint, blocked/corner/final-route, gentle-curve, defense/arrival ordering and Gamekeeper handoff regressions, builds and existing offline/UI/installer checks without game input. Live movement and combat remain to be verified after upgrading; leave the running application and live configuration untouched.
+
 ## Release1.127
 
 Fix the Saved routes panel alignment in Navigation.

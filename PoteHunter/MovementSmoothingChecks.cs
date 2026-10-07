@@ -361,21 +361,30 @@ internal static class MovementSmoothingChecks
         catch(OperationCanceledException){rejected=true;}
         Require(rejected && stops>0,"focus/preflight rejection did not release movement");
 
+        // Arrived characters must finish before another borrowed farm-defense
+        // slice. The old ordering renewed defense forever at the endpoint.
         clock=0;stops=0;pos=new(.10,0);int defenses=0;faces=0;
         bool defendedReturn=await AnchorArrival.ReturnAsync(()=>pos,default,.15,
             _=>throw new Exception("Defense moved a settled character"),()=>stops++,
             _=>{faces++;return Task.CompletedTask;},Delay,()=>clock,default,
-            _=>{if(defenses++<20){clock+=1000;return Task.FromResult(true);}return Task.FromResult(false);});
-        Require(defendedReturn && clock>20000 && faces==1 && stops>=21,
-            "stationary defense consumed the active correction budget or bypassed confirmed facing");
-        clock=0;stops=0;faces=0;
+            _=>{defenses++;clock+=1000;return Task.FromResult(true);});
+        Require(defendedReturn && defenses==0 && faces==1 && clock==240,
+            "a continuous farm spawn postponed confirmed endpoint arrival");
+        clock=0;stops=0;faces=0;moves=0;defenses=0;pos=new(1,0);
+        bool progressedUnderDefense=await AnchorArrival.ReturnAsync(()=>pos,default,.15,
+            _=>{moves++;pos-=new Vec(.2,0);clock+=50;return Task.CompletedTask;},()=>stops++,
+            _=>{faces++;return Task.CompletedTask;},Delay,()=>clock,default,
+            _=>{defenses++;clock+=1000;return Task.FromResult(true);});
+        Require(progressedUnderDefense && defenses==1 && moves==5 && faces==1 && pos.Length<=.15,
+            "continuous nearby targets starved the movement opportunity or bypassed settled arrival");
+        clock=0;stops=0;faces=0;moves=0;pos=new(1,0);
         bool endlessDefense=await AnchorArrival.ReturnAsync(()=>pos,default,.15,
-            _=>throw new Exception("Endless defense approached"),()=>stops++,
+            _=>{moves++;return Task.CompletedTask;},()=>stops++,
             _=>{faces++;return Task.CompletedTask;},Delay,()=>clock,default,
             _=>{clock+=1000;return Task.FromResult(true);});
-        Require(!endlessDefense && clock>=120000 && clock<=121020 && faces==0 && stops>0,
-            "defense extension lost its hard total bound or claimed unconfirmed arrival");
-        clock=0;stops=0;bool defenseCancelled=false;
+        Require(!endlessDefense && clock>=15000 && clock<=121020 && faces==0 && stops>0 && moves>0,
+            "defense extension lost its hard bound, starved approach or claimed unconfirmed arrival");
+        clock=0;stops=0;pos=new(1,0);bool defenseCancelled=false;
         try {await AnchorArrival.ReturnAsync(()=>pos,default,.15,_=>Task.CompletedTask,()=>stops++,
             _=>Task.CompletedTask,Delay,()=>clock,default,_=>throw new OperationCanceledException("Defense stopped"));}
         catch(OperationCanceledException){defenseCancelled=true;}
@@ -422,7 +431,7 @@ internal static class MovementSmoothingChecks
                 "progress-aware facing hard total bound and unavailable-error guard",
                 "recorded sub-frame steps excluded from speed training","frame-sized pulse and filtered speed gain",
                 "frame-quantized precise arrival","recorded post-facing drift rejected","settle then face then recheck",
-                "blocked/cancelled/focus-lost return releases movement","bounded stationary defense preserves active return budget",
+                "blocked/cancelled/focus-lost return releases movement","anchor arrival precedes defense; bounded slices leave approach time",
                 "persistent damage quiet period","stationary defense family/range/protection gates"}
         },new JsonSerializerOptions{WriteIndented=true}));
     }

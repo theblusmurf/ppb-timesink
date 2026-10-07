@@ -77,6 +77,7 @@ internal static class DeathRecoveryChecks
             throw new Exception("Lookahead skipped a distant required connector.");
         RecoveryArrivalBraking();
         RecoverySteering();
+        RecoveryObservedPassage();
 
         var self=new Entity(100,1,"Farmer",new(80,0),10,Model:"PC_MAN.GCMDS");
         var other=new Entity(200,2,"Neighbor",anchor,10,Model:"PC_MAN.GCMDS");
@@ -254,13 +255,22 @@ internal static class DeathRecoveryChecks
             new(6.784375,5.53390625),new(7.080625,7.6403125),new(7.1078125,9.161875)];
         var curved=new RecoveryPath(curve,new(7.1,13));
         curved.Next(curve[0],(_,_)=>false);
-        if(curved.Next(curve[1],(_,_)=>true)!=curve[2] || curved.ArrivalTolerance!=.6 ||
-            curved.UpcomingCurvatureDegrees<35 || curved.UpcomingCurvatureDegrees>40 ||
-            curved.SteeringGoal(curve[1],(_,_)=>true)!=curve[2])
-            throw new Exception("A dense multi-bend route still advanced at full speed into its cumulative curve.");
+        if(curved.Next(curve[1],(_,_)=>true)!=curve[2] || curved.ArrivalTolerance!=0 ||
+            curved.UpcomingCurvatureDegrees<35 || curved.UpcomingCurvatureDegrees>40)
+            throw new Exception("A gentle cumulative curve still forced precision stops at its recorded samples.");
+        Vec curveAim=curved.SteeringGoal(curve[1],(_,_)=>true);
+        double curveLookahead=RecoveryPath.SteeringLookaheadUnits/(1+curved.UpcomingCurvatureDegrees/90);
+        if(curveAim==curve[2] || (curveAim-curve[1]).Length>curveLookahead+.0001 || curved.Index!=2)
+            throw new Exception("A cumulative curve lost bounded forward lookahead or advanced its checkpoint while steering.");
         Vec nearCurve=curve[2]+new Vec(-.8,0);
         if(curved.Next(nearCurve,(_,_)=>true)!=curve[2] || curved.Index!=2)
-            throw new Exception("Local lookahead bypassed a required cumulative-curve capture.");
+            throw new Exception("Steering changed the conservative checkpoint capture of a cumulative curve.");
+        for(int sample=2;sample<curve.Length-1;sample++)
+        {
+            curved.Next(curve[sample],(_,_)=>false);
+            if(curved.ArrivalTolerance!=0)
+                throw new Exception("Consecutive gentle curve samples still alternated precision stop/aim/pulse movement.");
+        }
 
         Vec[] mild=[new(0,0),new(1.5,0),new(3,.15),new(4.5,.45),new(6,.9)];
         var path=new RecoveryPath(mild,new(8,1.3));
@@ -296,6 +306,13 @@ internal static class DeathRecoveryChecks
         transformed.Next(Transform(current),(_,_)=>false);
         if((transformed.SteeringGoal(Transform(current),(_,_)=>true)-Transform(aim)).Length>.000001)
             throw new Exception("Route steering depends on map origin or orientation.");
+        if(transformed.SteeringGoal(Transform(new(0,-1)),(_,_)=>true)!=Transform(mild[1]) ||
+            transformed.SteeringGoal(Transform(new(-5,0)),(_,_)=>true)!=Transform(mild[1]))
+            throw new Exception("Adaptive lookahead bypassed a rotated off-route or distant connector.");
+        var initialConnector=new RecoveryPath(mild.Skip(1),new(8,1.3));
+        initialConnector.Next(current,(_,_)=>false);
+        if(initialConnector.SteeringGoal(current,(_,_)=>true)!=mild[1])
+            throw new Exception("Steering looked beyond an unvisited initial route connector.");
 
         var final=new RecoveryPath([new(0,0),new(0,3)],new(0,6));
         final.Next(new(0,0),(_,_)=>false);
@@ -304,5 +321,61 @@ internal static class DeathRecoveryChecks
             final.SteeringGoal(new(0,3),(_,_)=>true)!=new Vec(0,6) ||
             final.Next(new(0,5.49),(_,_)=>true)!=new Vec(0,6) || final.Next(new(0,5.51),(_,_)=>true)!=null)
             throw new Exception("Steering loosened the exact final anchor envelope.");
+    }
+
+    static void RecoveryObservedPassage()
+    {
+        Vec[] straight=[new(0,0),new(0,3),new(0,7),new(0,11)];
+        foreach(double overshoot in new[]{1.3,1.5,2.0})
+        foreach(double angle in new[]{0.0,.73,-1.2,Math.PI})
+        {
+            Vec Transform(Vec value)=>Movement.Rotate(value,angle)+new Vec(20,-7);
+            var path=new RecoveryPath(straight.Select(Transform),Transform(straight[^1]));
+            if(path.Next(Transform(straight[0]),(_,_)=>false)!=Transform(straight[1]))
+                throw new Exception("Observed-passage fixture did not retain its first unvisited checkpoint.");
+            Vec current=Transform(new(0,3+overshoot));
+            Vec? next=path.Next(current,(_,_)=>true);
+            double error=Movement.Angle(Transform(new(0,4+overshoot))-current,path.SteeringGoal(current,(_,_)=>true)-current);
+            if(next!=Transform(straight[2]) || path.Index!=2 || Math.Abs(error)>.001)
+                throw new Exception("A delayed straight-route sample commanded a backwards turn after crossing its checkpoint.");
+            path.Next(Transform(new(0,0)),(_,_)=>false);
+            if(path.Index!=2)throw new Exception("Moving backwards regressed an observed route checkpoint.");
+        }
+
+        RecoveryPath NewStraight()=>new(straight,straight[^1]);
+        void Unpassed(Vec before,Vec current,Func<Vec,Vec,bool>? clear,string reason)
+        {
+            var path=NewStraight();path.Next(straight[0]);path.Next(before);
+            if(path.Next(current,clear)!=straight[1] || path.Index!=1)
+                throw new Exception("Observed route passage bypassed "+reason+".");
+        }
+        Unpassed(new(0,0),new(0,4.5),null,"unknown clearance");
+        Unpassed(new(0,0),new(0,4.5),(_,_)=>false,"blocked clearance");
+        Unpassed(new(0,0),new(0,4.5),(from,to)=>from!=new Vec(0,0) || to!=new Vec(0,4.5),"the traversed segment");
+        Unpassed(new(0,0),new(0,4.5),(from,to)=>from!=straight[1] || to!=new Vec(0,4.5),"the passed checkpoint connector");
+        Unpassed(new(0,0),new(0,4.5),(from,to)=>from!=new Vec(0,4.5) || to!=straight[2],"the onward connector");
+        Unpassed(new(.5,0),new(0,4.5),(_,_)=>true,"an off-route previous position");
+        Unpassed(new(0,0),new(.5,4.5),(_,_)=>true,"an off-route current position");
+        Unpassed(new(.2,4.5),new(-.2,4.5),(_,_)=>true,"a sideways crossing behind the checkpoint");
+        Unpassed(new(0,4.5),new(0,1.5),(_,_)=>true,"backwards travel");
+        Unpassed(new(0,0),new(0,6),(_,_)=>true,"an overlong jump");
+        Unpassed(new(0,-1),new(0,4.5),(_,_)=>true,"a remote prior observation");
+        var fresh=NewStraight();
+        if(fresh.Next(new(0,4.5),(_,_)=>true)!=straight[0] || fresh.Index!=0)
+            throw new Exception("A new route inherited passage history or searched globally for a later checkpoint.");
+        var connector=new RecoveryPath(straight.Skip(1),straight[^1]);connector.Next(new(0,0),(_,_)=>false);
+        if(connector.Next(new(0,4.5),(_,_)=>true)!=straight[1] || connector.Index!=0)
+            throw new Exception("Observed passage skipped an unvisited initial route connector.");
+
+        foreach(Vec[] protectedPath in new[]{
+            new Vec[]{new(0,0),new(0,3),new(3,3),new(7,3)},
+            new Vec[]{new(0,0),new(0,3),new(0,0),new(0,-4)},
+            new Vec[]{new(0,0),new(0,3),new(0,4.5)},
+            new Vec[]{new(0,0),new(0,3)}})
+        {
+            var path=new RecoveryPath(protectedPath,protectedPath[^1]);path.Next(protectedPath[0]);
+            if(path.Next(new(0,4.5),(_,_)=>true)!=protectedPath[1] || path.Index!=1)
+                throw new Exception("Observed passage skipped a sharp bend, U-turn, short final connector or exact final anchor.");
+        }
     }
 }

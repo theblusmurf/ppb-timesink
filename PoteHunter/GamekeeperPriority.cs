@@ -32,6 +32,18 @@ public static class GamekeeperPriority
     public static bool ShouldYield(Entity? locked,Entity? priority)=>
         priority!=null && (locked==null || !Same(locked,priority));
 
+    // Only the verified physical endpoint may release saved-route ownership.
+    // The caller supplies a freshly protected priority candidate and renews
+    // character, zone, floor, completed repair and destination occupancy checks.
+    // Saved facing may then wait until the Gamekeeper return completes.
+    public static bool ShouldHandOffAtAnchor(bool farmOnArrival,bool prioritize,bool contextVerified,
+        Vec position,Vec anchor,Health playerHealth,Entity? priority,Health priorityHealth)=>
+        farmOnArrival && prioritize && contextVerified && position.Finite && anchor.Finite &&
+        (position-anchor).Length<=NearbyLootPickup.AnchorArrivalTolerance &&
+        playerHealth is {Known:true,Dead:false} && priorityHealth is {Known:true,Dead:false} &&
+        priority is {Monster:true,Targetable:true,PriorityLootObject:false} &&
+        priority.Position.Finite && Targeting.IsGamekeeper(priority);
+
     // Preserve every ordinary engagement while temporarily serving Gamekeeper.
     public static Entity? ChooseFirst(Encounter encounter,Entity? priority,Func<Entity?> chooseFresh)=>
         priority ?? Targeting.ChooseEngagedFirst(encounter,chooseFresh);
@@ -128,5 +140,106 @@ public static class GamekeeperPriority
             throw new Exception("Normal low-health recovery did not resume after Gamekeeper and remaining engagements were finished.");
         if(ChooseFirst(encounter,null,Fresh)!=ordinary || freshCalls!=1)
             throw new Exception("Ordinary hunting did not resume after priority and engagements cleared.");
+
+        AnchorHandoffChecks(keeper,ordinary);
+        AnchorReturnDefenseCadence.Checks();
+    }
+
+    static void AnchorHandoffChecks(Entity keeper,Entity ordinary)
+    {
+        Vec anchor=new(20,30);var living=new Health(100,100);
+        bool HandOff(Vec position,bool farming=true,bool enabled=true,bool verified=true,
+            Health? selfHealth=null,Entity? target=null,Health? targetHealth=null)=>
+            ShouldHandOffAtAnchor(farming,enabled,verified,position,anchor,selfHealth??living,
+                target??keeper,targetHealth??living);
+        if(!HandOff(anchor) || !HandOff(anchor+new Vec(.5,0)) || !HandOff(anchor+new Vec(0,-.5)) ||
+            HandOff(anchor+new Vec(.500001,0)) || HandOff(anchor+new Vec(1.5,0)))
+            throw new Exception("Gamekeeper handoff did not require actual half-unit anchor arrival.");
+        // A protected keeper can be outside swing range: arrival must hand it
+        // to the existing priority pursuit rather than renew farm-target defense.
+        if((keeper.Position-anchor).Length<=Targeting.MeleeAttackRange || !HandOff(anchor,target:keeper))
+            throw new Exception("A response-range Gamekeeper was ignored merely because it was outside melee reach.");
+        if(HandOff(anchor,farming:false) || HandOff(anchor,enabled:false) || HandOff(anchor,verified:false) ||
+            HandOff(new(double.NaN,30)) || HandOff(new(20,double.PositiveInfinity)) ||
+            ShouldHandOffAtAnchor(true,true,true,anchor,new(double.NaN,30),living,keeper,living) ||
+            ShouldHandOffAtAnchor(true,true,true,anchor,new(20,double.NegativeInfinity),living,keeper,living) ||
+            ShouldHandOffAtAnchor(true,true,true,anchor,anchor,living,null,living))
+            throw new Exception("Gamekeeper handoff bypassed disabled farming/priority, protected context or finite endpoint checks.");
+        foreach(var unreadableOrDead in new[]{default(Health),new Health(0,100),new Health(-1,100)})
+            if(HandOff(anchor,selfHealth:unreadableOrDead) || HandOff(anchor,targetHealth:unreadableOrDead))
+                throw new Exception("Gamekeeper handoff accepted unknown or dead player/priority health.");
+        foreach(var invalid in new[]{ordinary,keeper with{Id=0x40001752},keeper with{Model="MON_mimic.GCMDS"},
+            keeper with{Position=new(double.NaN,0)},keeper with{Position=new(0,double.PositiveInfinity)}})
+            if(HandOff(anchor,target:invalid))
+                throw new Exception("Gamekeeper handoff accepted an unrelated or malformed target.");
+
+        // Keep completed repair and ordinary engagements while the character
+        // is near, but not at, its physical endpoint. After real arrival a
+        // protected keeper owns target selection without replaying repair.
+        var recovery=new DeathRecoveryState();recovery.Observe(new(0,100),0);
+        recovery.Observe(living,10);long episode=recovery.Episode;
+        if(!recovery.MarkPostRevivalPrepared(episode) || !recovery.MarkRepairCompleted(episode) ||
+            HandOff(anchor+new Vec(.6,0)) || !recovery.Pending || !recovery.RepairCompleted)
+            throw new Exception("Gamekeeper arrival handoff completed recovery before the actual endpoint or lost repair progress.");
+        var encounter=new Encounter();encounter.MarkAttack(ordinary,living);
+        if(!HandOff(anchor) || ChooseFirst(encounter,keeper,()=>ordinary)!=keeper || !encounter.IsEngaged(ordinary))
+            throw new Exception("An engaged farm target blocked the arrived Gamekeeper or was discarded at handoff.");
+        recovery.Reset();
+        if(recovery.Pending || recovery.MarkRepairCompleted(episode))
+            throw new Exception("Completed anchor handoff retained the old recovery or reused its repair episode.");
+    }
+}
+
+// One instance belongs to one saved-anchor return invocation. Reserving a
+// defense slice prevents repeated callbacks from lending the same interval;
+// completing it guarantees a movement opportunity before another slice.
+internal sealed class AnchorReturnDefenseCadence
+{
+    public const int ApproachOpportunityMilliseconds=500;
+    long nextDefenseAt,lastObservation=-1;
+    bool defending;
+
+    void ObserveClock(long now)
+    {
+        if(now<0 || now<lastObservation)throw new InvalidOperationException("Anchor defense clock is unavailable or moved backward.");
+        lastObservation=now;
+    }
+    public bool TryBegin(long now)
+    {
+        ObserveClock(now);
+        if(defending || now<nextDefenseAt)return false;
+        defending=true;return true;
+    }
+    public void Complete(long now)
+    {
+        ObserveClock(now);
+        if(!defending)throw new InvalidOperationException("Anchor defense slice was not reserved.");
+        defending=false;
+        nextDefenseAt=now>long.MaxValue-ApproachOpportunityMilliseconds?long.MaxValue:now+ApproachOpportunityMilliseconds;
+    }
+
+    internal static void Checks()
+    {
+        var cadence=new AnchorReturnDefenseCadence();
+        if(!cadence.TryBegin(0) || cadence.TryBegin(0) || cadence.TryBegin(50))
+            throw new Exception("Repeated anchor-defense requests reserved overlapping slices.");
+        cadence.Complete(1000);int approachUpdates=0;
+        for(long now=1000;now<1500;now+=25)
+        {
+            if(cadence.TryBegin(now))throw new Exception("Continuous nearby targets starved the anchor approach opportunity.");
+            approachUpdates++;
+        }
+        if(approachUpdates!=20 || !cadence.TryBegin(1500) || cadence.TryBegin(1500))
+            throw new Exception("Anchor defense did not reopen at its bounded 500-ms cadence.");
+        cadence.Complete(2500);
+        if(cadence.TryBegin(2999) || !cadence.TryBegin(3000))
+            throw new Exception("A later defense slice reset the movement opportunity before it elapsed.");
+        cadence.Complete(3000);
+        bool rollbackRejected=false,unreservedRejected=false,negativeRejected=false;
+        try{cadence.TryBegin(2999);}catch(InvalidOperationException){rollbackRejected=true;}
+        try{cadence.Complete(3000);}catch(InvalidOperationException){unreservedRejected=true;}
+        try{new AnchorReturnDefenseCadence().TryBegin(-1);}catch(InvalidOperationException){negativeRejected=true;}
+        if(!rollbackRejected || !unreservedRejected || !negativeRejected || !new AnchorReturnDefenseCadence().TryBegin(0))
+            throw new Exception("Anchor defense accepted an invalid clock/lifecycle or leaked cadence into a fresh return.");
     }
 }
