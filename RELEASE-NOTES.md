@@ -1,3 +1,15 @@
+## Release1.133
+
+Resolve short melee approaches and reduce unnecessary movement during loot pickup.
+
+- Complete a stationary melee assist only after a fresh position reading puts the engaged enemy inside the existing attack range. Small corrections no longer disappear inside a larger navigation arrival tolerance.
+- Keep assist destinations within 1.5 map units of the saved anchor. Allow bounded replanning, then return when movement stops making progress or the assisted target disappears or changes identity; retain priority, health, focus, target identity and collision checks.
+- Check the existing three-unit loot pickup reach before walking toward a drop. Refresh the whole pickup neighborhood before E, preserve the saved loot radius and protection for existing drops, and bound attempts when pickup makes no progress.
+- Apply a loot arrival envelope only to the actual final navigation destination, preserving intermediate waypoint checks.
+- Use an owned Windows waitable timer with a monotonic deadline for short forward corrections. Prepare timing resources before input, release on cancellation or failure, and retain the conventional timer fallback on older Windows. Movement speed and pulse duration limits remain unchanged.
+
+Validate short-assist range, leash, progress and deadline cases; pickup reach, neighborhood protection and disappearance accounting; pulse deadlines, cancellation, ownership and cleanup; and the full offline and native UI checks. A local no-input timing comparison showed less short-pulse delay; it is not a guarantee of live movement timing. Running gameplay and local routes, profiles and settings are left untouched. Live behavior after upgrading still requires confirmation.
+
 ## Release1.132
 
 Keep near-anchor combat continuous while the saved return remains pending.

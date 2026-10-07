@@ -980,7 +980,9 @@ public sealed partial class HunterForm : Form
         try {waypoint=navigation.Waypoint(self.Position,goal,anchor,boundaryRadius ?? (double)options.HuntRadius,avoidZones);}
         catch(RouteUnavailableException) when(bodyReach>0 && (goal-self.Position).Length<=bodyReach) {drive.StopApproach();return true;}
         if(version!=navigation.RouteVersion) drive.StopApproach();
-        try {await drive.Approach(world,self.Position,waypoint-self.Position,token,watchTurns,arrivalTolerance);}
+        // A final-goal envelope must not mark an intermediate route point as arrived.
+        double waypointTolerance=(waypoint-goal).Length<=1e-6 ? arrivalTolerance : 0;
+        try {await drive.Approach(world,self.Position,waypoint-self.Position,token,watchTurns,waypointTolerance);}
         catch(MovementBlockedException blocked)
         {
             drive.StopApproach();Input.HoldMouse(false,false,token);
@@ -2730,7 +2732,7 @@ public sealed partial class HunterForm : Form
                 int? lastCombatHp=null;
                 long approachStarted = now, combatStart = 0; Vec lastTargetPosition = target.Position; int missingHealth = 0;
                 long stationaryAttackHeldAt=0,nextStationaryRangeTrace=0; int stationaryAttackBaselineHp=-1;
-                bool stationaryAssistUsed=false,stationaryAssistActive=false; Vec stationaryAssistGoal=default;
+                bool stationaryAssistUsed=false; var stationaryAssist=new StationaryMeleeAssist();
                 long targetMissingSince = 0;
                 double bodyAllowance=0; int? bodyProbeHp=null;long bodyProbeAt=0;
                 long nextPriorityCheck = 0;
@@ -2962,11 +2964,11 @@ public sealed partial class HunterForm : Form
                     {
                         // Fixed targets stay at the saved point by default. If an
                         // already engaged target is only slightly beyond the
-                        // swing window, allow one bounded assist step (at most
-                        // 1.5 map units) so the attack can connect. The outer
+                        // swing window, allow one bounded assist with limited
+                        // replanning inside 1.5 map units of the anchor. The outer
                         // hunt loop returns to the activation point after the
                         // assisted target dies.
-                        if(!stationaryAssistActive)drive.StopApproach();
+                        if(!stationaryAssist.Active)drive.StopApproach();
                         delta=current.Position-pos;
                         bool keepStationarySwing=Input.BasicAttackHeld && encounter.IsEngaged(current) &&
                             Targeting.StationarySwingInRange(delta.Length,swingWindow,true);
@@ -2981,45 +2983,47 @@ public sealed partial class HunterForm : Form
                                 delta=current.Position-pos;lastTargetPosition=current.Position;
                                 missingHealth=0;targetMissingSince=0;lastCombatHp=hp.Current;
                                 stationaryAttackBaselineHp=-1;stationaryAttackHeldAt=Environment.TickCount64;
-                                stationaryAssistActive=false;drive.StopApproach();
+                                stationaryAssist.Cancel();drive.StopApproach();
                             }
                         }
                         if(delta.Length>swingWindow && !keepStationarySwing)
                         {
-                            if(!stationaryAssistActive && !stationaryAssistUsed && encounter.IsEngaged(current) &&
-                                Targeting.TryStationaryAssistStep(delta.Length,swingWindow,out double assistStep))
+                            if(!stationaryAssist.Active && !stationaryAssistUsed && encounter.IsEngaged(current) &&
+                                stationaryAssist.TryBegin(pos,current.Position,anchor,swingWindow,Environment.TickCount64))
                             {
-                                Vec direction=delta/delta.Length;
-                                stationaryAssistGoal=pos+direction*assistStep;
-                                stationaryAssistActive=true;stationaryAssistUsed=true;
+                                stationaryAssistUsed=true;
                                 navigation.BeginGoal("stationary melee assist");
-                                TraceLog.Record("stationary melee assist started",new {current.Id,current.DisplayName,Position=pos,Goal=stationaryAssistGoal,Step=assistStep,Distance=delta.Length,SwingWindow=swingWindow});
+                                TraceLog.Record("stationary melee assist started",new {current.Id,current.DisplayName,Position=pos,
+                                    Goal=stationaryAssist.Goal,Step=(stationaryAssist.Goal-pos).Length,Distance=delta.Length,SwingWindow=swingWindow});
                             }
-                            if(stationaryAssistActive)
+                            if(stationaryAssist.Active)
                             {
                                 Vec assistPosition=world.PlayerPosition();
-                                double goalDistance=(stationaryAssistGoal-assistPosition).Length;
-                                if(delta.Length<=swingWindow)
-                                {
-                                    drive.StopApproach();stationaryAssistActive=false;
-                                }
-                                else if(goalDistance>.25)
+                                var assistAction=stationaryAssist.Observe(assistPosition,current.Position,swingWindow,Environment.TickCount64);
+                                if(assistAction==StationaryAssistAction.Move)
                                 {
                                     ReleaseCombatPickup();Input.HoldMouse(false,false,token);
-                                    await NavigateTo(drive,stationaryAssistGoal,anchor,o,token,
-                                        boundaryRadius:Math.Max((double)o.HuntRadius,activeCompletionBoundary));
+                                    await NavigateTo(drive,stationaryAssist.Goal,anchor,o,token,
+                                        boundaryRadius:Targeting.StationaryAssistMaximumStep,
+                                        arrivalTolerance:StationaryMeleeAssist.ArrivalTolerance);
                                     await Input.Delay(25,token);
                                     continue;
                                 }
-                                else
+                                drive.StopApproach();
+                                TraceLog.Record("stationary melee assist outcome",new {current.Id,Action=assistAction.ToString(),
+                                    Position=assistPosition,Distance=(current.Position-assistPosition).Length,SwingWindow=swingWindow,
+                                    stationaryAssist.Plans,AnchorDistance=(assistPosition-anchor).Length});
+                                if(assistAction==StationaryAssistAction.Yield)
                                 {
-                                    drive.StopApproach();stationaryAssistActive=false;
-                                    message=$"Holding assisted hunt point; waiting for {current.DisplayName} to enter melee range ({delta.Length:F1}/{swingWindow:F1})";
-                                    await Input.Delay(100,token);
-                                    continue;
+                                    // Do not strand the hunt inside an exhausted range wait.
+                                    // Return remains pending while priority/health guards run.
+                                    stationaryAssistReturnPending=true;collectAfterTarget=false;
+                                    Input.HoldMouse(false,false,token);
+                                    message="Melee assist made no safe progress; returning to the saved hunt point.";
+                                    break;
                                 }
                             }
-                            if(!stationaryAssistActive && delta.Length>swingWindow)
+                            if(!stationaryAssist.Active && delta.Length>swingWindow)
                             {
                                 ReleaseCombatPickup();Input.HoldMouse(false,false,token);
                                 if(Environment.TickCount64>=nextStationaryRangeTrace)
@@ -3034,7 +3038,7 @@ public sealed partial class HunterForm : Form
                                 continue;
                             }
                         }
-                        if(stationaryAssistActive){drive.StopApproach();stationaryAssistActive=false;}
+                        if(stationaryAssist.Active){drive.StopApproach();stationaryAssist.Cancel();}
                         // Enter the swing state as soon as the target is in the
                         // hysteresis window. Facing is feedback, not a gate for
                         // the attack input: a transient turn read must not
@@ -3387,6 +3391,9 @@ public sealed partial class HunterForm : Form
                     if(encounter.Active && (lastTargetPosition-world.PlayerPosition()).Length<=(double)o.NearbyEnemyRadius)
                         throw new InvalidOperationException("A nearby enemy could not be reached; stopped before pickup.");
                 }
+                // Target disappearance, replacement and priority preemption
+                // end the assist too; none may leave us at its approach point.
+                if(stationaryAssist.ReturnRequired)stationaryAssistReturnPending=true;
                 ReleaseCombatPickup();drive.StopApproach();
                 bool preserveTransitionSwing=false;
                 if(Input.BasicAttackHeld && !token.IsCancellationRequested && Input.Allowed() &&
@@ -3671,40 +3678,50 @@ public sealed partial class HunterForm : Form
         long waitUntil = Environment.TickCount64 + (priorityObject ? 1500 : 350);
         while (drops.Count == 0 && Environment.TickCount64 < waitUntil) { await Input.Delay((int)Math.Min(100, Math.Max(1, waitUntil-Environment.TickCount64)), token); drops = ReadDrops().Where(EligibleDrop).ToList(); }
         if (drops.Count == 0) { TraceLog.Record("no nearby drops", new { Position = deathPosition, Anchor=anchor, Radius=lootRadius }); return; }
-        for (int attempt = 0; attempt < 3 && drops.Count > 0; attempt++)
+        for (int attempt=0;attempt<NearbyLootPickup.MaximumCollectionAttempts && drops.Count>0;attempt++)
         {
             if(deathRecovery.Pending)return;
-            await TryHeal(drive, options, token);
+            var plan=NearbyLootPickup.PlanAnchorCollection(world.PlayerPosition(),anchor,ReadDrops(),existingDrops,options.AntiKillSteal,lootRadius);
+            if(plan.Action==AnchorLootAction.Pickup)drive.StopApproach();
+            if(plan.Action==AnchorLootAction.Protected)throw new TargetProtectionException("Pre-existing drops are inside pickup range");
+            if(plan.Action is AnchorLootAction.Finished or AnchorLootAction.BoundaryBlocked)break;
+            lootGuardPosition=plan.Target!.Position;
+            await TryHeal(drive,options,token);
             if(deathRecovery.Pending)return;
-            var item = drops.OrderBy(i => (i.Position-world.PlayerPosition()).Length).First();
-            lootGuardPosition=item.Position;
-            long started = Environment.TickCount64;
-            while ((item.Position-world.PlayerPosition()).Length > 2.5 && Environment.TickCount64-started < 5000)
+            long started=Environment.TickCount64;
+            while(true)
             {
                 if(deathRecovery.Pending)return;
-                if (await TryHeal(drive, options, token)) continue;
+                plan=NearbyLootPickup.PlanAnchorCollection(world.PlayerPosition(),anchor,ReadDrops(),existingDrops,options.AntiKillSteal,lootRadius);
+                if(plan.Action!=AnchorLootAction.Approach || Environment.TickCount64-started>=5000)break;
+                lootGuardPosition=plan.Target!.Position;
+                if(await TryHeal(drive,options,token))continue;
                 if(deathRecovery.Pending)return;
-                var pos = world.PlayerPosition();
-                if ((pos-anchor).Length > lootRadius) break;
-                message = $"Approaching loot: {item.Name}";
-                await NavigateTo(drive,item.Position,anchor,options,token,boundaryRadius:lootRadius);
+                // Recheck range/whole neighborhood after healing before issuing movement.
+                plan=NearbyLootPickup.PlanAnchorCollection(world.PlayerPosition(),anchor,ReadDrops(),existingDrops,options.AntiKillSteal,lootRadius);
+                if(plan.Action!=AnchorLootAction.Approach)break;
+                lootGuardPosition=plan.Target!.Position;
+                message=$"Approaching loot: {plan.Target.Name}";
+                await NavigateTo(drive,plan.Target.Position,anchor,options,token,boundaryRadius:lootRadius,
+                    arrivalTolerance:NearbyLootPickup.PickupReach);
             }
-            drive.StopApproach(); await Input.Delay(100, token);
-            var pickupSnapshot=ReadDrops();
-            if(!NearbyLootPickup.MayPickupAt(world.PlayerPosition(),anchor,pickupSnapshot,lootRadius))
+            drive.StopApproach();await Input.Delay(100,token);
+            if(deathRecovery.Pending)return;
+            plan=NearbyLootPickup.PlanAnchorCollection(world.PlayerPosition(),anchor,ReadDrops(),existingDrops,options.AntiKillSteal,lootRadius);
+            if(plan.Action==AnchorLootAction.Protected)throw new TargetProtectionException("Pre-existing drops are inside pickup range");
+            if(plan.Action==AnchorLootAction.BoundaryBlocked)
             {
                 TraceLog.Record("anchor loot pickup boundary blocked",new{Anchor=anchor,Position=world.PlayerPosition(),Radius=lootRadius});break;
             }
-            var before = pickupSnapshot.Where(i => (i.Position-world.PlayerPosition()).Length <= NearbyLootPickup.PickupReach).ToList();
-            if (options.AntiKillSteal && before.Any(i=>existingDrops.Contains((i.KeyA,i.KeyB)))) throw new TargetProtectionException("Pre-existing drops are inside pickup range");
-            if (before.Count == 0) break;
-            message = $"Picking up {before.Count} nearby drop(s) Â· holding E";
-            TraceLog.Record("loot input", new { Items = before.Select(i => new { i.Name, i.KeyA, i.KeyB }), HoldMs = pickupHoldMs, Radius=lootRadius });
-            await Input.Key(Keys.E, pickupHoldMs, token); await Input.Delay(200, token);
-            var after = ReadDrops();
-            int removed = before.Count(i => !after.Any(a => a.KeyA == i.KeyA && a.KeyB == i.KeyB));
-            TraceLog.Record("loot result", new { Removed = removed, Before = before.Count, Player = world.PlayerPosition() });
-            drops = after.Where(EligibleDrop).ToList();
+            if(plan.Action!=AnchorLootAction.Pickup)break;
+            lootGuardPosition=plan.Target!.Position;
+            var before=plan.Nearby;
+            message=$"Picking up {before.Length} nearby drop(s) · holding E";
+            TraceLog.Record("loot input",new{Items=before.Select(i=>new{i.Name,i.KeyA,i.KeyB}),HoldMs=pickupHoldMs,Radius=lootRadius});
+            await Input.Key(Keys.E,pickupHoldMs,token);await Input.Delay(200,token);
+            var after=ReadDrops();int removed=NearbyLootPickup.RemovedAfterPickup(before,after);
+            TraceLog.Record("loot result",new{Removed=removed,Before=before.Length,Player=world.PlayerPosition()});
+            drops=after.Where(EligibleDrop).ToList();
         }
         drive.StopApproach();
     }

@@ -210,6 +210,7 @@ public static class Targeting
 
     public static void CompletionSelfTest()
     {
+        StationaryMeleeAssist.SelfTest();
         if (AttackRange(false, false, 2) != 2 || AttackRange(true, false, 2) != BowAttackRange ||
             AttackRange(true, true, BowAttackRange) != ArcherAttackRange)
             throw new Exception("Ranged class attack ranges were not normalized.");

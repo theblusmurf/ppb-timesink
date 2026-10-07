@@ -5,10 +5,15 @@ public readonly record struct NearbyLootDecision(int NearbyCount)
     public bool HoldLoot => NearbyCount > 0;
 }
 
+public enum AnchorLootAction { Finished, Approach, Pickup, BoundaryBlocked, Protected }
+
+public readonly record struct AnchorLootPlan(AnchorLootAction Action,GroundItem? Target,GroundItem[] Nearby);
+
 public static class NearbyLootPickup
 {
     public const double DefaultAnchorRadius=10;
     public const double PickupReach=3;
+    public const int MaximumCollectionAttempts=3;
     // Match the recorded route endpoint. Sub-frame W steps may advance
     // ~.26-.38 units; a tighter radius can oscillate across the saved point.
     public const double AnchorArrivalTolerance=.5;
@@ -16,16 +21,51 @@ public static class NearbyLootPickup
         double.IsFinite(radius) && radius>0 && (point-anchor).Length<=radius+1e-9;
     public static bool ArrivedAtAnchor(Vec position,Vec anchor) => position.Finite && anchor.Finite &&
         (position-anchor).Length<=AnchorArrivalTolerance;
+    public static bool WithinPickupReach(Vec position,Vec item) => position.Finite && item.Finite &&
+        (item-position).Length<=PickupReach;
     // E collects a neighborhood, not an individual selected item. Do not send
     // it beside drops outside the requested circle, even if one inside is near.
     public static bool MayPickupAt(Vec position,Vec anchor,IEnumerable<GroundItem> drops,double radius=DefaultAnchorRadius) =>
-        InsideAnchor(position,anchor,radius) && !drops.Any(d=>d.Position.Finite &&
-            (d.Position-position).Length<=PickupReach && !InsideAnchor(d.Position,anchor,radius));
+        InsideAnchor(position,anchor,radius) && !drops.Any(d=>d is not null &&
+            WithinPickupReach(position,d.Position) && !InsideAnchor(d.Position,anchor,radius));
     public static NearbyLootDecision EvaluateAnchor(Vec position,Vec anchor,IEnumerable<GroundItem> drops,double radius=DefaultAnchorRadius)
     {
         var snapshot=drops.ToArray();
         return MayPickupAt(position,anchor,snapshot,radius) ? Evaluate(position,PickupReach,
             snapshot.Where(d=>InsideAnchor(d.Position,anchor,radius))) : new(0);
+    }
+
+    // Prefer an admitted E neighborhood before choosing any movement. A failed
+    // E does not make a three-unit drop less reachable or justify moving closer.
+    // The caller still owns health, focus, encounter, avoidance and priority
+    // checks and must refresh this plan immediately before sending input.
+    public static AnchorLootPlan PlanAnchorCollection(Vec position,Vec anchor,IEnumerable<GroundItem> drops,
+        IReadOnlySet<(uint,uint)> existingDrops,bool protectExisting,double radius=DefaultAnchorRadius)
+    {
+        ArgumentNullException.ThrowIfNull(drops);ArgumentNullException.ThrowIfNull(existingDrops);
+        if(!InsideAnchor(position,anchor,radius))return new(AnchorLootAction.BoundaryBlocked,null,[]);
+        var snapshot=drops.Where(d=>d is not null && d.Position.Finite).ToArray();
+        var eligible=snapshot.Where(d=>InsideAnchor(d.Position,anchor,radius) &&
+            (!protectExisting || !existingDrops.Contains((d.KeyA,d.KeyB)))).ToArray();
+        if(eligible.Length==0)return new(AnchorLootAction.Finished,null,[]);
+        var nearby=snapshot.Where(d=>WithinPickupReach(position,d.Position)).ToArray();
+        var target=eligible.OrderBy(d=>(d.Position-position).Length).First();
+        if(protectExisting && nearby.Any(d=>existingDrops.Contains((d.KeyA,d.KeyB))))
+            return new(AnchorLootAction.Protected,target,[]);
+        if(!nearby.Any(d=>InsideAnchor(d.Position,anchor,radius) &&
+            (!protectExisting || !existingDrops.Contains((d.KeyA,d.KeyB)))))
+            return new(AnchorLootAction.Approach,target,[]);
+        if(!MayPickupAt(position,anchor,snapshot,radius))return new(AnchorLootAction.BoundaryBlocked,target,[]);
+        return new(AnchorLootAction.Pickup,target,nearby);
+    }
+
+    // New drops are not progress for the attempted neighborhood. Check only
+    // disappearance of identities observed immediately before this E input.
+    public static int RemovedAfterPickup(IEnumerable<GroundItem> before,IEnumerable<GroundItem> after)
+    {
+        ArgumentNullException.ThrowIfNull(before);ArgumentNullException.ThrowIfNull(after);
+        var remaining=after.Where(d=>d is not null).Select(d=>(d.KeyA,d.KeyB)).ToHashSet();
+        return before.Where(d=>d is not null).Select(d=>(d.KeyA,d.KeyB)).Distinct().Count(key=>!remaining.Contains(key));
     }
 
     public static NearbyLootDecision Evaluate(Vec position,double radius,IEnumerable<GroundItem> drops)
@@ -112,5 +152,6 @@ public static class NearbyLootPickup
         bool nullRejected=false;
         try{Evaluate(origin,5,null!);}catch(ArgumentNullException){nullRejected=true;}
         if(!nullRejected)throw new Exception("Nearby loot accepted a missing ground-item observation.");
+        NearbyLootPickupChecks.Run();
     }
 }

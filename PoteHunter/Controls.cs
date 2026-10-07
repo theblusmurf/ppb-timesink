@@ -277,7 +277,7 @@ public static class Input
     internal static async Task<long> PulseForward(int milliseconds,CancellationToken token)
     {
         var trace=new PulseInputTrace();Func<bool>? windowAllowed=null;long generation=0;
-        long origin=System.Diagnostics.Stopwatch.GetTimestamp(),pressedAt=0,releasedAt=0;
+        long pressedAt=0,releasedAt=0;
         DateTime? downUtc=null,upUtc=null;bool reserved=false,leaseCaptured=false,completed=false;
         void CheapSafety(bool requireHeld)
         {
@@ -327,8 +327,7 @@ public static class Input
                         if(!keys.IsHeld(Keys.W))forwardPulseTransition=null;
                     }
                 }
-            },()=>CheapSafety(true),()=>Check(token),Task.Delay,
-                ()=> (long)System.Diagnostics.Stopwatch.GetElapsedTime(origin).TotalMilliseconds,token,
+            },()=>CheapSafety(true),()=>Check(token),token,
                 work=>Task.Run(async()=>
                 {
                     using var scope=trace.Enter();
