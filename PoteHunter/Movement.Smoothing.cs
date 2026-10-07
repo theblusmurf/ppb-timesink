@@ -236,9 +236,12 @@ public sealed partial class Movement
             heldMilliseconds=await Input.PulseForward(duration,token);
         }
         finally { Input.Hold(Keys.W,false,default);advancing=false; }
+        long settlementStartedAt=Environment.TickCount64;
         Vec released=world.PlayerPosition();
+        token.ThrowIfCancellationRequested();
+        await Input.Delay(0,token); // recheck safety after the synchronous released-position read
         var settlement=await ArrivalPulseSettling.ObserveAsync(position,released,world.PlayerPosition,
-            Input.Delay,()=>Environment.TickCount64,token);
+            Input.Delay,()=>Environment.TickCount64,token,settlementStartedAt);
         Vec after=settlement.Position;
         // The client frequently publishes most/all movement after key-up.
         // Never stack a new tap against a still-changing read or learn a
@@ -248,8 +251,12 @@ public sealed partial class Movement
         TraceLog.Record("anchor approach correction",new {Before=position,After=after,Goal=goal,
             Remaining=(goal-after).Length,PulseMilliseconds=duration,HeldMilliseconds=heldMilliseconds,
             MovedWhileHeld=(released-position).Length,SettlingDisplacement=(after-released).Length,EstimatedUnitsPerMs=arrivalMotion.Speed,
-            ReservedDisplacement=step,settlement.Settled,SettlementMilliseconds=settlement.ElapsedMilliseconds,Learned=learn});
+            ReservedDisplacement=step,settlement.Settled,SettlementMilliseconds=settlement.ElapsedMilliseconds,Learned=learn,
+            NormalSettlementMilliseconds=ArrivalPulseSettling.NormalMilliseconds,HardSettlementMilliseconds=ArrivalPulseSettling.MaximumMilliseconds,
+            settlement.GraceUsed,settlement.Status,settlement.PositionReadElapsedMilliseconds,settlement.QuietMilliseconds,
+            settlement.QuietDisplacement,settlement.PositionReads,settlement.GraceReads,settlement.MaximumReadMilliseconds,
+            settlement.MaximumGuardOverheadMilliseconds});
         if(!settlement.Settled)
-            throw new AnchorReturnException("Forward correction did not settle before its bounded observation deadline; movement remains released.");
+            throw new AnchorReturnException($"Forward correction settling could not be confirmed within the {ArrivalPulseSettling.MaximumMilliseconds} ms safety budget ({settlement.Status}); movement remains released.");
     }
 }

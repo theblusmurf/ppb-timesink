@@ -1,3 +1,13 @@
+## Release1.137
+
+Allow delayed position and safety checks to confirm that a short forward correction has settled without prematurely stopping route startup.
+
+- Keep forward movement released throughout one bounded settling observation. Preserve the normal 320 ms window and allow confirmation within a fixed one-second hard limit, counting the initial released-position read, safety checks and later position reads in that same budget.
+- Require cumulative quiet motion for at least 80 ms before another correction; an unchanged position cannot permit a repeat before 200 ms. Check cancellation immediately after each read and refresh the ordinary input safety guards before accepting settled motion. Continuing drift, unavailable geometry, exceeded hard limits and safety failures remain blocked.
+- Record the normal and hard observation limits with actual settling duration so delayed checks can be distinguished from unconfirmed motion. Route progress, waypoint ownership, collision protections and the shorter urgent self-heal deadline remain in effect.
+
+Validation reproduces stable reads completing at 328–375 ms, delayed movement publication, cumulative drift, initial-read latency, exact and exceeded hard deadlines, and safety cancellation during a position read. The earlier 320 ms rejection could reach the route-start hunt failure handler; this update waits within the same released-input step rather than broadly retrying safety exceptions. Live route startup after updating still requires confirmation.
+
 ## Release1.136
 
 Give ready HP-triggered self-heals a bounded opportunity before an exhausted melee approach or pending anchor facing, and improve small movement corrections.
