@@ -2540,7 +2540,11 @@ public sealed partial class HunterForm : Form
                         // Approach keeps forward held through successive recorded
                         // waypoints. Resetting the local planner at every point
                         // used to release/repress movement and cause jerky turns.
-                        Vec steeringGoal=path.SteeringGoal(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && navigation.CanAdvance(from,to,avoidZones));
+                        // All steering candidates are checked synchronously
+                        // against one fresh obstacle list; do not rebuild it
+                        // for every vertex in the bounded distance window.
+                        var steeringObstacles=navigation.Obstacles(avoidZones);
+                        Vec steeringGoal=path.SteeringGoal(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && RoutePlanner.SegmentClear(from,to,steeringObstacles),speedUnitsPerMs:drive.RouteSpeedUnitsPerMs);
                         try
                         {
                             await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance,steeringDelta:steeringGoal-current);

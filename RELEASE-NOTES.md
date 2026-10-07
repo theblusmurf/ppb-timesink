@@ -1,3 +1,13 @@
+## Release1.139
+
+Follow saved routes with distance-based, speed-adaptive steering so dense recordings receive a useful forward aim instead of being limited to four samples.
+
+- Precompute route distances and examine a bounded local distance window for curvature and steering. Select the aim by distance along the recorded path from the current incoming-segment projection, with a separate point-count cap for work bounds. Reuse existing displacement-based speed feedback to shorten lookahead at lower speed and around curves; keep the existing maximum lookahead.
+- Keep forward movement continuous through ordinary samples and gentle bends. Steering changes neither recorded checkpoints nor their progress/retry ownership. Required connectors, sharp corners, U-turns and final arrival retain their precision handling. Every shortcut stays inside the existing narrow recorded corridor and requires the original segment and direct collision checks.
+- Preserve startup, death return and alternative-route behavior, exact final anchor/facing, input focus/identity/health guards and sustained turning detection. Existing routes, settings, profiles and session logs need no migration or re-recording.
+
+Validation covers differently sampled versions of the same path, speed/curvature bounds, blocked segments and chords, offset route entries, corners, loops, overshoot, rotation/translation and unchanged final arrival and retry guarantees. Offline checks do not establish improved gameplay travel time; live smoothness and efficiency still require confirmation after upgrading.
+
 ## Release1.138
 
 Allow one guarded recovery from a sustained turning fault while following a recorded route, instead of immediately cancelling route startup.

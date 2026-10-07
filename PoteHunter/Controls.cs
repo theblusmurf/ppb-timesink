@@ -1020,6 +1020,9 @@ public sealed partial class Movement
     public Vec Forward { get; private set; }
     public double RadiansPerPixel { get; private set; }
     public double UnitsPerMs { get; private set; }
+    // Reuse bounded displacement feedback; the legacy calibration speed is
+    // unset. ArrivalMotion starts conservatively until qualified travel samples.
+    internal double RouteSpeedUnitsPerMs=>arrivalMotion.Speed;
     bool advancing;
     Vec progressPosition;
     long progressAt, lastMotionTrace, lastFaceTrace;

@@ -85,12 +85,18 @@ internal static class RecoveryRouting
 internal sealed class RecoveryPath
 {
     internal const double SteeringLookaheadUnits=3.5;
+    internal const double MinimumSteeringLookaheadUnits=1.75;
     internal const double SteeringCorridorUnits=.35;
-    const double CurveHorizonUnits=4;
+    internal const double CurveHorizonUnits=4;
+    internal const int SpeedLookaheadMilliseconds=250;
+    internal const int MaximumLocalPoints=32;
     const double CurveBrakingDegrees=35;
-    const int MaximumLookaheadSegments=4;
     readonly Vec[] points;
+    readonly double[] cumulativeDistance;
     int index;
+    int trustedSteeringSegment;
+    double trustedSteeringDistance;
+    bool steeringOriginKnown;
     Vec? previousPosition;
     public int Index=>index;
     public RecoveryPath(IEnumerable<Vec> waypoints,Vec anchor)
@@ -100,6 +106,13 @@ internal sealed class RecoveryPath
         // Plans already include their destination. Keep the actual anchor only
         // once, so it receives final-arrival braking before we pass it.
         points=source.Where((point,at)=>at==source.Length-1 || point!=source[at+1]).ToArray();
+        cumulativeDistance=new double[points.Length];
+        for(int at=1;at<points.Length;at++)
+        {
+            cumulativeDistance[at]=cumulativeDistance[at-1]+(points[at]-points[at-1]).Length;
+            if(!double.IsFinite(cumulativeDistance[at]))
+                throw new RouteUnavailableException("Recovery route length is unavailable.");
+        }
     }
     // A clear, short lookahead avoids turning sideways just to touch the
     // projected route entry. Sharp corners and the final anchor stay exact.
@@ -117,14 +130,21 @@ internal sealed class RecoveryPath
     bool CumulativeCurve(int at)=>Curvature(at)>=CurveBrakingDegrees;
     double Curvature(int at)
     {
-        double turn=Bend(at),distance=0;
-        for(int next=at+1;next<points.Length-1 && next<=at+MaximumLookaheadSegments;next++)
+        // Checkpoint progression retains its existing curvature guard. If an
+        // unusually dense local path exceeds the work budget, do not regard
+        // the uninspected remainder as a straight shortcut.
+        return TryCurvature(at,cumulativeDistance[at],out double turn)?turn:Math.Max(turn,CurveBrakingDegrees);
+    }
+    bool TryCurvature(int at,double fromDistance,out double turn)
+    {
+        turn=0;int inspected=0;
+        for(int next=at;next<points.Length-1;next++)
         {
-            distance+=(points[next]-points[next-1]).Length;
-            if(distance>CurveHorizonUnits)break;
+            if(cumulativeDistance[next]-fromDistance>CurveHorizonUnits)return true;
+            if(inspected++>=MaximumLocalPoints)return false;
             turn+=Bend(next);
         }
-        return turn;
+        return true;
     }
     double Bend(int at)
     {
@@ -144,10 +164,32 @@ internal sealed class RecoveryPath
     public Vec? Next(Vec current,Func<Vec,Vec,bool>? clear=null)
     {
         if(!current.Finite)throw new RouteUnavailableException("Character position is unavailable during recovery.");
+        // Remember the locally owned incoming segment before proximity and
+        // clear-path admissions move the checkpoint ahead. Dense sampling may
+        // leave that checkpoint's immediate predecessor ahead of the player.
+        if(!steeringOriginKnown)
+        {
+            trustedSteeringSegment=Math.Max(0,index-1);
+            trustedSteeringDistance=cumulativeDistance[trustedSteeringSegment];
+            steeringOriginKnown=true;
+        }
         Vec? before=previousPosition;previousPosition=current;
         // Intermediate waypoints are sampled closely together. Never advance
         // merely because one frame of movement was sent to the client.
-        while(index<points.Length && (points[index]-current).Length<=(index==points.Length-1?.5:.6))index++;
+        while(index<points.Length && (points[index]-current).Length<=(index==points.Length-1?.5:.6))
+        {
+            if(ArrivalTolerance>0 && index>0)
+            {
+                // A physically observed mandatory arrival may establish a
+                // new local segment; a steering carrot cannot do this.
+                trustedSteeringSegment=Math.Max(trustedSteeringSegment,index-1);
+                Vec incoming=points[index]-points[index-1];double length=incoming.Length;
+                if(length>.01)
+                    trustedSteeringDistance=Math.Max(trustedSteeringDistance,cumulativeDistance[index-1]+
+                        Math.Clamp(Dot(current-points[index-1],incoming/length),0,length));
+            }
+            index++;
+        }
         // Advance only locally, with an independently checked segment. Never
         // search globally for a closer point on a loop or skip a sharp bend.
         if(clear!=null)
@@ -186,36 +228,72 @@ internal sealed class RecoveryPath
 
     static double Dot(Vec a,Vec b)=>a.X*b.X+a.Y*b.Y;
 
+    bool TrySteeringProjection(Vec current,out int segment,out double fromDistance)
+    {
+        segment=-1;fromDistance=0;double bestCrossTrack=double.PositiveInfinity;
+        if(!steeringOriginKnown || index-trustedSteeringSegment>MaximumLocalPoints)return false;
+        int inspected=0;
+        for(int at=trustedSteeringSegment;at<index && inspected++<MaximumLocalPoints;at++)
+        {
+            if(cumulativeDistance[at]-trustedSteeringDistance>CurveHorizonUnits)break;
+            Vec incoming=points[at+1]-points[at];double length=incoming.Length;
+            if(length<=.01)continue;
+            Vec direction=incoming/length;
+            double progress=Math.Clamp(Dot(current-points[at],direction),0,length);
+            double projectedDistance=cumulativeDistance[at]+progress;
+            if(!double.IsFinite(projectedDistance) || projectedDistance<trustedSteeringDistance-.025 ||
+                projectedDistance-trustedSteeringDistance>CurveHorizonUnits)continue;
+            double crossTrack=(current-(points[at]+direction*progress)).Length;
+            if(crossTrack>SteeringCorridorUnits || crossTrack>bestCrossTrack+1e-9 ||
+                Math.Abs(crossTrack-bestCrossTrack)<=1e-9 && projectedDistance<=fromDistance)continue;
+            segment=at;fromDistance=projectedDistance;bestCrossTrack=crossTrack;
+        }
+        return segment>=0;
+    }
+
     // Steering is separate from checkpoint progression. Call Next first and
     // keep its checkpoint for arrival, progress and blocked-route checks. This
     // aim point is only for turning during continuous approach; precise arrival
     // must still use the checkpoint and ArrivalTolerance.
-    public Vec SteeringGoal(Vec current,Func<Vec,Vec,bool>? clear=null)
+    public Vec SteeringGoal(Vec current,Func<Vec,Vec,bool>? clear=null,double speedUnitsPerMs=0)
     {
         if(!current.Finite || index>=points.Length)
             throw new RouteUnavailableException("A live route checkpoint is required for steering.");
         Vec checkpoint=points[index];
-        double distance=(checkpoint-current).Length;
-        double lookahead=Math.Clamp(SteeringLookaheadUnits/(1+UpcomingCurvatureDegrees/90),1.75,SteeringLookaheadUnits);
-        if(clear==null || index==0 || ArrivalTolerance>0 || distance>=lookahead ||
-            !clear(current,checkpoint))return checkpoint;
+        if(clear==null || index==0 || !clear(current,checkpoint))return checkpoint;
         // The chord corridor below bounds the lookahead after the checkpoint.
         // Independently require the current position inside the original
         // incoming segment: shortening the chord must not turn an off-route
         // connector into permission to skip its required entry point.
-        Vec incoming=checkpoint-points[index-1];double square=Dot(incoming,incoming);
-        if(square<=.0001)return checkpoint;
-        double progress=Math.Clamp(Dot(current-points[index-1],incoming)/square,0,1);
-        if((current-(points[index-1]+incoming*progress)).Length>SteeringCorridorUnits)return checkpoint;
-        double remaining=lookahead-distance;
-        Vec accepted=checkpoint,previous=checkpoint;
-        var corridor=new List<Vec>{current,checkpoint};
-        for(int next=index+1;next<points.Length-1 && next<=index+MaximumLookaheadSegments && remaining>.01;next++)
+        if(!TrySteeringProjection(current,out int incomingSegment,out double fromDistance))return checkpoint;
+        Vec previous=current;var corridor=new List<Vec>{current};
+        for(int at=incomingSegment+1;at<=index;at++)
         {
+            if(!clear(previous,points[at]))return checkpoint;
+            corridor.Add(points[at]);previous=points[at];
+        }
+        if(!InsideSteeringCorridor(current,checkpoint,corridor))return checkpoint;
+        trustedSteeringSegment=incomingSegment;
+        trustedSteeringDistance=Math.Max(trustedSteeringDistance,fromDistance);
+        if(ArrivalTolerance>0)return checkpoint;
+        // Measure the horizon from this one verified incoming segment, never
+        // from a globally nearest route branch or the checkpoint's density.
+        if(!TryCurvature(incomingSegment+1,fromDistance,out double curvature))return checkpoint;
+        double baseLookahead=double.IsFinite(speedUnitsPerMs) && speedUnitsPerMs>0
+            ?Math.Clamp(speedUnitsPerMs*SpeedLookaheadMilliseconds,MinimumSteeringLookaheadUnits,SteeringLookaheadUnits)
+            :SteeringLookaheadUnits;
+        double lookahead=Math.Clamp(baseLookahead/(1+curvature/90),MinimumSteeringLookaheadUnits,SteeringLookaheadUnits);
+        double remaining=lookahead-(cumulativeDistance[index]-fromDistance);
+        if(remaining<=.01)return checkpoint;
+        Vec accepted=checkpoint;previous=checkpoint;
+        int inspected=index-incomingSegment;
+        for(int next=index+1;next<points.Length-1 && remaining>.01;next++)
+        {
+            if(inspected++>=MaximumLocalPoints)return checkpoint;
             // Do not look through a required corner, a U-turn, or the final
             // anchor. The controller must capture those checkpoints exactly.
             if(!Straight(next-1) || !Straight(next))break;
-            Vec delta=points[next]-previous;double length=delta.Length;
+            Vec delta=points[next]-previous;double length=cumulativeDistance[next]-cumulativeDistance[next-1];
             if(length<=.0001){previous=points[next];continue;}
             double step=Math.Min(remaining,length);
             Vec candidate=previous+delta*(step/length);
