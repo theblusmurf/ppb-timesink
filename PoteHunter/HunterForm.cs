@@ -1259,6 +1259,7 @@ public sealed partial class HunterForm : Form
 
     async Task RunAnchorLoot(Movement drive,Vec anchor,Options options,CancellationToken token)
     {
+        drive.StopApproach();drive.ResetTurnResponse();
         navigation.BeginGoal($"{options.LootPickupRadius:0.#}-unit anchor loot sweep");
         var previousPickup=Input.PickupHoldProvider;
         Input.PickupHoldProvider=null;Input.Release();
@@ -1273,7 +1274,7 @@ public sealed partial class HunterForm : Form
         catch(RouteUnavailableException ex){TraceLog.Record("anchor loot route unavailable",new{Reason=ex.Message});}
         finally
         {
-            drive.StopApproach();Input.Release();lootGuardPosition=null;lootBeforeFight=null;
+            drive.StopApproach();Input.Release();drive.ResetTurnResponse();lootGuardPosition=null;lootBeforeFight=null;
             Input.PickupHoldProvider=previousPickup;
         }
     }
@@ -1858,6 +1859,7 @@ public sealed partial class HunterForm : Form
             }
             long nextSkillFacingTrace=0;
             var anchorDefenseCadence=new AnchorReturnDefenseCadence();
+            var arrivedCombatHandoff=new ArrivedCombatHandoff();
             bool CombatSkillReady(HotbarSlot slot,Entity expected,double range,bool bodyMode,string mode)
             {
                 // Survival skills retain their existing HP/MP checks and never
@@ -2023,6 +2025,7 @@ public sealed partial class HunterForm : Form
             }
 
             bool savedFacingDeferredForPriority=false;
+            bool savedFacingDeferredForCombat=false;
             bool HandOffArrivedGamekeeper()
             {
                 if(!activeFarmOnArrival || !o.PrioritizeGamekeeper || o.GroupMode || o.HealerMode)return false;
@@ -2046,14 +2049,50 @@ public sealed partial class HunterForm : Form
                     ReturnPending=gamekeeperReturnPending,RecoveryPending=deathRecovery.Pending});
                 return true;
             }
+            bool HandOffArrivedCombat(Vec stoppedPosition,CancellationToken handoffToken)
+            {
+                Input.CheckSafety(handoffToken);
+                RefreshGuardScene();
+                var self=world.LocalPlayer();var health=world.HealthSnapshot();
+                ObserveEncounter(o,health,self.Position,world.PlayerLevel());
+                if(PriorityGamekeeper(o)!=null)return false;
+                double swingRange=Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,
+                    Targeting.MeleeAttackRange+1.0);
+                var candidate=ArrivedCombatHandoff.Choose(entities,encounter.EngagedCandidates,health,self.Position,swingRange,
+                    e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),self.Position,o)==null);
+                bool context=!o.Ranged && StationaryReturnContext() && healingRest==null &&
+                    (!o.UseAlternativeHuntRoutes || !RecoveryRouting.Occupied(anchor,savedHuntHeight,
+                        activeRouteProfile is {HuntRadius:>0} route ? route.HuntRadius:(double)o.HuntRadius,entities,guardSelfId));
+                var sample=new StationaryReturnDefense.Observation(self.Position,anchor,health.GetValueOrDefault(self.Id),
+                    candidate,candidate==null?default:health.GetValueOrDefault(candidate.Id),swingRange,context,candidate!=null);
+                if(!arrivedCombatHandoff.TryDefer(sample,
+                    AnchorArrival.Settled(stoppedPosition,self.Position,anchor,NearbyLootPickup.AnchorArrivalTolerance),
+                    world.RestState().Posture,gamekeeperReturnHeading,deathRecovery.Episode,Environment.TickCount64))return false;
+                savedFacingDeferredForCombat=true;
+                message="Saved anchor reached; finishing owned nearby enemies before restoring saved facing.";
+                TraceLog.Record("anchor arrival handed off to owned combat",new{candidate!.Id,candidate.Generation,
+                    candidate.DisplayName,HP=sample.TargetHealth,Distance=(candidate.Position-self.Position).Length,
+                    Position=self.Position,Anchor=anchor,SavedHeading=gamekeeperReturnHeading,Episode=deathRecovery.Episode,
+                    RecoveryPending=deathRecovery.Pending,MaximumDeferralMilliseconds=ArrivedCombatHandoff.MaximumDeferralMilliseconds});
+                return true;
+            }
             Task RestoreSavedHuntFacing(CancellationToken restoreToken)=>RestoreHuntFacing(restoreToken,1);
             Task RestoreLootFacing(CancellationToken restoreToken)=>RestoreHuntFacing(restoreToken,3);
-            async Task RestoreHuntFacing(CancellationToken restoreToken,int attempts)
+            async Task RestoreHuntFacing(CancellationToken restoreToken,int attempts,bool allowCombatHandoff=true)
             {
-                savedFacingDeferredForPriority=false;
+                savedFacingDeferredForPriority=false;savedFacingDeferredForCombat=false;
+                if(arrivedCombatHandoff.Pending && !arrivedCombatHandoff.Matches(anchor,gamekeeperReturnHeading,deathRecovery.Episode))
+                    arrivedCombatHandoff.Reset();
                 if(!double.IsFinite(gamekeeperReturnHeading))return;
+                // Every caller, including a leashed-target return, must stop
+                // movement and observe settling before lending ordinary combat
+                // the arrived endpoint. No attack is carried through a W pulse.
+                drive.StopApproach();
+                Vec stoppedPosition=world.PlayerPosition();
+                await Input.Delay(120,restoreToken);
                 Vec desiredForward=Movement.FromClientHeading(gamekeeperReturnHeading);
-                int observations=await FacingRestore.RunAsync(ct=>HandOffArrivedGamekeeper()?Task.FromResult(true):drive.Face(world,desiredForward,ct),drive.ResetTurnResponse,
+                int observations=await FacingRestore.RunAsync(ct=>HandOffArrivedGamekeeper() ||
+                    allowCombatHandoff && HandOffArrivedCombat(stoppedPosition,ct) ? Task.FromResult(true):drive.Face(world,desiredForward,ct),drive.ResetTurnResponse,
                     ()=>drive.StopApproach(),Input.Delay,()=>Environment.TickCount64,
                     ()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward),restoreToken,attempts,
                     attempt=>TraceLog.Record("saved facing retry",new{Attempt=attempt,Position=world.PlayerPosition(),Heading=gamekeeperReturnHeading}),
@@ -2065,8 +2104,11 @@ public sealed partial class HunterForm : Form
                     deadlineFailure:()=>new TurnUnresponsiveException(world.PlayerPosition(),desiredForward,
                         "Saved facing did not settle within its turn-speed allowance."),
                     errorRadians:()=>Movement.Angle(Movement.FromClientHeading(world.PlayerHeading()),desiredForward));
-                if(!savedFacingDeferredForPriority)
+                if(!savedFacingDeferredForPriority && !savedFacingDeferredForCombat)
+                {
+                    arrivedCombatHandoff.Reset();
                     TraceLog.Record("restored saved hunt facing",new {Heading=gamekeeperReturnHeading,Position=world.PlayerPosition(),Attempts=observations,Zone=runZone});
+                }
             }
             var fallbackCycle=new RecoveryFallbackCycle(activeSavedRouteSlot);
             var recoveryReference=activeRouteProfile;
@@ -2104,8 +2146,8 @@ public sealed partial class HunterForm : Form
                     }
                     gamekeeperReturnRouting=true;
                     message="Returning to saved hunt location after Gamekeeper";
-                    // Keep return ownership through settling AND saved facing.
-                    // Ordinary engaged selection resumes only after both pass.
+                    // Keep travel ownership through settling. Saved facing may
+                    // explicitly defer to already owned combat at that endpoint.
                     double gamekeeperArrivalTolerance=GamekeeperReturnPolicy.Stationary(o)?NearbyLootPickup.AnchorArrivalTolerance:3.25;
                     bool arrived=await AnchorArrival.ReturnAsync(world.PlayerPosition,gamekeeperReturnLocation,gamekeeperArrivalTolerance,
                         async ct=>
@@ -2123,7 +2165,8 @@ public sealed partial class HunterForm : Form
                     if(!arrived)throw new AnchorReturnException("Gamekeeper return could not settle at the saved anchor; stopped rather than resume away from it.");
                     gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;
                     anchorDefenseCadence.Reset();
-                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount});
+                    TraceLog.Record("returned to saved hunt location after Gamekeeper",new {Position=world.PlayerPosition(),Location=gamekeeperReturnLocation,Heading=gamekeeperReturnHeading,Zone=runZone,Engaged=encounter.EngagedCount,
+                        FacingRestored=!savedFacingDeferredForPriority&&!savedFacingDeferredForCombat,CombatFacingPending=arrivedCombatHandoff.Pending});
                     return true;
                 }
                 finally {returningFromPriority=false;drive.StopApproach();}
@@ -2144,7 +2187,8 @@ public sealed partial class HunterForm : Form
                         defend:DefendDuringAnchorReturn,defenseSchedule:anchorDefenseCadence,turnSpeedDegreesPerSecond:drive.TurnSpeedDegreesPerSecond);
                     if(!arrived)throw new AnchorReturnException("Loot return could not settle at the saved anchor; stopped rather than resume away from it.");
                     lootReturnPending=false;anchorDefenseCadence.Reset();
-                    TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
+                    TraceLog.Record("returned to saved hunt point after loot",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone,
+                        FacingRestored=!savedFacingDeferredForPriority&&!savedFacingDeferredForCombat,CombatFacingPending=arrivedCombatHandoff.Pending});
                 }
                 finally{returningFromPriority=false;drive.StopApproach();}
             }
@@ -2172,7 +2216,8 @@ public sealed partial class HunterForm : Form
                         return false;
                     }
                     anchorDefenseCadence.Reset();
-                    TraceLog.Record("returned to saved hunt point after stationary melee assist",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone});
+                    TraceLog.Record("returned to saved hunt point after stationary melee assist",new {Position=world.PlayerPosition(),Location=anchor,Heading=gamekeeperReturnHeading,Zone=runZone,
+                        FacingRestored=!savedFacingDeferredForPriority&&!savedFacingDeferredForCombat,CombatFacingPending=arrivedCombatHandoff.Pending});
                     return true;
                 }
                 finally { returningFromPriority=false; if(!arrived)drive.StopApproach(); }
@@ -2198,6 +2243,7 @@ public sealed partial class HunterForm : Form
                 void Activate(int slot)
                 {
                     var route=navigation.GetSavedRoute(slot)!;
+                    arrivedCombatHandoff.Reset();
                     anchorDefenseCadence.Reset();
                     bool original=slot==originalSavedPoint.Slot;
                     anchor=activationLocation=gamekeeperReturnLocation=original?originalSavedPoint.Location:route.Anchor;
@@ -2271,9 +2317,11 @@ public sealed partial class HunterForm : Form
                             RefreshGuardScene();if(ChooseDestination())continue;
                             if((world.PlayerPosition()-anchor).Length>.5){ResetPath();continue;}
                             fallbackCycle.Arrived(activeSavedRouteSlot);anchorDefenseCadence.Reset();
-                            message=savedFacingDeferredForPriority?"Saved anchor reached; prioritizing Gamekeeper":"Returned to saved anchor and facing";
+                            message=savedFacingDeferredForPriority?"Saved anchor reached; prioritizing Gamekeeper":savedFacingDeferredForCombat?
+                                "Saved anchor reached; finishing owned combat before saved facing":"Returned to saved anchor and facing";
                             TraceLog.Record("saved hunt anchor reached",new{Position=world.PlayerPosition(),Anchor=anchor,Heading=gamekeeperReturnHeading,
-                                FacingRestored=!savedFacingDeferredForPriority,PriorityGamekeeper=savedFacingDeferredForPriority,
+                                FacingRestored=!savedFacingDeferredForPriority&&!savedFacingDeferredForCombat,PriorityGamekeeper=savedFacingDeferredForPriority,
+                                CombatFacingPending=arrivedCombatHandoff.Pending,
                                 Slot=activeSavedRouteSlot,AfterDeath=afterDeath,UsedSavedRoute=true,Zone=runZone});
                             return;
                         }
@@ -2380,6 +2428,7 @@ public sealed partial class HunterForm : Form
                     long recoveryEpisode=deathRecovery.Episode;
                     if(!deathRecovery.PostRevivalPrepared)
                     {
+                    arrivedCombatHandoff.Reset();
                     anchorDefenseCadence.Reset();
                     encounter.Reset();courtesy.Reset();deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;encounterQuietSince=0;encounterUnknownSince=0;
                     pendingPriorityGamekeeper=null;gamekeeperReturnPending=false;gamekeeperDefeated=false;gamekeeperReturnRouting=false;gamekeeperExcursion=false;completionReturnPending=false;stationaryAssistReturnPending=false;
@@ -2399,6 +2448,7 @@ public sealed partial class HunterForm : Form
                     await MoveToSavedHuntAnchor(recoveryToken,true);
                     if(deathRecovery.Episode!=recoveryEpisode)throw new DeathRecoveryRequiredException();
                     deathRecovery.Reset();
+                    arrivedCombatHandoff.CompleteRecovery(anchor,gamekeeperReturnHeading,recoveryEpisode,deathRecovery.Episode);
                     stopAfterDeathReturn=!activeFarmOnArrival;
                     if(stopAfterDeathReturn)message="Saved anchor reached; Resume farming is disabled.";
                     else StartNearbyPickup(o);
@@ -2423,6 +2473,8 @@ public sealed partial class HunterForm : Form
             {
                 try
                 {
+                if(arrivedCombatHandoff.Pending && !arrivedCombatHandoff.Matches(anchor,gamekeeperReturnHeading,deathRecovery.Episode))
+                    arrivedCombatHandoff.Reset();
                 if(faultDeathWatch.Active && StationaryReturnContext())
                 {
                     faultDeathWatch.Reset();anchorAdjustmentRetryAt=Environment.TickCount64+500;
@@ -2483,9 +2535,30 @@ public sealed partial class HunterForm : Form
                 {
                     await ReturnToSavedHuntPointAfterLoot(token);continue;
                 }
+                if(gamekeeper==null && arrivedCombatHandoff.Pending)
+                {
+                    RefreshGuardScene();var facingSelf=world.LocalPlayer();var facingHealth=world.HealthSnapshot();
+                    ObserveEncounter(o,facingHealth,facingSelf.Position,world.PlayerLevel());
+                    double facingSwingRange=Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,Targeting.MeleeAttackRange+1);
+                    var remainingOwned=ArrivedCombatHandoff.Choose(entities,encounter.EngagedCandidates,facingHealth,
+                        facingSelf.Position,facingSwingRange,e=>TargetGuardReason(e,facingHealth.GetValueOrDefault(e.Id),facingSelf.Position,o)==null);
+                    if(arrivedCombatHandoff.Expired(Environment.TickCount64) || remainingOwned==null)
+                    {
+                        // Finish the saved orientation before any new target,
+                        // pickup, rest, buff or repair. Expiry grants an actual
+                        // correction opportunity; spawns cannot renew its lease.
+                        ReleaseCombatPickup();drive.StopApproach();Input.HoldMouse(false,false,token);lockedTarget=null;
+                        if((facingSelf.Position-anchor).Length>NearbyLootPickup.AnchorArrivalTolerance)
+                        {stationaryAssistReturnPending=true;continue;}
+                        returningFromPriority=true;
+                        try {await RestoreHuntFacing(token,3,allowCombatHandoff:false);}
+                        finally {returningFromPriority=false;drive.StopApproach();}
+                        continue;
+                    }
+                }
                 if (await TryHeal(drive, o, token)) continue;
                 if (deathRecovery.Pending)continue;
-                if(await TryDurabilityRepair(o,token,lootReturnPending||stationaryAssistReturnPending||gamekeeperReturnPending&&gamekeeperDefeated))continue;
+                if(await TryDurabilityRepair(o,token,arrivedCombatHandoff.Pending||lootReturnPending||stationaryAssistReturnPending||gamekeeperReturnPending&&gamekeeperDefeated))continue;
                 if(gamekeeper==null && healingRestPending && !HasActiveFight() && combatPressure.RecentDamage(Environment.TickCount64))
                 {
                     message="Holding position while checking nearby threats; waiting for damage to stop before resting.";
@@ -2507,7 +2580,7 @@ public sealed partial class HunterForm : Form
                         }
                         else {await RepositionUnderPressure(drive,anchor,o,token);continue;}
                     }
-                    if(!(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
+                    if(!arrivedCombatHandoff.Pending && !(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Tagging) && await TryMaintainBuff(o,token))continue;
                     if(deathRecovery.Pending)continue;
                 }
                 var pos = world.PlayerPosition();
@@ -2568,7 +2641,18 @@ public sealed partial class HunterForm : Form
                 if(gamekeeper==null && gamekeeperReturnPending && gamekeeperDefeated && await ReturnAfterGamekeeper(token))continue;
                 if(gamekeeper==null && await RunRangedPullStep(drive,anchor,o,health,pos,level,skillDue,token))continue;
                 Entity? target=o.GroupMode?gamekeeper:GamekeeperPriority.ChooseFirst(encounter,gamekeeper,()=>null);
-                if(gamekeeper==null && target!=null && Targeting.IsStationaryHuntTargetId(target.Id))
+                if(gamekeeper==null && arrivedCombatHandoff.Pending)
+                {
+                    // Healing/mana waits can outlive the last owned enemy.
+                    // Decide again from this final refreshed scene; neither an
+                    // old out-of-range member nor a fresh spawn may bypass the
+                    // pending saved-facing transition.
+                    target=ArrivedCombatHandoff.Choose(entities,encounter.EngagedCandidates,health,pos,
+                        Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,Targeting.MeleeAttackRange+1),
+                        e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos,o)==null);
+                    if(target==null)continue;
+                }
+                if(gamekeeper==null && !arrivedCombatHandoff.Pending && target!=null && Targeting.IsStationaryHuntTargetId(target.Id))
                     target=StationarySwingCandidate(o,pos,Math.Max(Math.Min((double)o.MeleeRange,Targeting.MeleeAttackRange)+.35,
                         Targeting.MeleeAttackRange+1),health) ?? target;
                 if(gamekeeper==null && RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing)
@@ -2643,6 +2727,7 @@ public sealed partial class HunterForm : Form
                     if(decision.Action!=GroupAction.Attack || decision.Target==null){Input.Release(preserveNearbyPickup:true);await Input.Delay(150,token);continue;}
                     target=decision.Target;
                 }
+                if(gamekeeper==null && arrivedCombatHandoff.Pending && target==null)continue;
                 if(encounter.Active && target==null)
                 {
                     target=healingRestPending || o.LeaveAreaWhenEmpty && completionReturnPending ? null : Targeting.ChooseEncounter(entities.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),pos,o)==null),
@@ -2744,6 +2829,12 @@ public sealed partial class HunterForm : Form
                 while (true)
                 {
                     token.ThrowIfCancellationRequested();
+                    if(arrivedCombatHandoff.Pending && !Targeting.IsGamekeeper(target) && arrivedCombatHandoff.Expired(Environment.TickCount64))
+                    {
+                        collectAfterTarget=false;
+                        TraceLog.Record("arrived combat facing allowance expired",new{target.Id,Anchor=anchor,Heading=gamekeeperReturnHeading});
+                        break;
+                    }
                     if(deathRecovery.Pending)
                     {
                         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);lockedTarget=null;
@@ -2766,7 +2857,7 @@ public sealed partial class HunterForm : Form
                         ReleaseCombatPickup();drive.StopApproach();Input.Release(preserveNearbyPickup:true);
                         break;
                     }
-                    if(await TryDurabilityRepair(o,token,lootReturnPending||gamekeeperReturnPending&&gamekeeperDefeated))
+                    if(await TryDurabilityRepair(o,token,arrivedCombatHandoff.Pending||lootReturnPending||gamekeeperReturnPending&&gamekeeperDefeated))
                     {
                         // Repair released input. Re-read the target before normal
                         // combat can resume, and exclude UI time from watchdogs.

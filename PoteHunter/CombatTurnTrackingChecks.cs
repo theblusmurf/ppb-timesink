@@ -9,6 +9,7 @@ internal static class CombatTurnTrackingChecks
     internal static async Task Run()
     {
         CheckSkillFacing();
+        CheckDeferredRecoveryFacing();
         Require(CombatTurnTracking.Allowed(true,true,true,false,false,false,false,false),"ordinary melee tracking blocked");
         for(int blocked=0;blocked<8;blocked++)
         {
@@ -86,8 +87,39 @@ internal static class CombatTurnTrackingChecks
                 "sub-pixel accumulation","speed cap and fast-poll bound","long pause burst bound",
                 "fresh offensive body-facing confirmation","observed 26.76-degree retarget error rejected","finite usable direction required",
                 "refreshed moving target and player direction","two-degree inclusive tolerance without jitter starvation",
-                "priority self-heal and ranged-facing exemptions"}
+                "priority self-heal and ranged-facing exemptions","standing deferred recovery retains fine aim",
+                "active rest and unknown/transitioning posture exclude fine aim","coarse-safe angle reaches unchanged offensive gate"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static void CheckDeferredRecoveryFacing()
+    {
+        bool Standing(bool pending,bool active)=>CombatTurnTracking.PostureAllowsTracking(pending,active,true,RestPosture.Standing);
+        Require(Standing(true,false),"deferred recovery suppressed upright owned combat aiming");
+        Require(!Standing(true,true)&&!Standing(false,true),"active rest recovery admitted combat aiming");
+        foreach(var posture in new[]{RestPosture.Unknown,RestPosture.SittingDown,RestPosture.Resting,RestPosture.StandingUp})
+            Require(!CombatTurnTracking.PostureAllowsTracking(true,false,true,posture)&&
+                !CombatTurnTracking.PostureAllowsTracking(false,false,true,posture),"unknown or transitioning posture admitted aiming");
+        Require(!CombatTurnTracking.PostureAllowsTracking(true,false,false,RestPosture.Unknown),
+            "pending recovery borrowed an unsupported posture");
+        Require(CombatTurnTracking.PostureAllowsTracking(false,false,false,RestPosture.Unknown),
+            "ordinary combat on a client without rest support changed");
+
+        // An angle accepted by coarse stationary facing still needs correction
+        // before the unchanged offensive two-degree gate can admit a skill.
+        const double goal=-.092;var steering=new SmoothSteering();var rate=new TurnRateBudget();double heading=0;
+        bool admitted=false;
+        for(int now=0;now<1000;now+=16)
+        {
+            bool postureReady=Standing(true,false);
+            Require(CombatTurnTracking.Allowed(true,true,true,false,false,false,!postureReady,false),
+                "pending standing recovery blocked the cooperative correction");
+            double error=goal-heading;
+            if(Math.Abs(error)<=CombatTurnTracking.SkillFacingTolerance){admitted=true;break;}
+            int pixels=steering.Next(error,-heading,-.0024,false,now,rate,180,.018);
+            heading+=pixels*-.0024;
+        }
+        Require(admitted,"coarse-safe angle stayed outside the offensive gate during deferred recovery");
     }
 
     static void CheckSkillFacing()

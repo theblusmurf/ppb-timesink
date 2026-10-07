@@ -24,6 +24,13 @@ internal static class CombatTurnTracking
         bool recovery,bool repair,bool resting,bool tagging)=>
         running&&bodyMode&&matchingTarget&&!navigation&&!recovery&&!repair&&!resting&&!tagging;
 
+    // A deferred request to recover after the owned fight is not a posture
+    // transition. Keep aiming that fight while upright; an active recovery,
+    // sitting/standing animation, or unreadable supported posture stays exclusive.
+    internal static bool PostureAllowsTracking(bool recoveryPending,bool recoveryActive,
+        bool postureSupported,RestPosture posture)=>
+        !recoveryActive && (postureSupported ? posture==RestPosture.Standing : !recoveryPending);
+
     internal static async Task WaitAsync(int milliseconds,Func<long> clock,
         Func<bool> correct,Func<int,CancellationToken,Task> guardedDelay,CancellationToken token)
     {
@@ -92,9 +99,11 @@ public sealed partial class HunterForm
         {
             bool returnDefense=stationaryReturnDefenseGuard is {} guard &&
                 StationaryReturnDefense.CanDefend(guard());
+            bool postureReady=CombatTurnTracking.PostureAllowsTracking(healingRestPending,healingRest!=null,
+                world.RestSupported,world.RestState().Posture);
             if(!CombatTurnTracking.Allowed(working,bodyMode,
                 lockedTarget!=null&&TargetIdentity(lockedTarget)==TargetIdentity(expected),navigationInputOwned&&!returnDefense,
-                deathRecoveryActive||(deathReturnInProgress&&!returnDefense),repairInProgress,healingRestPending,rangedTagging))return false;
+                deathRecoveryActive||(deathReturnInProgress&&!returnDefense),repairInProgress,!postureReady,rangedTagging))return false;
             var live=world.Find(expected.Id);
             if(live==null||TargetIdentity(live)!=TargetIdentity(expected)||!live.Position.Finite)return false;
             var health=world.TargetHealth(live.Id);

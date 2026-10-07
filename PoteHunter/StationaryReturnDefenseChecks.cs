@@ -10,6 +10,7 @@ internal static class StationaryReturnDefenseChecks
 
     public static async Task Run()
     {
+        await ArrivedCombatHandoffChecks.Run();
         var sample=Sample();
         Require(StationaryReturnDefense.CanDefend(sample),"approved nearby living stationary enemy was refused");
         Require(StationaryReturnDefense.CanDefend(sample with{Position=new(1.5,0)}) &&

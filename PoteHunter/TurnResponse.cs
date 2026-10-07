@@ -96,6 +96,16 @@ public sealed class TurnResponse
         quiet.Reset();
         Require(!quiet.Observe(origin,0,96,0),"explicit reset retained the previous window or observation time.");
 
+        // A new loot owner must not inherit a combat observation's elapsed
+        // no-response window. Reset the goal, not the genuine stall deadline.
+        var changedGoal=new TurnResponse();
+        Require(!changedGoal.Observe(origin,0,96,0) && !changedGoal.Observe(origin,0,96,1200) &&
+            changedGoal.Observe(origin,0,96,1600),"old goal fixture did not retain a sustained turn failure.");
+        changedGoal.Reset();
+        Require(!changedGoal.Observe(origin,0,-32,1600) && !changedGoal.Observe(origin,0,-32,1900) &&
+            !changedGoal.Observe(origin,0,-32,3099) && changedGoal.Observe(origin,0,-32,3100),
+            "new loot goal inherited old elapsed time or reset disabled genuine no-response detection.");
+
         var invalid=new TurnResponse();invalid.Observe(origin,0,96,100);
         foreach(var position in new[]{new Vec(double.NaN,0),new Vec(0,double.PositiveInfinity)})
         {

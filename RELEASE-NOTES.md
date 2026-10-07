@@ -1,3 +1,13 @@
+## Release1.134
+
+Resume owned combat promptly after a settled return to the anchor, then restore the saved facing when the pack clears.
+
+- Hand off a settled anchor return to approved living engaged targets before restoring the saved facing. Keep the saved facing as a separate pending action with a two-minute maximum allowance across target changes, preserve Gamekeeper priority and correction opportunities, and release input before travel or any unsafe context.
+- Continue fine melee facing while health recovery is deferred and the character is still fighting upright. Actual resting and recovery retain their input guards; the strict offensive skill-facing requirement stays unchanged.
+- Stop the previous approach and reset its turn-response state when a new anchor loot sweep takes ownership, so old combat timing cannot cause an immediate turning fault for the new goal. Genuine sustained no-response detection remains active.
+
+Validation covers safe handoffs, identity/range/health/priority changes, pending versus actual rest, renewed loot-goal watchdog deadlines, and the full offline and native UI checks. These changes address captured behavior; live gameplay after upgrading still requires confirmation. Existing settings, routes, profiles and session logs are preserved.
+
 ## Release1.133
 
 Resolve short melee approaches and reduce unnecessary movement during loot pickup.
