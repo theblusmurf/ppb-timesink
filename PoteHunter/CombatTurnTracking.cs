@@ -65,7 +65,7 @@ public sealed partial class Movement
         return CombatTurnTracking.FacingReady(player.Heading,refreshedTargetPosition-player.Position,out errorRadians);
     }
 
-    internal void TrackFacing(World world,Vec delta,CancellationToken token)
+    internal void TrackFacing(World world,Vec delta,CancellationToken token,string owner="combat")
     {
         double heading=world.PlayerHeading();
         Forward=FromClientHeading(heading);
@@ -79,7 +79,7 @@ public sealed partial class Movement
         int pixels=smoothSteering.Next(angle,heading,RadiansPerPixel,false,now,turnRateBudget,TurnSpeedDegreesPerSecond,.018);
         Vec position=world.PlayerPosition();
         if(pixels!=0)Input.Turn(pixels,token); // Existing focus/identity/health/preflight guards run here.
-        if(turnResponse.Observe(position,heading,pixels,now,true))throw new TurnUnresponsiveException(position,Forward);
+        ObserveTurning(position,heading,pixels,now,owner,angle,.018,token);
         if(pixels!=0&&now-lastCombatTurnTrace>=100)
         {
             lastCombatTurnTrace=now;
@@ -111,7 +111,7 @@ public sealed partial class HunterForm
             if(!health.Known||health.Dead||TargetGuardReason(live,health,position,o)!=null)return false;
             if(activeHuntAnchor is Vec anchor && !o.GroupMode &&
                 (live.Position-anchor).Length>activeMovementBoundary)return false;
-            drive.TrackFacing(world,live.Position-position,token);
+            drive.TrackFacing(world,live.Position-position,token,$"combat:{expected.Id}:{expected.Generation}:{expected.Address}");
             return true;
         },Input.Delay,token);
         // Even an invalid/replaced/dead target gets the normal safety/preflight

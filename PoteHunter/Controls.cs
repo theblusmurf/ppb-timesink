@@ -1080,7 +1080,7 @@ public sealed partial class Movement
         throw new InvalidOperationException("The game did not give a consistent turn response. Keep the mouse still and press F8 again.");
     }
 
-    public async Task<bool> Face(World world, Vec delta, CancellationToken token,double tolerance=.035)
+    public async Task<bool> Face(World world, Vec delta, CancellationToken token,double tolerance=.035,string owner="facing")
     {
         double heading=world.PlayerHeading();
         Forward = FromClientHeading(heading);
@@ -1095,7 +1095,7 @@ public sealed partial class Movement
         int pixels = smoothSteering.Next(angle,heading,RadiansPerPixel,false,Environment.TickCount64,turnRateBudget,TurnSpeedDegreesPerSecond);
         Vec position=world.PlayerPosition();
         if (pixels != 0) Input.Turn(pixels, token);
-        if(turnResponse.Observe(position,heading,pixels,Environment.TickCount64,awaitingResponse:true))throw new TurnUnresponsiveException(position,Forward);
+        ObserveTurning(position,heading,pixels,Environment.TickCount64,owner,angle,tolerance,token);
         await Input.Delay(TurnFeedbackDelay(pixels), token);
         return false;
     }
@@ -1139,12 +1139,22 @@ public sealed partial class Movement
         {
             Input.Turn(pixels, token);
         }
-        if(watchTurns && turnResponse.Observe(position,heading,pixels,now,awaitingResponse:Math.Abs(angle)>.035))throw new TurnUnresponsiveException(position,Forward);
+        if(watchTurns)ObserveTurning(position,heading,pixels,now,"approach",angle,.035,token,Math.Abs(angle)>.035);
         if (now - lastMotionTrace > 300)
         {
             lastMotionTrace = now;
             TraceLog.Record("approach feedback", new { Position = position, TargetDelta = delta, SteeringDelta=aim, Forward, ActualHeading=heading, ErrorDegrees = angle * 180 / Math.PI, HoldingW = advancing, TurnPixels = pixels });
         }
         await Input.Delay(TurnFeedbackDelay(pixels), token);
+    }
+    internal void ObserveTurning(Vec position,double heading,int pixels,long now,string owner,double angle,double tolerance,
+        CancellationToken token,bool awaitingResponse=true)
+    {
+        token.ThrowIfCancellationRequested();
+        if(!turnResponse.ObserveGoal(position,heading,pixels,now,owner,angle,tolerance,awaitingResponse))return;
+        // Emit once at the bounded failure, not every high-frequency poll.
+        // Heading/goal/error are measured separately from commanded pixels.
+        TraceLog.Record("turn response unavailable",turnResponse.Observation!);
+        throw new TurnUnresponsiveException(position,Forward,observation:turnResponse.Observation);
     }
 }

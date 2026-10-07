@@ -84,6 +84,7 @@ internal sealed class ArrivalMotion
 {
     internal const int FrameMilliseconds=16;
     readonly Queue<double> speedSamples=new();
+    readonly Queue<double> frameDisplacements=new();
     Vec previous;
     long previousAt;
     bool observed;
@@ -102,8 +103,22 @@ internal sealed class ArrivalMotion
         previous=position;previousAt=now;observed=true;
     }
     public double BrakingDistance(double tolerance)=>Math.Clamp(Speed*160+tolerance,1.25,4);
-    public int PulseMilliseconds(double distance,double tolerance)=>
-        Math.Clamp((int)Math.Floor(Math.Max(0,distance-tolerance*.5)/Speed*.5),FrameMilliseconds,60);
+    public int PulseMilliseconds(double distance,double tolerance)
+    {
+        if(!double.IsFinite(distance)||distance<0)throw new ArgumentOutOfRangeException(nameof(distance));
+        if(!double.IsFinite(tolerance)||tolerance<0)throw new ArgumentOutOfRangeException(nameof(tolerance));
+        return ArrivalPulseGeometry.FrameDuration(
+            (int)Math.Clamp(Math.Floor(Math.Max(0,distance-tolerance*.5)/Speed*.5),FrameMilliseconds,60));
+    }
+    public double PulseClearance(int milliseconds)
+    {
+        ArrivalPulseGeometry.FrameDuration(milliseconds); // validate before input
+        // A minimum input frame is a physical displacement quantum, not an
+        // arbitrarily short step. Reserve the whole observed/predicted path,
+        // including settling, even if the navigation goal is much nearer.
+        double frame=frameDisplacements.Count==0?0:frameDisplacements.Max()+.025;
+        return Math.Max(.05,Math.Max(Speed*milliseconds*2,frame*Math.Ceiling(milliseconds/(double)FrameMilliseconds)));
+    }
     void ObserveSpeed(double measured)
     {
         speedSamples.Enqueue(measured);
@@ -115,6 +130,13 @@ internal sealed class ArrivalMotion
     }
     public void ObservePulse(double moved,double heldMilliseconds)
     {
+        // Learn short settled displacements independently of velocity. Their
+        // published quantum is often the same for every sub-two-frame hold.
+        if(moved>.01 && moved<3 && heldMilliseconds>=FrameMilliseconds && heldMilliseconds<FrameMilliseconds*2)
+        {
+            frameDisplacements.Enqueue(moved);
+            if(frameDisplacements.Count>5)frameDisplacements.Dequeue();
+        }
         // A sub-frame correction is quantized, not a velocity measurement.
         // Use actual held time for longer pulses, never the requested sleep.
         if(moved>.01 && moved<3 && heldMilliseconds>=FrameMilliseconds*2)
@@ -198,15 +220,15 @@ public sealed partial class Movement
         if(StopApproach()) { await Input.Delay(120,token); return; }
         Vec position=world.PlayerPosition(),delta=goal-position;
         if(delta.Length<=tolerance)return;
-        if(!await Face(world,delta,token,.035))return;
+        if(!await Face(world,delta,token,.035,"approach"))return;
         // Re-read after aiming; never pulse against stale geometry.
         position=world.PlayerPosition();delta=goal-position;
         if(delta.Length<=tolerance)return;
         Vec forward=FromClientHeading(world.PlayerHeading());
         if(Math.Abs(Angle(forward,delta))>.08)return;
         int duration=arrivalMotion.PulseMilliseconds(delta.Length,tolerance);
-        double step=Math.Min(delta.Length,Math.Max(.05,arrivalMotion.Speed*duration*2));
-        if(CanAdvance?.Invoke(position,position+forward*step)==false)return;
+        double step=arrivalMotion.PulseClearance(duration);
+        if(!ArrivalPulseGeometry.PathClear(position,forward,step,CanAdvance))return;
         double heldMilliseconds=0;
         try
         {
@@ -215,13 +237,19 @@ public sealed partial class Movement
         }
         finally { Input.Hold(Keys.W,false,default);advancing=false; }
         Vec released=world.PlayerPosition();
-        await Input.Delay(120,token);
-        Vec after=world.PlayerPosition();
+        var settlement=await ArrivalPulseSettling.ObserveAsync(position,released,world.PlayerPosition,
+            Input.Delay,()=>Environment.TickCount64,token);
+        Vec after=settlement.Position;
         // The client frequently publishes most/all movement after key-up.
-        // Train on the complete settled pulse rather than a partial first read.
-        arrivalMotion.ObservePulse((after-position).Length,heldMilliseconds);
+        // Never stack a new tap against a still-changing read or learn a
+        // partial/lateral step as settled forward velocity.
+        bool learn=settlement.Settled && ArrivalPulseGeometry.ForwardObservation(position,after,forward);
+        if(learn)arrivalMotion.ObservePulse((after-position).Length,heldMilliseconds);
         TraceLog.Record("anchor approach correction",new {Before=position,After=after,Goal=goal,
             Remaining=(goal-after).Length,PulseMilliseconds=duration,HeldMilliseconds=heldMilliseconds,
-            MovedWhileHeld=(released-position).Length,SettlingDisplacement=(after-released).Length,EstimatedUnitsPerMs=arrivalMotion.Speed});
+            MovedWhileHeld=(released-position).Length,SettlingDisplacement=(after-released).Length,EstimatedUnitsPerMs=arrivalMotion.Speed,
+            ReservedDisplacement=step,settlement.Settled,SettlementMilliseconds=settlement.ElapsedMilliseconds,Learned=learn});
+        if(!settlement.Settled)
+            throw new AnchorReturnException("Forward correction did not settle before its bounded observation deadline; movement remains released.");
     }
 }

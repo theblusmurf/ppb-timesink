@@ -1,3 +1,13 @@
+## Release1.136
+
+Give ready HP-triggered self-heals a bounded opportunity before an exhausted melee approach or pending anchor facing, and improve small movement corrections.
+
+- Permit one urgent approach per low-health episode to an already owned, verified living target, with at most 0.5 map units of correction and two seconds of total work. Recheck identity, HP/MP, cooldown, standing posture, Gamekeeper priority, saved-anchor leash, collision and focus before movement and each activation. Preserve pending anchor return; unknown health, target changes and failed attempts cannot renew the approach budget. Attack reach and assigned HP thresholds remain unchanged.
+- Measure turn response toward the last actually sent goal, with a smaller progress requirement near the existing facing gate. Wrong-way motion, recycled progress toward the same goal, target motion without measured heading response, and position drift cannot renew the no-response deadline. Record bounded owner, heading, error and progress details when a turn fails.
+- Align short forward corrections to the existing input-frame bands, learn their settled displacement separately from velocity, and check the whole conservative travel envelope after aiming. Observe delayed movement before another pulse; release and yield when movement remains unsettled at the fixed observation deadline, without recording a false collision obstacle.
+
+Validation covers the captured marginal range and short-pulse geometry, injected runtime movement/cast guards and deadlines, quantized facing, wrong-way and oscillating responses, delayed settlement, and the full offline/native UI checks. These changes address recorded behavior; live gameplay after upgrading still requires confirmation. Existing settings, routes, profiles, item imagery and session logs are preserved.
+
 ## Release1.135
 
 Keep optional diagnostic file failures from cancelling a hunt, and retain enough local detail to identify a failed operation.

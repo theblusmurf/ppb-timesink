@@ -86,6 +86,29 @@ internal static class MovementSmoothingChecks
         var restoredResponse=new TurnResponse();restoredResponse.Observe(default,0,1,0);restoredResponse.Reset();
         Require(!restoredResponse.Observe(default,0,1,10000,true) && !restoredResponse.Observe(default,0,0,11499,true) &&
             restoredResponse.Observe(default,0,0,11500,true),"new facing goal inherited an idle timer or waits hid a real stall");
+        // Replay a small fixed saved-facing goal with slow quantized measured
+        // movement. Total required movement is less than the old universal
+        // 0.02-radian watchdog threshold. The actual controller, response
+        // detector and unchanged facing timeout must agree on progress.
+        long fineClock=0;var fineSteering=new SmoothSteering();var fineRate=new TurnRateBudget();
+        var fineResponse=new TurnResponse();var fineFailures=new List<FacingRestoreFailure>();
+        const double fineStart=.04634;int fineSent=0;
+        await FacingRestore.RunAsync(_=>
+        {
+            fineClock+=100;
+            double measured=Math.Floor(fineClock/400.0)*.0024,error=fineStart-measured;
+            if(error<=.035)return Task.FromResult(true);
+            int pixels=fineSteering.Next(error,-measured,.0024,false,fineClock,fineRate,165);
+            if(pixels!=0)fineSent++;
+            if(fineResponse.ObserveGoal(default,-measured,pixels,fineClock,"saved-facing",error,.035))
+                throw new TurnUnresponsiveException(default,default,observation:fineResponse.Observation);
+            return Task.FromResult(false);
+        },()=>{fineResponse.Reset();fineSteering.Reset();},()=>{},(ms,ct)=>
+            {ct.ThrowIfCancellationRequested();fineClock+=ms;return Task.CompletedTask;},()=>fineClock,
+            ()=>new TurnUnresponsiveException(default,default),default,
+            timeoutMilliseconds:FacingRestore.TimeoutMilliseconds(165),failureObserved:fineFailures.Add);
+        Require(fineClock>=2000 && fineClock<3091 && fineSent>0 && fineFailures.Count==0,
+            "recorded-sized quantized facing could not finish under its strict acceptance and absolute timeout");
         var quantized=new ArrivalMotion();double originalSpeed=quantized.Speed;
         foreach(double moved in new[]{.0032626,0,.326145,.341727})quantized.ObservePulse(moved,9);
         Require(quantized.Speed==originalSpeed && quantized.PulseMilliseconds(.334,.15)>=16,
@@ -484,6 +507,7 @@ internal static class MovementSmoothingChecks
                 "deadzone/reversal retains pending feedback",
                 "bounded lost-command retry","time-bounded turn size","unresponsive turn deadline",
                 "unsent turns cannot start stall timing","new facing goal clears idle timer","bounded post-loot facing retry and cancellation",
+                "small saved-facing controller goal reaches strict tolerance with quantized measured progress",
                 "slow-cap progressive saved facing and delayed feedback","speed-derived bounded facing deadline",
                 "saved-facing deadline distinguished from real no-progress watchdog","extended facing cancellation and focus guards",
                 "movement key-up precedes slow postflight","short pulse focus/cancellation/duration gates",

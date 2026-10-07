@@ -32,9 +32,32 @@ public static class SkillHealthRule
     }
     public static bool ReserveExempt(HotbarSlot slot,bool healerMode,uint characterId,uint? recipientId)=>
         AutomaticMatch(slot) && (!healerMode || recipientId==characterId);
+    internal static string? ActivationBlockedReason(HotbarSlot expected,HotbarSlot current,Health character,Options options)
+    {
+        if(current.Kind!=SlotKind.Skill || current.Id!=expected.Id || current.Name!=expected.Name || current.Key!=expected.Key ||
+            current.SkillUse!=expected.SkillUse || current.SkillTarget!=expected.SkillTarget)return "live skill slot identity changed";
+        if(!current.Ready)return current.Locked?"live skill slot locked":"live skill cooldown";
+        if(!Applies(current,options))return null;
+        if(!character.Known)return "HP condition health unavailable";
+        if(character.Dead)return "HP condition character or recipient dead";
+        if(options.HealthSkillPercent<=0 || options.HealthSkillPercent>100)return "HP condition threshold invalid";
+        return Allows(current,character,options)?null:"HP above assigned threshold";
+    }
     public static bool CanActivate(HotbarSlot expected,HotbarSlot current,Health character,Options options)=>
-        current.Kind==SlotKind.Skill && current.Id==expected.Id && current.Name==expected.Name && current.Key==expected.Key &&
-        current.SkillUse==expected.SkillUse && current.SkillTarget==expected.SkillTarget && current.Ready && Allows(current,character,options);
+        ActivationBlockedReason(expected,current,character,options)==null;
+
+    internal static Func<bool> FreshActivationGuard(HotbarSlot expected,Options options,
+        Func<HotbarSlot> readSlot,Func<Health> readHealth,Func<HotbarSlot,bool> manaAllowed,
+        Func<bool>? combatGuard=null,Action<HotbarSlot,Health>? accepted=null,
+        Action<HotbarSlot,Health,string>? withheld=null)=>()=>
+    {
+        var current=readSlot();var health=readHealth();
+        string? reason=ActivationBlockedReason(expected,current,health,options);
+        reason??=manaAllowed(current)?null:"MP rule";
+        if(reason!=null){withheld?.Invoke(current,health,reason);return false;}
+        if(combatGuard?.Invoke()==false)return false;
+        accepted?.Invoke(current,health);return true;
+    };
 
     internal static async Task<bool> ActivateGuardedAsync(Func<bool>? activationGuard,Func<Func<bool>?,Task<bool>> activate,Action? withheld=null)
     {
@@ -54,6 +77,11 @@ public static class CombatSkillPolicy
     public static bool IsPriorityHeal(HotbarSlot slot,Options options)=>
         !options.HealerMode && SkillHealthRule.Applies(slot,options) && SkillHealthRule.AutomaticMatch(slot);
 
+    internal static int ChoosePriorityHeal(string keys,int cursor,HotbarSnapshot bar,
+        IReadOnlyDictionary<char,long> retryAt,long now,Health character,Options options,Func<HotbarSlot,bool> eligible)=>
+        SkillRotation.Choose(keys,cursor,bar,retryAt,now,
+            slot=>IsPriorityHeal(slot,options) && SkillHealthRule.Allows(slot,character,options) && eligible(slot));
+
     public static int Choose(string keys,int cursor,HotbarSnapshot bar,IReadOnlyDictionary<char,long> retryAt,long now,
         Health character,Options options,SkillGroupStatus group,bool targetReady,bool offensiveReady,bool delayReady,
         Func<HotbarSlot,bool> eligible)
@@ -62,8 +90,7 @@ public static class CombatSkillPolicy
         bool CanUse(HotbarSlot slot)=>SkillHealthRule.Allows(slot,character,options) && eligible(slot);
         // Keep the same live cooldown, slot-lock and retry checks as attacks,
         // but do not make survival wait for a full wounded pack or its timer.
-        int heal=SkillRotation.Choose(keys,cursor,bar,retryAt,now,
-            slot=>IsPriorityHeal(slot,options) && CanUse(slot));
+        int heal=ChoosePriorityHeal(keys,cursor,bar,retryAt,now,character,options,eligible);
         if(heal>=0)return heal;
         if(!offensiveReady || !group.Ready)return -1;
         return SkillRotation.Choose(keys,cursor,bar,retryAt,now,
@@ -120,7 +147,7 @@ public sealed partial class HunterForm
         }
     }
 
-    async Task<bool> CastHealthCheckedSkill(HotbarSlot expected,Options options,CancellationToken token,Func<bool>? activationGuard=null)
+    async Task<bool> CastHealthCheckedSkill(HotbarSlot expected,Options options,CancellationToken token,Func<bool>? activationGuard=null,long requestId=0,int attempt=1)
     {
         // Recheck after selecting a key and before every activation/retry. A
         // potion or ally may have healed us during the intervening key delay.
@@ -128,20 +155,28 @@ public sealed partial class HunterForm
         var hp=SkillConditionHealth(options);
         if(!SkillHealthRule.CanActivate(expected,current,hp,options) || !ManaSkillAllowed(current,options))
         {
-            TraceLog.Record("skill activation withheld",new{expected.Key,expected.Name,hp.Current,hp.Maximum,HealthSource=options.HealerMode?"Healing target":"Character",Threshold=options.HealthSkillPercent,Condition=SkillHealthRule.Applies(expected,options),current.Ready});
+            TraceLog.Record("skill activation withheld",new{expected.Key,expected.Name,RequestId=requestId,Attempt=attempt,hp.Current,hp.Maximum,HealthSource=options.HealerMode?"Healing target":"Character",Threshold=options.HealthSkillPercent,Condition=SkillHealthRule.Applies(expected,options),current.Ready,Reason=SkillHealthRule.ActivationBlockedReason(expected,current,hp,options)??"MP rule"});
             return false;
         }
         // Key selection may have taken long enough for the target, its range,
         // pack eligibility or facing to change. Admit each activation only
         // after input preflight, including a fallback retry, without releasing
         // the basic-attack hold when the final combat gate refuses it.
-        return await SkillHealthRule.ActivateGuardedAsync(activationGuard,admit=>
+        var finalAdmission=SkillHealthRule.FreshActivationGuard(expected,options,
+            ()=>CheckedHotbar().Slot(expected.Key[0]),()=>SkillConditionHealth(options),fresh=>ManaSkillAllowed(fresh,options),
+            activationGuard,(fresh,freshHp)=>{current=fresh;hp=freshHp;},(fresh,freshHp,reason)=>
+            {
+                TraceLog.Record("skill final admission withheld",new{expected.Key,expected.Name,RequestId=requestId,
+                    Attempt=attempt,Reason=reason,HP=freshHp,Threshold=options.HealthSkillPercent,
+                    fresh.RemainingCooldown,fresh.Locked});
+            });
+        return await SkillHealthRule.ActivateGuardedAsync(finalAdmission,admit=>
         {
             return Input.CastSkill(current.SkillUse,(int)options.HealChargeMilliseconds,token,()=>
             {
                 if(CombatSkillPolicy.IsPriorityHeal(current,options))
-                    TraceLog.Record("self-heal activation requested",new{current.Key,current.Name,hp.Current,hp.Maximum,Threshold=options.HealthSkillPercent,Target=lockedTarget?.Id});
+                    TraceLog.Record("self-heal activation requested",new{current.Key,current.Name,RequestId=requestId,Attempt=attempt,hp.Current,hp.Maximum,Threshold=options.HealthSkillPercent,Target=lockedTarget?.Id,Generation=lockedTarget?.Generation});
             },admit);
-        },()=>TraceLog.Record("skill activation withheld by combat gate",new{expected.Key,expected.Name,Target=lockedTarget?.Id}));
+        },()=>TraceLog.Record("skill activation withheld by combat gate",new{expected.Key,expected.Name,RequestId=requestId,Attempt=attempt,Target=lockedTarget?.Id}));
     }
 }
