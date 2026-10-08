@@ -40,4 +40,10 @@
   </PropertyGroup>
   <ItemGroup><EmbeddedResource Include="Resources\ItemGrades\grade_breakpoints.csv.gz" LogicalName="PoteHunter.Resources.ItemGrades.grade_breakpoints.csv.gz" /></ItemGroup>
   <ItemGroup><None Include="../UPGRADE-DESK.md" Link="UPGRADE-DESK.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
+  <!-- Captured teleporter links and sibling temporary/backup files are local user data. -->
+  <ItemGroup>
+    <None Remove="**/teleporter-profiles.json*" />
+    <Content Remove="**/teleporter-profiles.json*" />
+    <EmbeddedResource Remove="**/teleporter-profiles.json*" />
+  </ItemGroup>
 </Project>

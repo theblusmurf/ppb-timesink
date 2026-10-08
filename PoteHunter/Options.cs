@@ -113,6 +113,7 @@ public sealed partial class Options
     public bool AutomaticRouting { get; set; } = true;
     public bool GuideTreasureChests { get; set; } = true;
     public bool UseAlternativeHuntRoutes { get; set; } = true;
+    public bool UseTeleporterRoutes { get; set; } = false;
     public bool AutoReviveAfterDeath { get; set; } = true;
     public bool AutoRepairAfterDeath { get; set; }
     public bool AutoRepairLowDurability { get; set; }

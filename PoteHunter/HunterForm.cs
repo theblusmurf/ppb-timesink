@@ -91,6 +91,7 @@ public sealed partial class HunterForm : Form
     List<AvoidZone> avoidZones = new();
     uint guardSelfId;
     Options? activeGuardOptions;
+    TeleporterTransaction? activeTeleporter;
     RetreatRecovery? retreatRecovery;
     Movement? retreatDrive;
     long guardRefreshedAt;
@@ -590,6 +591,14 @@ public sealed partial class HunterForm : Form
         string tickOperation = "validate client and input";
         try
         {
+            // The explicit portal transaction owns all observations. Do not
+            // promote a transient/recreated body through the normal Tick path.
+            if(activeTeleporter!=null)
+            {
+                if(!world.ClientProcessAlive)throw new InvalidOperationException("Client closed during teleport; stopped.");
+                Input.CheckSafety(cancel?.Token??default);
+                return;
+            }
             if(working && !world.ClientProcessAlive && TryQueueClientRecovery())return;
             if (working && !Input.Allowed()) Stop("Stopped: switched away from the game. Recalibrate before starting again.");
             int beforeZone=world.ActiveZone();
@@ -843,6 +852,7 @@ public sealed partial class HunterForm : Form
         lootTracker.ObserveActivity(false);
         FinishLoggedHunt(reason);
         startVersion++;
+        activeTeleporter=null;
         faultDeathWatch.Reset();
         rangedPull.Reset(); rangedTagging = false;
         Input.PickupHoldProvider=null;nearbyPickupSnapshot.Clear();nearbyPickupCount=0;
@@ -1409,6 +1419,12 @@ public sealed partial class HunterForm : Form
 
     void ProtectionPreflight()
     {
+        if(activeTeleporter is {} portal)
+        {
+            if(portal.ConfirmationWasSent)throw new InvalidOperationException("Input is released while verifying the teleporter landing.");
+            portal.CheckDeparture(LiveTeleporter.Observe(world,cancel?.Token??default),Environment.TickCount64);
+            return;
+        }
         // The death screen still requires one deliberate client input. Do not
         // let the normal combat guard reject that revive key while HP is zero.
         if(deathRecoveryActive)return;
@@ -2421,6 +2437,9 @@ public sealed partial class HunterForm : Form
                 deathReturnInProgress=true;returningFromPriority=true;
                 Input.PickupHoldProvider=null;ReleaseCombatPickup();drive.StopApproach();Input.Release();drive.ResetTurnResponse();
                 RecoveryPath? path=null;
+                TeleporterProfile? departurePortal=null;
+                TeleporterJourney? portalJourney=null;
+                SavedNavigationRoute? landingRoute=null;
                 var defenseCadence=anchorDefenseCadence;
                 long nextOccupancyCheck=0,progressAt=Environment.TickCount64;
                 int progressIndex=-1;double bestDistance=double.PositiveInfinity;
@@ -2431,8 +2450,8 @@ public sealed partial class HunterForm : Form
                     var route=navigation.GetSavedRoute(slot)!;
                     return RecoveryRouting.Occupied(route.Anchor,route.Height,route.HuntRadius>0?route.HuntRadius:(double)o.HuntRadius,entities,guardSelfId);
                 }
-                bool CompatibleSlot(int slot)=>navigation.GetSavedRoute(slot) is {} route && RecoveryRouting.CompatibleIdentity(route,runZone!.Value,runCharacter.Name) && RecoveryTravel.SharedOrigin(reference,route);
-                void ResetPath(){path=null;progressIndex=-1;bestDistance=double.PositiveInfinity;progressAt=Environment.TickCount64;drive.StopApproach();drive.ResetTurnResponse();}
+                bool CompatibleSlot(int slot)=>landingRoute==null && navigation.GetSavedRoute(slot) is {} route && RecoveryRouting.CompatibleIdentity(route,runZone!.Value,runCharacter.Name) && RecoveryTravel.SharedOrigin(reference,route);
+                void ResetPath(){path=null;departurePortal=null;portalJourney=null;progressIndex=-1;bestDistance=double.PositiveInfinity;progressAt=Environment.TickCount64;drive.StopApproach();drive.ResetTurnResponse();}
                 void Activate(int slot)
                 {
                     var route=navigation.GetSavedRoute(slot)!;
@@ -2450,6 +2469,7 @@ public sealed partial class HunterForm : Form
                 bool ChooseDestination()
                 {
                     if(!alternatives || fallbackCycle.Waiting || !fallbackCycle.Rejected(activeSavedRouteSlot) && !Occupied(activeSavedRouteSlot))return false;
+                    if(landingRoute!=null)throw new RouteUnavailableException("The destination is occupied after teleport. No reverse portal or landing-side alternative was configured; stopped safely.");
                     fallbackCycle.Reject(activeSavedRouteSlot);
                     int slot=fallbackCycle.Select(Navigation.SavedRouteSlotCount,CompatibleSlot,Occupied);
                     if(slot>=0)Activate(slot);
@@ -2473,10 +2493,23 @@ public sealed partial class HunterForm : Form
                             var destination=fallbackCycle.Waiting?reference:activeRouteProfile!;
                             if(!RecoveryRouting.CompatibleIdentity(destination,runZone!.Value,runCharacter.Name))throw new RouteUnavailableException("Saved route no longer matches the character or map.");
                             var routes=alternatives?navigation.SavedRoutes:new SavedNavigationRoute?[]{destination};
-                            var plan=RecoveryTravel.Plan(routes,destination,current,fallbackCycle.Waiting,!afterDeath && startupRouteTravel?(double)o.RouteCorridorRadius:20);
+                            double joinRadius=!afterDeath && startupRouteTravel?(double)o.RouteCorridorRadius:20;
+                            if(landingRoute!=null){destination=landingRoute;routes=new SavedNavigationRoute?[]{destination};}
+                            else if(o.UseTeleporterRoutes && !o.GroupMode && !fallbackCycle.Waiting)
+                            {
+                                var link=TeleporterProfile.Load(world.ClientHash,RepairScreen.Bounds(world).Size,o.Target,activeSavedRouteSlot);
+                                if(link!=null)
+                                {
+                                    var journey=TeleporterJourney.Create(destination,link,(double)o.RouteCorridorRadius);
+                                    if(journey.NeedsTeleport(current,joinRadius))
+                                    {departurePortal=link;portalJourney=journey;destination=journey.DepartureLeg;routes=new SavedNavigationRoute?[]{destination};}
+                                }
+                            }
+                            var plan=landingRoute!=null||departurePortal!=null?TeleporterJourney.PlanLeg(destination,current,joinRadius):
+                                RecoveryTravel.Plan(routes,destination,current,fallbackCycle.Waiting,joinRadius);
                             // Activation may be up to 2.5 units from the route's
                             // saved endpoint. Finish at the actual hunt anchor.
-                            path=new RecoveryPath(plan.Points,fallbackCycle.Waiting?plan.Destination:anchor);
+                            path=new RecoveryPath(plan.Points,fallbackCycle.Waiting||departurePortal!=null?plan.Destination:anchor);
                             activeMovementBoundary=Math.Max((double)o.HuntRadius,Math.Max((current-anchor).Length+2,
                                 plan.Points.Select(p=>(p-anchor).Length+2).DefaultIfEmpty(0).Max()));
                             navigation.BeginGoal(fallbackCycle.Waiting?"retreat on saved route to revival point":"follow saved return route");
@@ -2487,6 +2520,31 @@ public sealed partial class HunterForm : Form
                         if(goal==null)
                         {
                             drive.StopApproach();
+                            if(departurePortal is {} portal && portalJourney is {} journey)
+                            {
+                                Input.Release();await Input.Delay(120,returnToken);
+                                var departure=LiveTeleporter.Observe(world,returnToken);
+                                if(departure.Character is not {} departing || !portal.Departure.Near(departing,departure.Zone,TeleporterProfile.SourceRadius)||
+                                    !AnchorArrival.Settled(current,departing.Position,portal.Departure.Position,.5))
+                                    throw new RouteUnavailableException("Teleporter departure did not settle on its captured floor; stopped before selecting a destination.");
+                                message=$"Selecting teleporter to {portal.Destination}";savedReturnPhase="teleporter selection";
+                                activeTeleporter=new(portal,departure,Environment.TickCount64);
+                                try
+                                {
+                                    var landed=await new LiveTeleporter(world,portal,activeTeleporter,returnToken).Run();
+                                    // Adopt only the confirmed, coherent landing body. Ordinary
+                                    // identity and jump checks are unchanged outside this scope.
+                                    runCharacter=detectedCharacter=landed;guardSelfId=landed.Id;
+                                    navigationZone=runZone!.Value;navigationPosition=landed.Position;
+                                    ClearPlayerRecognition();ClearRangedPending();lockedTarget=null;
+                                    encounter.Reset();courtesy.Reset();deferredLoot.Clear();encounterExistingDrops=null;encounterAnchor=null;encounterHasAttack=false;
+                                    encounterQuietSince=encounterUnknownSince=0;combatPressure.Reset();
+                                    navigation.Observe(world.NavigationContext(landed),landed.Position,landed.Height);
+                                    landingRoute=journey.LandingLeg;drive.ResetTurnResponse();RefreshGuardScene();
+                                }
+                                finally {activeTeleporter=null;Input.Release();}
+                                ResetPath();nextOccupancyCheck=0;continue;
+                            }
                             if(fallbackCycle.Waiting)
                             {
                                 if(fallbackCycle.Wait(now))
@@ -2533,7 +2591,7 @@ public sealed partial class HunterForm : Form
                         double distance=(goal.Value-current).Length;
                         if(path.Index!=progressIndex || distance<bestDistance-.15){progressIndex=path.Index;bestDistance=distance;progressAt=now;}
                         else if(now-progressAt>20000)throw new RouteUnavailableException("Recovery made no progress toward the recorded waypoint; the route may be blocked.");
-                        savedReturnPhase=fallbackCycle.Waiting?"returning to route start":"following saved route";
+                        savedReturnPhase=fallbackCycle.Waiting?"returning to route start":departurePortal!=null?"following route to teleporter":"following saved route";
                         message=$"{savedReturnPhase} · {distance:F1} to waypoint";
                         if(Avoidance.BlockedSegment(current,goal.Value,avoidZones)!=null || !navigation.CanAdvance(current,goal.Value,avoidZones))
                             throw new RouteUnavailableException("The recorded return segment is blocked; stopped before leaving the saved path.");

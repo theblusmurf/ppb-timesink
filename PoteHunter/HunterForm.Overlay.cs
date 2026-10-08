@@ -74,6 +74,7 @@ public sealed partial class HunterForm
             guideTreasureChests.Checked = options.GuideTreasureChests;
             showTreasureChestMarkers.Checked = options.ShowTreasureChestMarkers;
             useAlternativeHuntRoutes.Checked = options.UseAlternativeHuntRoutes;
+            useTeleporterRoutes.Checked = options.UseTeleporterRoutes;
             navigation.SelectTargetSelection(options.Target);
         }
         catch
@@ -88,6 +89,7 @@ public sealed partial class HunterForm
 
         savedNavigationSlot.Items.AddRange(["Primary hunt route", "Alternative route 1", "Alternative route 2"]);
         savedNavigationSlot.SelectedIndex = 0;
+        InitializeTeleporterSettings();
         RefreshSavedNavigationRouteStatus();
 
         var sizeLabel = new Label { Text = "Size:", AutoSize = true, Padding = new Padding(5, 5, 0, 0) };
@@ -230,6 +232,7 @@ public sealed partial class HunterForm
                 ? "Recording cancelled; start again"
                 : "Ready · Home starts";
         navigationRecordingStatus.ForeColor=navigation.RecordingCancelled ? Color.Orange : Color.Silver;
+        RefreshTeleporterControls();
     }
 
     void OverlaySettingsChanged()
@@ -277,6 +280,7 @@ public sealed partial class HunterForm
         options.GuideTreasureChests = guideTreasureChests.Checked;
         options.ShowTreasureChestMarkers = showTreasureChestMarkers.Checked;
         options.UseAlternativeHuntRoutes = useAlternativeHuntRoutes.Checked;
+        options.UseTeleporterRoutes = useTeleporterRoutes.Checked;
         try
         {
             var saved=Options.Read();
@@ -368,6 +372,7 @@ public sealed partial class HunterForm
         if(navigation.UnassignedRouteCount>0)savedNavigationRoutesStatus.Text+=$"{Environment.NewLine}{navigation.UnassignedRouteCount} existing route(s) unassigned";
         assignUnassignedNavigationRoutes.Visible=navigation.UnassignedRouteCount>0;
         assignUnassignedNavigationRoutes.Enabled=!busy && !working && !navigation.Recording && navigation.CanAssignUnassignedRoutes;
+        RefreshTeleporterSettings();
     }
 
     double NavigationViewRadius() => (double)navigationViewRadius.Value;

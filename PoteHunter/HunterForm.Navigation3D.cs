@@ -96,6 +96,7 @@ public sealed partial class HunterForm
         var alternativesHelp=new Label{Name="navigationAlternativesHelp",AutoSize=true,
             Text="When the saved spot is occupied.",ForeColor=ImperialTheme.Muted,Font=new Font("Segoe UI",8.5f)};
         Section("navigationSavedRoutes","Saved routes",true,navigation3DTarget,savedNavigationSlot,startNavigationRecording,saveNavigationRoute,navigationRecordingStatus,useAlternativeHuntRoutes,alternativesHelp,savedNavigationRoutesStatus);
+        AddTeleporterNavigationSection(side);
         Section("navigationRouteManagement","Route management",false,saveNavigationSpot,assignUnassignedNavigationRoutes,clearSavedNavigationRoute,clearAllSavedNavigationRoutes);
         Section("navigationOverlayOptions","Overlay options",false,showNavigationOverlay,radar3D,showNavigationRoutes,showRouteOverlay,routes3D,overlay3DTopView,showTreasureChestMarkers,overlay3DStatus,
             new Label{AutoSize=true,Text="Overlay size"},navigationOverlaySize,new Label{AutoSize=true,Text="MiniMap radius (map units)"},navigationViewRadius,fitNavigationRadius,fitGameMap,followMapPlayer);

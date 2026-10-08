@@ -21,7 +21,7 @@ $test=Join-Path $staging 'install-test'
 New-Item -ItemType Directory -Path $test | Out-Null
 $sentinel='preserve-user-settings'
 New-Item -ItemType Directory -Path (Join-Path $test 'hunting-logs/test-session') -Force | Out-Null
-$preservedFiles=@('settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv')
+$preservedFiles=@('settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','teleporter-profiles.json','teleporter-profiles.json.backup-fixture','teleporter-profiles.json.fixture.tmp','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv')
 function Assert-PreservedUserData {
     param([string]$Stage)
     foreach($name in $preservedFiles){
@@ -44,5 +44,5 @@ Assert-PreservedUserData -Stage 'Auto patcher'
 $process=Start-Process -FilePath (Join-Path $test 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru -WindowStyle Hidden
 if($process.ExitCode -ne 0 -or !(Test-Path (Join-Path $test 'settings.json')) -or !(Test-Path (Join-Path $test 'navigation-routes.json'))){throw 'Uninstall did not preserve user data.'}
 Assert-PreservedUserData -Stage 'Uninstall'
-@{Passed=$true;Version=$Version;Install=$true;Upgrade=$true;AutoPatcherInstall=$true;StartupBlockedDuringPatch=$true;StartupAllowedAfterPatch=$true;ProfilesAndLogsPreserved=$true;HuntingSessionLogsPreserved=$true;UninstallPreservesUserData=$true;SHA256=$hash} | ConvertTo-Json | Set-Content (Join-Path $output 'installer-checks.json')
+@{Passed=$true;Version=$Version;Install=$true;Upgrade=$true;AutoPatcherInstall=$true;StartupBlockedDuringPatch=$true;StartupAllowedAfterPatch=$true;ProfilesAndLogsPreserved=$true;TeleporterProfilesPreserved=$true;PreservedUserDataFiles=$preservedFiles;HuntingSessionLogsPreserved=$true;UninstallPreservesUserData=$true;SHA256=$hash} | ConvertTo-Json | Set-Content (Join-Path $output 'installer-checks.json')
 

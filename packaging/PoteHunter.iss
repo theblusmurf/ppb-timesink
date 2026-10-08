@@ -29,7 +29,7 @@ DisableProgramGroupPage=yes
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 [Files]
-Source: "{#PackageSource}\*"; DestDir: "{app}"; Excludes: "settings.json"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PackageSource}\*"; DestDir: "{app}"; Excludes: "settings.json,teleporter-profiles.json*"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#PackageSource}\settings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist uninsneveruninstall
 [InstallDelete]
 Type: files; Name: "{autoprograms}\PoteHunter.lnk"

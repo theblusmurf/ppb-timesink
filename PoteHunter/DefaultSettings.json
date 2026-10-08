@@ -29,6 +29,7 @@
   "FarmOnArrival": true,
   "ReviveKey": "R",
   "UseAlternativeHuntRoutes": true,
+  "UseTeleporterRoutes": false,
   "HealBelowPercent": 75,
   "HealDelaySeconds": 5,
   "AntiKillSteal": true,

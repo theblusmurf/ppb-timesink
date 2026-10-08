@@ -102,6 +102,7 @@ public sealed partial class HunterForm
                 form.CheckCompactControls();
                 form.CheckSelectedFeatureUi(tabs);
                 form.CheckRevivalSetupUi();
+                form.CheckTeleporterSetupUi();
                 form.CheckClientRecoveryUi();
                 form.compactMode.SelectedIndex=0;
                 form.autoRepair.Checked=true;form.PerformLayout();Application.DoEvents();

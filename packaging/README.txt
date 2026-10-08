@@ -34,10 +34,17 @@ Failed patches retain local UpdateCache logs and stop automatic retries; toggle
 automatic patching off/on or use manual installation to retry. No game close or
 Windows reboot is requested. Install Release1.72 once to enable auto patching.
 For first migration, close the app and copy settings.json, navigation-routes.json,
-repair-profile.json and revival-profile.json to the installed app folder if present.
+repair-profile.json, revival-profile.json and teleporter-profiles.json to the installed app folder if present.
 Copy your old settings.json before starting if you want to keep your preferences.
-Also preserve navigation-routes.json, repair-profile.json, and revival-profile.json
+Also preserve navigation-routes.json, repair-profile.json, revival-profile.json and teleporter-profiles.json
 (if configured).
+Teleporter setup is optional and off by default. In Navigation > Teleporter route,
+choose the target selection and destination saved-route slot, then Configure
+teleporter while hunting is stopped. Capture the destination marker and map text,
+capture the Move to Location prompt with its OK button, and manually teleport
+before capturing the living landing. Setup sends no game clicks or keys. Keep the
+private teleporter-profiles.json registry and any local backups on upgrade; never
+publish them. Only same-zone links with compatible recorded walking legs are used.
 Choose Solo, Group combat, Healer or Group healer in Setup.
 For Group healer, choose a tank and set follow distance, healing skills and range.
 Support contains skill buffs and attack/defense potion switches.

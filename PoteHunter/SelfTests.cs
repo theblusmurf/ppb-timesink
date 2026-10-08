@@ -14,6 +14,8 @@ static class SelfTests
             MapToolWorldRenderer.SelfTest();
             HuntingSessionLogChecks.Run();
             ClientRecoveryChecks.Run();
+            TeleporterChecks.Run().GetAwaiter().GetResult();
+            TeleporterJourney.Checks();
             PotionChecks.Run();
             GroupHealerChecks.Run();
             ZoneMapBackground.SelfTest();
@@ -127,6 +129,7 @@ static class SelfTests
             AdjustableRadiusChecks.Run();
             Input.CheckRepairPointer();
             Input.CheckReviveInput().GetAwaiter().GetResult();
+            Input.CheckVerifiedClick().GetAwaiter().GetResult();
             ChestCatalog.SelfTest();
             RetreatRecovery.SelfTest();
             RestToggle.SelfTest();

@@ -19,5 +19,8 @@ Invoke-Dotnet -Arguments @('publish',$mainProject,'-c','Release','-p:Portable=tr
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PoteHunter/Start-Fixed-Detection.cmd') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PoteHunter/Start-PoteHunter.ps1') -Destination $OutputDirectory
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'packaging/settings.json') -Destination $OutputDirectory
+if (Get-ChildItem -LiteralPath $OutputDirectory -Recurse -File | Where-Object { $_.Name -like 'teleporter-profiles.json*' }) {
+    throw 'Build output contains private teleporter setup data. The build cannot be distributed.'
+}
 Write-Host "Build complete. Run PoteHunter.exe in $OutputDirectory"
 

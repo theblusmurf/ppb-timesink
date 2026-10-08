@@ -523,6 +523,42 @@ public static class Input
         try { HoldMouse(right, true, token); await Delay(70, token); }
         finally { HoldMouse(right, false, token); }
     }
+    internal static async Task ClickVerified(bool right,CancellationToken token,Func<bool> admit,Action sent)
+    {
+        try
+        {
+            if(buttons.IsHeld(right))throw new InvalidOperationException("One-shot confirmation requires a released mouse button.");
+            if(!TryHoldMouse(right,true,token,admit))throw new InvalidOperationException("The recognized click changed at final admission. No click was sent.");
+            sent(); // Acknowledge actual down before the client can recreate its body.
+            await Task.Delay(70,token);CheckSafety(token);
+        }
+        finally {HoldMouse(right,false,default);}
+    }
+    internal static async Task CheckVerifiedClick()
+    {
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;var savedSink=selfTestSink;var savedDown=selfTestDown;
+        var packets=new List<Packet>();
+        try
+        {
+            selfTestSink=packets.Add;selfTestDown=_=>false;Allowed=()=>true;Preflight=null;PickupHoldProvider=null;Release();packets.Clear();
+            int acknowledged=0;
+            await ClickVerified(false,default,()=>true,()=>{acknowledged++;Preflight=()=>throw new Exception("Landing delay repeated character preflight");});
+            if(acknowledged!=1||packets.Count(p=>p.Value.Mouse.Flags==2)!=1||packets.Count(p=>p.Value.Mouse.Flags==4)!=1||BasicAttackHeld)
+                throw new Exception("Verified click did not acknowledge one down and release while awaiting landing.");
+            Preflight=null;packets.Clear();acknowledged=0;bool stopped=false;
+            try{await ClickVerified(false,default,()=>false,()=>acknowledged++);}catch(InvalidOperationException){stopped=true;}
+            if(!stopped||acknowledged!=0||packets.Count!=0)throw new Exception("Rejected click acknowledged or emitted input.");
+            HoldMouse(false,true,default);packets.Clear();stopped=false;
+            try{await ClickVerified(false,default,()=>true,()=>acknowledged++);}catch(InvalidOperationException){stopped=true;}
+            if(!stopped||acknowledged!=0||BasicAttackHeld||packets.Any(p=>p.Value.Mouse.Flags==2))
+                throw new Exception("Already held mouse acknowledged a new confirmation click.");
+            packets.Clear();using var cancel=new CancellationTokenSource();stopped=false;
+            try{await ClickVerified(false,cancel.Token,()=>true,()=>{acknowledged++;cancel.Cancel();});}catch(OperationCanceledException){stopped=true;}
+            if(!stopped||acknowledged!=1||BasicAttackHeld||packets.Count(p=>p.Value.Mouse.Flags==4)!=1)
+                throw new Exception("Cancelled verified click did not release its successfully sent down.");
+        }
+        finally{Preflight=null;PickupHoldProvider=null;Release();Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;selfTestSink=savedSink;selfTestDown=savedDown;}
+    }
     public static void MovePointer(Point screen,CancellationToken token)
     {
         Check(token);

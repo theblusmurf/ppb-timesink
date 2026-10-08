@@ -1,3 +1,14 @@
+## Release1.141
+
+Add optional teleporter links to selected targets and saved-route destination slots, with recorded walking before and after transit.
+
+- Keep Use teleporter routes off by default. Navigation > Teleporter route provides a three-stage setup while hunting is stopped: capture the chosen blue destination marker with its map text, capture the Move to Location prompt and OK button, then manually teleport and capture the same living character at the landing. Calibration sends no game clicks or keys and saves only a complete validated link for the selected target and route slot.
+- Bind each captured link to the client build, game-window size, character, same map zone, departure position and landing position/floor. A journey walks the compatible saved path to departure, recognizes the captured destination and prompt, selects once and confirms OK once, then releases input while awaiting a verified living landing for at most fifteen seconds. Ordinary walking resumes only from the compatible landing-side route to its saved anchor/facing.
+- Retain focus, stop-key, process/window, health and character protections. Recreated body identity is accepted only at the captured landing after the sent confirmation; stale controls, changed identities, wrong landings and expired waits stop safely. Short unreadable loading intervals wait with input released under the original deadline; known dead HP still stops. Startup and revival return share the journey. If the destination becomes occupied after transit, stop safely; reverse portals and landing-side alternative switching are not configured by this version.
+- Store captures in the private local teleporter-profiles.json registry. Exclude that registry and its sibling temporary/backup files from Git, build and release payloads, and preserve existing local registry files through installer upgrades and uninstall.
+
+The setup requires manual in-game calibration. Live portal recognition, transit and the complete return journey remain unverified; no live game input is part of offline validation. Existing ordinary saved routes continue walking, and existing settings, recovery profiles and session logs are preserved.
+
 ## Release1.140
 
 Reduce abrupt checkpoint corrections and repeated ineffective short taps while following existing saved routes.

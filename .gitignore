@@ -15,6 +15,7 @@ navigation-route.json
 navigation-routes.json
 repair-profile.json
 revival-profile.json*
+teleporter-profiles.json*
 self-test.txt
 launcher-error.txt
 startup-trace.txt
@@ -29,6 +30,7 @@ radar-preview.png
 ui-page-*.png
 ui-repair-*.png
 ui-revival-*.png
+ui-teleporter-*.png
 
 # Private calibrated login screens and Windows-encrypted secret
 client-recovery-profile.json*
