@@ -214,8 +214,15 @@ public sealed partial class Movement
 {
     readonly SmoothSteering smoothSteering=new();
     readonly ArrivalMotion arrivalMotion=new();
+    readonly ArrivalPulseAdaptation arrivalPulseAdaptation=new();
 
     async Task ApproachPrecisely(World world,Vec goal,double tolerance,CancellationToken token)
+    {
+        try {await ApproachPreciselyCore(world,goal,tolerance,token);}
+        catch {arrivalPulseAdaptation.Reset();throw;}
+    }
+
+    async Task ApproachPreciselyCore(World world,Vec goal,double tolerance,CancellationToken token)
     {
         if(StopApproach()) { await Input.Delay(120,token); return; }
         Vec position=world.PlayerPosition(),delta=goal-position;
@@ -226,9 +233,9 @@ public sealed partial class Movement
         if(delta.Length<=tolerance)return;
         Vec forward=FromClientHeading(world.PlayerHeading());
         if(Math.Abs(Angle(forward,delta))>.08)return;
-        int duration=arrivalMotion.PulseMilliseconds(delta.Length,tolerance);
-        double step=arrivalMotion.PulseClearance(duration);
-        if(!ArrivalPulseGeometry.PathClear(position,forward,step,CanAdvance))return;
+        int plannedDuration=arrivalMotion.PulseMilliseconds(delta.Length,tolerance);
+        if(!arrivalPulseAdaptation.TrySelectClearance(goal,position,forward,tolerance,plannedDuration,
+            Environment.TickCount64,arrivalMotion.PulseClearance,CanAdvance,out int duration,out double step))return;
         double heldMilliseconds=0;
         try
         {
@@ -243,13 +250,16 @@ public sealed partial class Movement
         var settlement=await ArrivalPulseSettling.ObserveAsync(position,released,world.PlayerPosition,
             Input.Delay,()=>Environment.TickCount64,token,settlementStartedAt);
         Vec after=settlement.Position;
+        arrivalPulseAdaptation.Observe(goal,position,released,after,tolerance,duration,heldMilliseconds,
+            settlement.Settled,settlement.Status,Environment.TickCount64);
         // The client frequently publishes most/all movement after key-up.
         // Never stack a new tap against a still-changing read or learn a
         // partial/lateral step as settled forward velocity.
         bool learn=settlement.Settled && ArrivalPulseGeometry.ForwardObservation(position,after,forward);
         if(learn)arrivalMotion.ObservePulse((after-position).Length,heldMilliseconds);
         TraceLog.Record("anchor approach correction",new {Before=position,After=after,Goal=goal,
-            Remaining=(goal-after).Length,PulseMilliseconds=duration,HeldMilliseconds=heldMilliseconds,
+            Remaining=(goal-after).Length,PulseMilliseconds=duration,PlannedPulseMilliseconds=plannedDuration,
+            PulseAdapted=duration!=plannedDuration,HeldMilliseconds=heldMilliseconds,
             MovedWhileHeld=(released-position).Length,SettlingDisplacement=(after-released).Length,EstimatedUnitsPerMs=arrivalMotion.Speed,
             ReservedDisplacement=step,settlement.Settled,SettlementMilliseconds=settlement.ElapsedMilliseconds,Learned=learn,
             NormalSettlementMilliseconds=ArrivalPulseSettling.NormalMilliseconds,HardSettlementMilliseconds=ArrivalPulseSettling.MaximumMilliseconds,

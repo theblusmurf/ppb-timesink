@@ -1,3 +1,14 @@
+## Release1.140
+
+Reduce abrupt checkpoint corrections and repeated ineffective short taps while following existing saved routes.
+
+- Keep a useful partial lookahead along a clear incoming segment before a farther corner or sparsely recorded checkpoint. Recover a stale local projection only from an actually observed ordinary arrival or verified forward crossing, with the original bounded corridor, monotonic path and collision checks. After an accepted aim loses admission, restore its horizon gradually through verified forward path progress rather than jumping immediately to a distant carrot.
+- Allow a modest 20–35 degree corner to retain continuous movement only when the actual returned steering chord proves the recorded transition clear. Keep its independent physical checkpoint capture, and retain precision for required initial connectors, sharper corners, U-turns, short final adjustments and the final anchor. Preserve the existing bounded, clear lateral entry merge. Near-point skipping also respects required corner and short-final capture; steering cannot advance checkpoints or refill movement and turning retry deadlines.
+- After two recent, fully settled minimum-frame taps produce no observed displacement at the same goal and location, offer one 32 ms tap. Check its complete conservative travel envelope after fresh aiming; a blocked larger envelope permits only an independently checked ordinary tap. Movement, goal changes, safety exceptions and expired evidence invalidate the observations. Continued no-motion taps cannot repeatedly rearm the larger offer at the same quiet location.
+- Include the steering admission decision, arrival policy and forward-block reason in sampled movement feedback, and record planned versus adapted pulse duration. Focus, health, identity, cancellation, collision and released-motion settling protections remain in effect.
+
+Validation includes synthetic route progression, original corridor and obstacle boundaries, sparse and dense geometry, local projection recovery, rolling capture ownership, reacquisition without time-based refill, and bounded pulse adaptation. Offline checks do not establish live gameplay improvement. Existing routes, settings, profiles, overlays and session logs need no migration or re-recording.
+
 ## Release1.139
 
 Follow saved routes with distance-based, speed-adaptive steering so dense recordings receive a useful forward aim instead of being limited to four samples.

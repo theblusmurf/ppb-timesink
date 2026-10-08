@@ -109,6 +109,7 @@ static class SelfTests
             Navigation.SelfTest();
             DeathRecoveryChecks.Run();
             RouteDistanceSteeringChecks.Run().GetAwaiter().GetResult();
+            RouteFluidityChecks.Run();
             StationaryReturnDefenseChecks.Run().GetAwaiter().GetResult();
             Input.CheckFaultWatchSafety();
             AutoRepairChecks.Run().GetAwaiter().GetResult();

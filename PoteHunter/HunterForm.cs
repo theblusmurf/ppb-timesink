@@ -2547,7 +2547,7 @@ public sealed partial class HunterForm : Form
                         Vec steeringGoal=path.SteeringGoal(current,(from,to)=>Avoidance.BlockedSegment(from,to,avoidZones)==null && RoutePlanner.SegmentClear(from,to,steeringObstacles),speedUnitsPerMs:drive.RouteSpeedUnitsPerMs);
                         try
                         {
-                            await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance,steeringDelta:steeringGoal-current);
+                            await drive.Approach(world,current,goal.Value-current,returnToken,watchTurns:true,arrivalTolerance:path.ArrivalTolerance,steeringDelta:steeringGoal-current,steeringStatus:path.SteeringStatus);
                         }
                         catch(TurnUnresponsiveException failure)
                         {

@@ -199,10 +199,48 @@ internal static class DeathRecoveryChecks
                 if(path.Next(before,(_,_)=>false)!=Transform(entry[expected]) || path.Index!=expected)
                     throw new Exception("Recorded entry progression lost a required checkpoint.");
                 bool actualCorner=expected is 3 or 4;
-                if(path.ArrivalTolerance!=(actualCorner?.6:0))
+                if(path.ArrivalTolerance!=(actualCorner?.6:0) || path.CaptureTolerance!=(actualCorner?.6:0))
                     throw new Exception("Recorded entry added a precision stop before its real corner or removed real-corner braking.");
-                if(expected is 2 or 3 && path.SteeringGoal(before,(_,_)=>true)!=Transform(entry[expected]))
-                    throw new Exception("Smoother entry steering looked through an uncaptured sharp corner.");
+                if(expected is 2 or 3)
+                {
+                    // These 21/32-degree bends may now use a proved rolling
+                    // carrot or an aim within the incoming segment. Independently
+                    // verify the returned aim on the original forward polyline
+                    // and every crossed vertex, without relaxing physical capture.
+                    Vec aim=path.SteeringGoal(before,(_,_)=>true);
+                    Vec[] original=[..checkpoints.Select(Transform),Transform(destination)];
+                    var crossed=new List<Vec>{before};double arc=0;bool found=false;
+                    for(int at=expected-1;at<original.Length-1;at++)
+                    {
+                        Vec edge=original[at+1]-original[at];double square=edge.X*edge.X+edge.Y*edge.Y;
+                        if(square<=1e-12)continue;
+                        double progress=((aim-original[at]).X*edge.X+(aim-original[at]).Y*edge.Y)/square;
+                        if(progress>=-1e-8 && progress<=1+1e-8 &&
+                            (aim-(original[at]+edge*progress)).Length<=1e-8)
+                        {arc+=edge.Length*Math.Clamp(progress,0,1);found=true;break;}
+                        arc+=edge.Length;crossed.Add(original[at+1]);
+                    }
+                    Vec chord=aim-before;double chordSquare=chord.X*chord.X+chord.Y*chord.Y;
+                    if(!aim.Finite || !found || arc<=0 || arc>3.5+1e-8 || chordSquare<=1e-12 || path.Index!=expected)
+                        throw new Exception("Recorded entry steering left its bounded original polyline or advanced physical capture.");
+                    double priorProjection=0;
+                    foreach(Vec vertex in crossed)
+                    {
+                        Vec offset=vertex-before;
+                        double projection=(offset.X*chord.X+offset.Y*chord.Y)/chordSquare;
+                        if(projection<priorProjection-1e-8 || projection>1+1e-8 ||
+                            (offset-chord*projection).Length>.35+1e-8)
+                            throw new Exception("Recorded entry steering shortcut a crossed vertex outside its monotonic corridor.");
+                        priorProjection=projection;
+                    }
+                    double capture=actualCorner?.6:0;
+                    bool beyondCorner=arc>(entry[expected]-entry[expected-1]).Length+.01;
+                    if(path.CaptureTolerance!=capture ||
+                        (path.RollingCornerApproved
+                            ?capture!=.6 || path.ArrivalTolerance!=0 || !beyondCorner
+                            :path.ArrivalTolerance!=capture))
+                        throw new Exception("Recorded entry steering relaxed arrival without proved rolling-corner ownership.");
+                }
             }
 
             var corner=new RecoveryPath(checkpoints.Select(Transform),Transform(destination));

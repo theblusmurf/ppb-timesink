@@ -1027,7 +1027,7 @@ public sealed partial class Movement
     Vec progressPosition;
     long progressAt, lastMotionTrace, lastFaceTrace;
     readonly TurnResponse turnResponse = new();
-    public void ResetTurnResponse() { turnResponse.Reset();smoothSteering.Reset();fineFacing=false; }
+    public void ResetTurnResponse() { turnResponse.Reset();smoothSteering.Reset();arrivalPulseAdaptation.Reset();fineFacing=false; }
     public static double Angle(Vec a, Vec b) => Math.Atan2(a.X * b.Y - a.Y * b.X, a.X * b.X + a.Y * b.Y);
     public static Vec Rotate(Vec a, double angle) => new(a.X * Math.Cos(angle) - a.Y * Math.Sin(angle), a.X * Math.Sin(angle) + a.Y * Math.Cos(angle));
     // The client advances X/Z with cos(-heading-pi/2), sin(-heading-pi/2).
@@ -1129,7 +1129,7 @@ public sealed partial class Movement
         advancing = false;
         return wasAdvancing || wasTraveling;
     }
-    public async Task Approach(World world, Vec position, Vec delta, CancellationToken token,bool watchTurns=false,double arrivalTolerance=0,Vec? steeringDelta=null)
+    public async Task Approach(World world, Vec position, Vec delta, CancellationToken token,bool watchTurns=false,double arrivalTolerance=0,Vec? steeringDelta=null,string? steeringStatus=null)
     {
         long now = Environment.TickCount64;
         arrivalMotion.Observe(position,now,advancing);
@@ -1145,8 +1145,12 @@ public sealed partial class Movement
         double angle = Angle(Forward, aim);
         // Hysteresis avoids repeatedly releasing/repressing W around the turn threshold.
         bool shouldAdvance = Math.Abs(angle) < (advancing ? .95 : .60);
+        string advanceBlockReason=shouldAdvance?"none":"heading";
         // If the current heading would clip an avoid zone, turn in place toward the clear route.
-        if (shouldAdvance && CanAdvance!=null && !CanAdvance(position,position + Forward*Math.Clamp(delta.Length,.35,2.5))) shouldAdvance=false;
+        if (shouldAdvance && CanAdvance!=null && !CanAdvance(position,position + Forward*Math.Clamp(delta.Length,.35,2.5)))
+        {
+            shouldAdvance=false;advanceBlockReason="clearance";
+        }
         if (shouldAdvance && !advancing) { progressPosition = position; progressAt = now; }
         Input.Hold(Keys.W, shouldAdvance, token);
         advancing = shouldAdvance;
@@ -1165,7 +1169,8 @@ public sealed partial class Movement
         if (now - lastMotionTrace > 300)
         {
             lastMotionTrace = now;
-            TraceLog.Record("approach feedback", new { Position = position, TargetDelta = delta, SteeringDelta=aim, Forward, ActualHeading=heading, ErrorDegrees = angle * 180 / Math.PI, HoldingW = advancing, TurnPixels = pixels });
+            TraceLog.Record("approach feedback", new { Position = position, TargetDelta = delta, SteeringDelta=aim, Forward, ActualHeading=heading, ErrorDegrees = angle * 180 / Math.PI, HoldingW = advancing, TurnPixels = pixels,
+                ArrivalTolerance=arrivalTolerance,SteeringStatus=steeringStatus,AdvanceBlockReason=advanceBlockReason });
         }
         await Input.Delay(TurnFeedbackDelay(pixels), token);
     }
