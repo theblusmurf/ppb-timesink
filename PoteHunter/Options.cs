@@ -121,6 +121,10 @@ public sealed partial class Options
     public decimal RepairDurabilityPercent { get=>repairDurabilityPercent; set=>repairDurabilityPercent=Math.Clamp(value,1m,99m); }
     public bool VisualRevivalDetection { get; set; } = true;
     public int RevivalDelaySeconds { get; set; }
+    // Keep existing recovery immediate unless this separate return wait is enabled.
+    public bool DelayReturnAfterRevival { get; set; }
+    int returnDelaySeconds=10;
+    public int ReturnDelaySeconds { get=>returnDelaySeconds; set=>returnDelaySeconds=Math.Clamp(value,0,600); }
     public bool FarmOnArrival { get; set; } = true;
     // The death screen is client/UI specific. Keep the key configurable instead
     // of assuming that every client uses the same revive prompt.

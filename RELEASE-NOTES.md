@@ -1,3 +1,13 @@
+## Release1.143
+
+Add an optional wait after revival and repair before returning along the saved route.
+
+- In Recovery > Death recovery, enable Delay route return and choose 0–600 seconds. The toggle defaults off; the saved duration defaults to ten seconds. Existing settings keep their immediate return behavior. The controls autosave, restore through named settings profiles, and remain locked during an active hunt.
+- Start the countdown only after living revival is confirmed and any enabled post-revival repair completes. Wait once per death episode, preserve the original deadline through return retries, and start a fresh wait only after another death and recovery. A zero-second setting adds no wait. Ordinary startup travel, Gamekeeper/loot returns and independent low-durability repairs do not use this delay.
+- Keep movement, attack and pickup released during the countdown. Stop, cancellation, focus, client/window, character, map and health checks remain active. Unknown health stops safely; a new death interrupts the wait and returns to revival. Show the remaining seconds in the recovery status and retain local countdown audit events.
+
+Offline episode, timing, cancellation, safety, legacy settings, named-profile and native UI checks cover the new behavior. Live revival/repair/return timing still requires verification after updating. Existing routes, recovery profiles and logs are preserved.
+
 ## Release1.142
 
 Correct teleporter calibration when opening the portal requires walking and when the destination map closes as Move to Location appears.

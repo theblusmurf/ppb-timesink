@@ -27,6 +27,7 @@ public sealed partial class HunterForm
             lootPickupRadius.Value=Math.Clamp((decimal)o.LootPickupRadius,lootPickupRadius.Minimum,lootPickupRadius.Maximum);
             leaveAreaWhenEmpty.Checked=o.LeaveAreaWhenEmpty;
             autoRevive.Checked=o.AutoReviveAfterDeath;
+            ApplyRecoveryReturnDelaySettings(o);
             autoRepair.Checked=o.AutoRepairAfterDeath;
             durabilityRepair.Checked=o.AutoRepairLowDurability;
             durabilityThreshold.Value=Math.Clamp((decimal)o.RepairDurabilityPercent,durabilityThreshold.Minimum,durabilityThreshold.Maximum);
@@ -100,6 +101,6 @@ public sealed partial class HunterForm
             ApplyItemGradeSettings(o);RegisterItemGradeHotkey();UpdateItemGradeStatus();
             navigation.SelectTargetSelection(o.Target);refreshOverview?.Invoke();
         }
-        finally{compactSaveTimer.Stop();busy=false;}
+        finally{compactSaveTimer.Stop();busy=false;RefreshRecoveryReturnDelaySettings();}
     }
 }

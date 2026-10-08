@@ -16,6 +16,7 @@ public sealed partial class HunterForm
     {
         AddRevivalSettings(card);
         CompactAdd(card,CompactRow("Repair",autoRepair));
+        AddRecoveryReturnDelaySettings(card);
         CompactAdd(equipmentCard,CompactRow("Durability",durabilityRepair,durabilityThreshold,new Label{Text="% or lower",AutoSize=true}));
         CompactAdd(equipmentCard,durabilityStatus);
         var actions=CompactFlow(configureRepair,testRepair);CompactAdd(equipmentCard,actions);CompactAdd(equipmentCard,repairStatus);

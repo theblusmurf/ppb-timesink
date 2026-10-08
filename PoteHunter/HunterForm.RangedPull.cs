@@ -101,6 +101,7 @@ public sealed partial class HunterForm
                     throw new Exception("Combined healer/group controls did not persist alongside potion settings.");
                 form.CheckCompactControls();
                 form.CheckSelectedFeatureUi(tabs);
+                form.CheckRecoveryReturnDelayUi(tabs);
                 form.CheckRevivalSetupUi();
                 form.CheckTeleporterSetupUi();
                 form.CheckClientRecoveryUi();

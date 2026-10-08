@@ -110,6 +110,8 @@ static class SelfTests
             RoutePlanner.SelfTest();
             Navigation.SelfTest();
             DeathRecoveryChecks.Run();
+            RecoveryReturnDelayChecks.Run().GetAwaiter().GetResult();
+            RecoveryReturnDelaySettingsChecks.Run();
             RouteDistanceSteeringChecks.Run().GetAwaiter().GetResult();
             RouteFluidityChecks.Run();
             StationaryReturnDefenseChecks.Run().GetAwaiter().GetResult();

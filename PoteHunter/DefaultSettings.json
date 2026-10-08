@@ -26,6 +26,8 @@
   "AutoRepairLowDurability": false,
   "RepairDurabilityPercent": 20,
   "RevivalDelaySeconds": 0,
+  "DelayReturnAfterRevival": false,
+  "ReturnDelaySeconds": 10,
   "FarmOnArrival": true,
   "ReviveKey": "R",
   "UseAlternativeHuntRoutes": true,

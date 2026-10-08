@@ -47,7 +47,7 @@ internal sealed class SettingsProfileStore
         if(options.AllowedDifficulties.Any(x=>!Enum.TryParse<Threat>(x,true,out _)))throw new InvalidDataException("The profile contains an unknown difficulty.");
         Avoidance.Validate(options.AvoidNames);
         if(options.HuntRadius is <5 or >150||options.MeleeRange is <1.5m or >30||options.GroupFollowDistance is <2 or >20||
-           options.GroupFollowLimit<options.GroupFollowDistance||options.RevivalDelaySeconds is <0 or >600)
+           options.GroupFollowLimit<options.GroupFollowDistance||options.RevivalDelaySeconds is <0 or >600||options.ReturnDelaySeconds is <0 or >600)
             throw new InvalidDataException("The profile contains invalid hunting or recovery limits.");
         if((options.SkillKeys??"").Length>100||(options.HealingSkillKeys??"").Length>100||(options.HealthConditionKeys??"").Length>100)
             throw new InvalidDataException("The profile contains an oversized skill-key list.");

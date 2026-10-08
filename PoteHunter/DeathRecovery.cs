@@ -8,6 +8,8 @@ internal sealed class DeathRecoveryState
     public long Episode { get; private set; }
     public bool PostRevivalPrepared { get; private set; }
     public bool RepairCompleted { get; private set; }
+    public bool ReturnDelayCompleted { get; private set; }
+    public long? ReturnDelayReadyAt { get; private set; }
     bool dead;
 
     public bool Observe(Health health,long now)
@@ -17,7 +19,7 @@ internal sealed class DeathRecoveryState
         Pending=true;
         if(dead)return false;
         dead=true;ObservedAt=now;Episode++;
-        PostRevivalPrepared=false;RepairCompleted=false;
+        PostRevivalPrepared=false;RepairCompleted=false;ReturnDelayCompleted=false;ReturnDelayReadyAt=null;
         return true;
     }
 
@@ -34,6 +36,17 @@ internal sealed class DeathRecoveryState
         if(!Pending || dead || !PostRevivalPrepared || Episode!=episode)return false;
         RepairCompleted=true;return true;
     }
+    public bool MarkReturnDelayCompleted(long episode)
+    {
+        if(!Pending || dead || !PostRevivalPrepared || !RepairCompleted || !ReturnDelayReadyAt.HasValue || Episode!=episode)return false;
+        ReturnDelayCompleted=true;return true;
+    }
+    public bool BeginReturnDelay(long episode,int milliseconds,long now)
+    {
+        if(!Pending || dead || !PostRevivalPrepared || !RepairCompleted || Episode!=episode)return false;
+        ReturnDelayReadyAt??=now+Math.Clamp(milliseconds,0,RecoveryReturnDelay.MaximumSeconds*1000);
+        return true;
+    }
 
     public long ReadyAt(int delaySeconds,bool visual=false)=>ObservedAt+
         Math.Max(visual?VisualRevival.DeathWaitMilliseconds:500,Math.Clamp(delaySeconds,0,600)*1000L);
@@ -46,7 +59,7 @@ internal sealed class DeathRecoveryState
     public void Reset()
     {
         Pending=false;dead=false;ObservedAt=0;Episode++;
-        PostRevivalPrepared=false;RepairCompleted=false;
+        PostRevivalPrepared=false;RepairCompleted=false;ReturnDelayCompleted=false;ReturnDelayReadyAt=null;
     }
 }
 
