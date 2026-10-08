@@ -37,7 +37,7 @@ internal sealed class RepairSetupForm : Form
     internal static RepairSetupForm ForTeleporter(Bitmap image,bool confirmation,string destination,Color background,Color foreground)=>new(image,background,foreground,
         confirmation?"Teleporter setup · Move to Location / OK":"Teleporter setup · "+destination+" destination",
         confirmation?"Drag around the distinctive STATIC 'Move to Location' dialog text, separate from OK. Exclude changing text and the buttons. Then choose Next."
-            :"Drag around distinctive STATIC map text or artwork that remains visible when 'Move to Location' opens. Keep it separate from the chosen blue destination marker. Exclude the player and changing markers. Then choose Next.",
+            :"Drag around the STATIC destination name or map text that identifies the correct blue marker for "+destination+". Keep it separate from that blue control. Exclude other destination markers, the player and changing labels. Then choose Next.",
         confirmation?"Click the centre of the dialog's OK button in this image. Do not select StartLoc. This editor sends no game input. Then choose Save selection."
             :"Click the centre of the blue destination marker for "+destination+" in this image. This editor sends no game input. Then choose Save selection.",false);
 

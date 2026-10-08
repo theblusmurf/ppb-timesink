@@ -10,16 +10,20 @@ internal static class TeleporterChecks
         bool rejected=false;try{action();}catch(InvalidOperationException){rejected=true;}
         Require(rejected,message);
     }
-    static Bitmap Fixture(bool popup,bool wrongDestination=false)
+    static Bitmap Fixture(bool popup,bool wrongDestination=false,bool mapVisible=true)
     {
         var image=new Bitmap(960,640);using var g=Graphics.FromImage(image);g.Clear(Color.FromArgb(35,40,45));
         using var font=new Font("Segoe UI",16,FontStyle.Bold);
-        g.DrawString(wrongDestination?"OTHER PLACE":"TEST LANDING",font,Brushes.White,35,35);
-        foreach(int x in new[]{120,240,360})
+        if(mapVisible)
         {
-            g.FillEllipse(Brushes.RoyalBlue,x,110,36,36);
-            g.DrawLine(Pens.White,x+8,128,x+28,128);g.DrawLine(Pens.White,x+18,118,x+18,138);
+            g.DrawString(wrongDestination?"OTHER PLACE":"TEST LANDING",font,Brushes.White,35,35);
+            foreach(int x in new[]{120,240,360})
+            {
+                g.FillEllipse(Brushes.RoyalBlue,x,110,36,36);
+                g.DrawLine(Pens.White,x+8,128,x+28,128);g.DrawLine(Pens.White,x+18,118,x+18,138);
+            }
         }
+        else g.DrawString("WORLD AFTER MAP CLOSED",font,Brushes.White,35,500);
         if(popup)
         {
             g.FillRectangle(Brushes.DarkSlateGray,320,200,350,170);
@@ -46,11 +50,16 @@ internal static class TeleporterChecks
 
     public static Task Run()
     {
-        using var before=Fixture(false);using var popup=Fixture(true);using var wrong=Fixture(false,true);
+        using var before=Fixture(false);using var popup=Fixture(true,mapVisible:false);using var wrong=Fixture(false,true);
         var profile=Profile(before,popup);profile.Validate(profile.ClientHash,before.Size);
         var selection=profile.FindSelection(before,default);var confirmation=profile.FindConfirmation(popup,default);
         Require(selection!=null && confirmation!=null && profile.FindConfirmation(before,default)==null && profile.FindSelection(popup,default)==null,
             "stage recognition confused the map marker and generic Move to Location dialog");
+        Require(!profile.Select.Marker.Matches(popup) && profile.CanClickConfirmation(popup,confirmation!,default),
+            "closing the destination map prevented independent Move to Location / OK recognition");
+        using(var popupOverMap=Fixture(true))
+            Require(profile.Select.Matches(popupOverMap,true,default) && profile.FindSelection(popupOverMap,default)==null &&
+                !profile.CanClickSelection(popupOverMap,selection!,default),"a pre-existing confirmation dialog authorized a new destination selection");
         Require(profile.FindSelection(wrong,default)==null && !profile.CanClickSelection(wrong,selection!,default),
             "a different destination label authorized the saved blue marker");
         using(var hovered=(Bitmap)before.Clone())
@@ -99,14 +108,18 @@ internal static class TeleporterChecks
         Invalid(()=>(profile with{Confirm=profile.Confirm with{Button=null}}).Validate(profile.ClientHash,before.Size),"OK without captured button accepted");
         Invalid(()=>(profile with{Select=profile.Select with{Marker=profile.Select.Button!}}).Validate(profile.ClientHash,before.Size),"overlapping destination marker/button accepted");
         Storage(profile,before,popup);
+        Calibration(profile,before,popup);
         Policy(profile);
         Journey(profile);
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"teleporter-checks.json"),JsonSerializer.Serialize(new
         {
             Passed=true,HardwareInputEmitted=false,SyntheticFixtures=true,
-            Checks=new[]{"destination and generic dialog stage recognition","wrong destination rejected","hover independent markers","exact saved control identity",
+            Checks=new[]{"destination and generic dialog stage recognition","map may close before independently recognized confirmation","pre-existing dialog blocks selection",
+                "wrong destination rejected","hover independent markers","exact saved control identity",
                 "strict client/window size and bounds","same-zone only finite separated geometry","target/slot registry isolation and latest merge",
                 "stale selected scope rejected","sixteen-link/file-size bounds","invalid/corrupt/duplicate registry preservation","failed atomic replace keeps all scopes",
+                "walking/map transition/body recreation before first capture allowed only for same character","coherent first image and departure reading required",
+                "strict captured departure body/map/position through confirmation","living same-character same-map landing permits manual body recreation",
                 "one selection and one confirmation","identity recreation only after sent OK at captured landing","wrong player/client/window/map/location rejected",
                 "known living HP only","focus/cancel stop","fifteen-second deadline and reversed clock stop","ordinary identity rule remains strict",
                 "continuous separately recorded walking legs","no route jump or implied reverse connector","landing tail skips teleport","reversed/off-route/incompatible walking plans rejected"}
@@ -161,6 +174,89 @@ internal static class TeleporterChecks
         finally{foreach(string child in Directory.GetFiles(directory))File.Delete(child);Directory.Delete(directory);}
     }
 
+    static void Calibration(TeleporterProfile profile,Bitmap before,Bitmap popup)
+    {
+        var departure=Departure(profile);var original=departure.Character!;
+        var initial=new TeleporterSetupSample(original,departure.Zone,departure.Health);
+        var walked=initial with{Body=original with{Position=new(45,65),Height=10}};
+        var recreated=walked with{Body=walked.Body with{Address=300,Generation=4},Zone=9};
+        TeleporterSetupPolicy.RequireBeforeDeparture(original,walked);
+        TeleporterSetupPolicy.RequireBeforeDeparture(original,recreated);
+        Require(TeleporterSetupPolicy.SameIdentity(original,recreated.Body) && !LocalCharacter.Same(original,recreated.Body),
+            "walking or same-character body recreation before the first capture required the wizard-start body");
+
+        var invalidSamples=new[]
+        {
+            recreated with{Body=recreated.Body with{Id=8}},
+            recreated with{Body=recreated.Body with{Name="Other character"}},
+            recreated with{Body=recreated.Body with{Model="PC_OTHER.GCMDS"}},
+            recreated with{Body=recreated.Body with{Position=new(double.NaN,65)}},
+            recreated with{Body=recreated.Body with{Height=double.PositiveInfinity}},
+            recreated with{Health=default},recreated with{Health=new(0,100)},
+            recreated with{Zone=0},recreated with{Zone=19}
+        };
+        foreach(var invalid in invalidSamples)
+            Invalid(()=>TeleporterSetupPolicy.RequireBeforeDeparture(original,invalid),
+                "pre-capture walking accepted a different character, unreadable/dead HP, or invalid scene");
+
+        // The departure comes from the living reading bracketing this image,
+        // after any walk from the place where the wizard was first opened.
+        var captured=recreated;
+        TeleporterSetupPolicy.RequireCaptureStable(original,captured,captured);
+        var captureBoundary=captured with{Body=captured.Body with{Position=captured.Body.Position+new Vec(.5,0),Height=captured.Body.Height+.5}};
+        TeleporterSetupPolicy.RequireCaptureStable(original,captured,captureBoundary);
+        foreach(var changed in invalidSamples.Concat(new[]
+        {
+            captured with{Body=captured.Body with{Position=captured.Body.Position+new Vec(.501,0)}},
+            captured with{Body=captured.Body with{Height=captured.Body.Height+.501}},
+            captured with{Body=captured.Body with{Address=400}},
+            captured with{Body=captured.Body with{Generation=5}},
+            captured with{Zone=8}
+        }))
+        {
+            Invalid(()=>TeleporterSetupPolicy.RequireCaptureStable(original,captured,changed),
+                "changed post-image reading was attached to an incoherent capture");
+            Invalid(()=>TeleporterSetupPolicy.RequireCaptureStable(original,changed,captured),
+                "changed pre-image reading was attached to an incoherent capture");
+        }
+
+        var departureBoundary=captured with{Body=captured.Body with{Position=captured.Body.Position+new Vec(3,0),Height=captured.Body.Height+3}};
+        TeleporterSetupPolicy.RequireDeparture(captured,departureBoundary);
+        foreach(var changed in invalidSamples.Concat(new[]
+        {
+            captured with{Body=captured.Body with{Position=captured.Body.Position+new Vec(3.001,0)}},
+            captured with{Body=captured.Body with{Height=captured.Body.Height+3.001}},
+            captured with{Body=captured.Body with{Address=400}},
+            captured with{Body=captured.Body with{Generation=5}},
+            captured with{Zone=8}
+        }))
+        {
+            Invalid(()=>TeleporterSetupPolicy.RequireDeparture(captured,changed),
+                "captured departure moved or changed body/map before confirmation");
+            Invalid(()=>TeleporterSetupPolicy.RequireDeparture(changed,captured),
+                "invalid captured departure baseline authorized a later reading");
+        }
+
+        var landed=captured with{Body=captured.Body with{Address=900,Generation=6,Position=new(100,200),Height=17}};
+        TeleporterSetupPolicy.RequireLanding(captured,landed);
+        TeleporterSetupPolicy.RequireCaptureStable(captured.Body,landed,landed);
+        foreach(var changed in invalidSamples.Concat(new[]{landed with{Zone=8}}))
+            Invalid(()=>TeleporterSetupPolicy.RequireLanding(captured,changed),
+                "manual landing admitted the wrong character/map, invalid position, or unknown/dead HP");
+        foreach(var invalid in invalidSamples)
+            Invalid(()=>TeleporterSetupPolicy.RequireLanding(invalid,landed),"invalid departure baseline admitted a manual landing");
+
+        // The synthetic execution recognises the intended destination first;
+        // its later confirmation only needs the saved dialog, with no map.
+        var transaction=new TeleporterTransaction(profile,departure,0);
+        Require(profile.FindSelection(before,default)!=null,"calibrated destination was not recognized before its confirmation");
+        transaction.BeforeSelection(departure,1);transaction.SelectionSent(departure,2);
+        Require(profile.FindConfirmation(popup,default)!=null && !profile.Select.Marker.Matches(popup),
+            "closed-map confirmation still depended on the earlier destination text");
+        transaction.BeforeConfirmation(departure,3);transaction.ConfirmationSent(4);
+        Require(transaction.ObserveLanding(Landing(profile,departure),5),"closed-map confirmation failed the recognized destination-to-landing sequence");
+    }
+
     static void Policy(TeleporterProfile profile)
     {
         var departure=Departure(profile);var landing=Landing(profile,departure);
@@ -180,6 +276,23 @@ internal static class TeleporterChecks
         Invalid(()=>new TeleporterTransaction(profile,landing,0),"landing identity was accepted before teleport began");
         var pending=new TeleporterTransaction(profile,departure,0);
         Invalid(()=>pending.CheckDeparture(landing,1),"generation changed before confirmation");
+        foreach(var changed in new[]
+        {
+            departure with{ClientHash="different-client"},departure with{ProcessId=999},departure with{Window=(nint)999},
+            departure with{WindowSize=new(800,600)},departure with{Focused=false},departure with{Cancelled=true},
+            departure with{Health=default},departure with{Health=new(0,100)},departure with{Character=null}
+        })
+        {
+            var selectionStopped=new TeleporterTransaction(profile,departure,0);
+            Invalid(()=>selectionStopped.BeforeSelection(changed,1),"changed or unreadable context authorized selection before confirmation");
+            Require(selectionStopped.Stage==TeleporterStage.Stopped && !selectionStopped.SelectionAttempted,
+                "failed context check left a selection attempt usable");
+            var confirmationStopped=new TeleporterTransaction(profile,departure,0);
+            confirmationStopped.BeforeSelection(departure,1);confirmationStopped.SelectionSent(departure,2);
+            Invalid(()=>confirmationStopped.BeforeConfirmation(changed,3),"changed or unreadable context authorized confirmation");
+            Require(confirmationStopped.Stage==TeleporterStage.Stopped && !confirmationStopped.ConfirmationAttempted,
+                "failed context check left a confirmation attempt usable");
+        }
         var skipped=new TeleporterTransaction(profile,departure,0);
         Invalid(()=>skipped.BeforeConfirmation(departure,1),"generic OK was accepted without recognized destination selection");
         var noClick=new TeleporterTransaction(profile,departure,0);

@@ -1,3 +1,14 @@
+## Release1.142
+
+Correct teleporter calibration when opening the portal requires walking and when the destination map closes as Move to Location appears.
+
+- Capture the departure position and body immediately around the destination image, after the user has entered the portal and its map has opened. Walking or recreating the same character body before that capture no longer compares against an earlier wizard-start position. Client, window, size, character identity, target selection, route slot, known living HP and capture focus remain bound throughout setup.
+- Require a coherent, unchanged body and map across the image capture. After departure is captured, keep the original movement, body and map limits until confirmation, and accept only the same living character in the captured zone for the manual landing.
+- Recognize the destination map and Move to Location as separate stages. The map need not remain visible behind the confirmation. Require distinctive dialog recognition absent from the destination image; runtime still selects the independently recognized destination once before permitting one recognized OK confirmation.
+- Clarify which static destination/map text to select, keep the blue control separate, and record the active setup stage with cancellation reasons. Calibration continues to send no game clicks or keys and saves only a complete validated link.
+
+Offline regression checks cover walking and body recreation before capture, changed readings across capture, strict confirmation and landing checks, and the map closing before the confirmation dialog. Live automatic transit and full route return remain unverified. Existing routes, profiles and settings are preserved.
+
 ## Release1.141
 
 Add optional teleporter links to selected targets and saved-route destination slots, with recorded walking before and after transit.

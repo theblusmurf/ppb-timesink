@@ -8,17 +8,18 @@ public sealed partial class HunterForm
     readonly Button configureTeleporter=new(){Name="configureTeleporter",Text="Configure teleporter",AutoSize=true};
     readonly Label teleporterStatus=new(){Name="teleporterStatus",AutoSize=true,MaximumSize=new(240,0),ForeColor=UiMuted};
     readonly Label teleporterHelp=new(){Name="teleporterHelp",AutoSize=true,MaximumSize=new(240,0),ForeColor=UiMuted,
-        Text="Optional, same-map link for this target and selected route. The recorded path must contain departure, landing, then anchor. Capture the destination marker, Move to Location / OK, then the landing. Setup sends no game input."};
+        Text="Optional, same-map link for this target and selected route. Walk to the portal to open its map automatically. Capture the destination marker, Move to Location / OK, then the landing on the recorded route. Setup sends no game input."};
     readonly CancellationTokenSource teleporterSetupLifetime=new();
     CollapsibleSection? teleporterSection;
     bool teleporterProfileReady;
     string teleporterStatusSignature="";
+    string teleporterSetupStage="";
 
     void InitializeTeleporterSettings()
     {
         configureTeleporter.Click+=async(_,_)=>await RunTeleporterSetup();
         useTeleporterRoutes.CheckedChanged+=(_,_)=>{OverlaySettingsChanged();RefreshTeleporterSettings(true);};
-        priorityHint.SetToolTip(configureTeleporter,"Stop hunting at the departure point. Open CaernarvonMap manually, identify the correct blue destination marker and its Move to Location / OK dialog, then manually teleport and capture your living landing on the selected recorded route. No setup click or key is sent to the game.");
+        priorityHint.SetToolTip(configureTeleporter,"Stop hunting, then walk to the portal to open CaernarvonMap automatically. Identify the correct blue destination marker and its Move to Location / OK dialog, then manually teleport and capture your living landing on the selected recorded route. The departure is read when its image is captured. No setup click or key is sent to the game.");
         priorityHint.SetToolTip(useTeleporterRoutes,"Off by default. Uses only a complete captured link for this character, client/window, target selection and destination route slot. Configure first; a saved spot alone is insufficient.");
         FormClosed+=(_,_)=>{teleporterSetupLifetime.Cancel();teleporterSetupLifetime.Dispose();};
         RefreshTeleporterSettings(true);
@@ -94,12 +95,11 @@ public sealed partial class HunterForm
 
     static void RequireTeleporterLivingState(Entity body,Health health)
     {
-        if(body.Id==0||string.IsNullOrWhiteSpace(body.Name)||!body.Position.Finite||!double.IsFinite(body.Height)||!health.Known||health.Dead)
-            throw new InvalidOperationException("Teleporter setup requires the same living character with readable HP and a finite live position.");
+        TeleporterSetupPolicy.RequireLiving(body,health);
     }
 
     static bool TeleporterSetupCharacterMatches(Entity original,Entity current,bool landing)=>
-        original.Id==current.Id&&original.Name==current.Name&&original.Model==current.Model&&
+        TeleporterSetupPolicy.SameIdentity(original,current)&&
         (landing||original.Address==current.Address&&original.Generation==current.Generation);
 
     static void RequireTeleporterHandoff(SavedNavigationRoute? route,TeleporterPosition landing,string character,int slot,double corridor)
@@ -120,34 +120,34 @@ public sealed partial class HunterForm
         var originalFilterEnabled=filter.Enabled;
         busy=true;settings.Enabled=false;start.Enabled=false;connect.Enabled=false;filter.Enabled=false;
         cancel=CancellationTokenSource.CreateLinkedTokenSource(teleporterSetupLifetime.Token);var token=cancel.Token;
+        teleporterSetupStage="starting";
         RefreshNavigationRecordingControls();
         try{await ConfigureTeleporterAsync(token);}
         catch(OperationCanceledException ex)
         {
             message="Teleporter setup cancelled; previous captured links are preserved. "+ex.Message;
-            TraceLog.Record("teleporter setup cancelled",new{Reason=ex.Message,HardwareInputEmitted=false});
+            TraceLog.Record("teleporter setup cancelled",new{Stage=teleporterSetupStage,Reason=ex.Message,HardwareInputEmitted=false});
         }
         catch(Exception ex)
         {
             message="Teleporter setup stopped; previous captured links are preserved. "+ex.Message;
-            TraceLog.Record("teleporter setup stopped",new{Error=ex.Message,HardwareInputEmitted=false});
+            TraceLog.Record("teleporter setup stopped",new{Stage=teleporterSetupStage,Error=ex.Message,HardwareInputEmitted=false});
         }
         finally
         {
             busy=false;settings.Enabled=true;start.Enabled=true;connect.Enabled=true;filter.Enabled=originalFilterEnabled;
-            cancel?.Dispose();cancel=null;RefreshNavigationRecordingControls();RefreshTeleporterSettings(true);
+            cancel?.Dispose();cancel=null;teleporterSetupStage="";RefreshNavigationRecordingControls();RefreshTeleporterSettings(true);
         }
     }
 
     async Task ConfigureTeleporterAsync(CancellationToken token)
     {
         var original=world.LocalPlayer();RequireTeleporterLivingState(original,world.TargetHealth(original.Id));
-        int processId=world.Pid,zone=world.ActiveZone(),slot=SelectedSavedNavigationSlot();
+        int processId=world.Pid,slot=SelectedSavedNavigationSlot();
         IntPtr window=world.Window;string client=world.ClientHash,target=navigation.RouteTargetLabel,targetKey=navigation.RouteTargetKey;
         string targetSelection=filter.Text.Trim();
         var size=RepairScreen.Bounds(world).Size;
-        var departure=new TeleporterPosition(zone,original.Position,original.Height);
-        Entity Validate(bool landing=false,bool foreground=false)
+        void ValidateContext(bool foreground=false)
         {
             token.ThrowIfCancellationRequested();
             if(IsDisposed||!connected||working||!world.ConnectionVerified||world.Pid!=processId||world.Window!=window||world.ClientHash!=client||
@@ -156,56 +156,83 @@ public sealed partial class HunterForm
             var windowState=world.CheckInputWindow();
             if(!windowState.OwnershipVerified||!windowState.ProcessAlive||windowState.Minimized||foreground&&!windowState.Allowed||RepairScreen.Bounds(world).Size!=size)
                 throw new OperationCanceledException("Keep the same complete game window visible at the captured size; switch to the game for each capture.");
-            var current=world.LocalPlayer();RequireTeleporterLivingState(current,world.TargetHealth(current.Id));
-            if(!TeleporterSetupCharacterMatches(original,current,landing)||world.ActiveZone()!=zone)
-                throw new OperationCanceledException(landing?"The landing must belong to the same living character and map.":"Character body or map changed before the confirmation was captured.");
-            if(!landing&&((current.Position-original.Position).Length>3||Math.Abs(current.Height-original.Height)>3))
-                throw new OperationCanceledException("Remain at the departure point until the destination and confirmation are captured.");
-            return current;
         }
-        Validate();
+        TeleporterSetupSample Read(bool foreground=false)
+        {
+            // Bind the process/window/selection on both sides of each fresh
+            // read. Bind HP to a coherent body/map reading too; walking and a
+            // recreated body are allowed before this capture-stage sample.
+            ValidateContext(foreground);
+            int zone=world.ActiveZone();var body=world.LocalPlayer();var health=world.TargetHealth(body.Id);
+            var afterBody=world.LocalPlayer();int afterZone=world.ActiveZone();
+            ValidateContext(foreground);
+            var before=new TeleporterSetupSample(body,zone,health);var after=new TeleporterSetupSample(afterBody,afterZone,health);
+            TeleporterSetupPolicy.RequireCaptureStable(original,before,after);return after;
+        }
+        Read();teleporterSetupStage="destination name";
         using var nameDialog=TeleporterStageDialog.Destination(target,SavedNavigationSlotName(slot),UiWindow,UiText);
         ShowTeleporterStage(nameDialog,token);
         string destination=nameDialog.DestinationName;
 
         using var departureDialog=TeleporterStageDialog.Instruction("Teleporter setup · 1 of 3",
-            $"At the departure point, manually open CaernarvonMap. Leave the three blue destination markers visible; do not select one yet.\n\nYou will identify the marker for {destination} in a captured image. After Capture in 5s, switch to the game and move the pointer away from the map.\n\nSaved scope: {target} · {SavedNavigationSlotName(slot)}. Setup sends no game input.","Capture destination · 5s",UiWindow,UiText);
+            $"Walk to the portal in the game; CaernarvonMap opens automatically. Leave the blue destination markers visible; do not select one yet. Your departure position is read at the image capture, so you may walk to the portal now.\n\nYou will identify the marker for {destination} in a captured image. After Capture in 5s, switch to the game, remain still and move the pointer away from the map.\n\nSaved scope: {target} · {SavedNavigationSlotName(slot)}. Setup sends no game input.","Capture destination · 5s",UiWindow,UiText);
+        teleporterSetupStage="destination instructions";
         ShowTeleporterStage(departureDialog,token);
-        await RepairCountdown("Teleporter 1/3: switch to the game with the destination map open",token);Validate(foreground:true);
-        using var selectionImage=RepairScreen.Capture(world);Validate(foreground:true);Activate();
+        teleporterSetupStage="destination countdown";
+        await RepairCountdown("Teleporter 1/3: switch to the game with the destination map open",token);
+        teleporterSetupStage="destination capture";
+        var beforeDeparture=Read(foreground:true);
+        using var selectionImage=RepairScreen.Capture(world);
+        var capturedDeparture=Read(foreground:true);
+        TeleporterSetupPolicy.RequireCaptureStable(original,beforeDeparture,capturedDeparture);
+        var departure=new TeleporterPosition(capturedDeparture.Zone,capturedDeparture.Body.Position,capturedDeparture.Body.Height);
+        TraceLog.Record("teleporter departure captured",new{Stage=teleporterSetupStage,Departure=departure,
+            capturedDeparture.Body.Id,capturedDeparture.Body.Generation,HardwareInputEmitted=false});
+        Activate();teleporterSetupStage="destination selection";
         using var selectionEditor=RepairSetupForm.ForTeleporter(selectionImage,false,destination,UiWindow,UiText);
-        var select=SelectTeleporterStep(selectionEditor,selectionImage.Size,token);Validate();
+        var select=SelectTeleporterStep(selectionEditor,selectionImage.Size,token);
+        TeleporterSetupPolicy.RequireDeparture(capturedDeparture,Read());
 
         using var confirmationDialog=TeleporterStageDialog.Instruction("Teleporter setup · 2 of 3",
-            $"Manually select the blue marker for {destination} in the game. Leave its 'Move to Location' confirmation open. Do not press OK yet and do not select StartLoc. Keep the map in the same position.\n\nAfter Capture in 5s, switch to the game and move the pointer away from the dialog. You will identify its static text and OK button in the captured image.","Capture confirmation · 5s",UiWindow,UiText);
+            $"Manually select the blue marker for {destination} in the game. The map may close when its 'Move to Location' confirmation opens. Leave that confirmation open; do not press OK yet and do not select StartLoc. Remain at the captured departure point.\n\nAfter Capture in 5s, switch to the game and move the pointer away from the dialog. You will identify its static text and OK button in the captured image. The map does not have to remain visible.","Capture confirmation · 5s",UiWindow,UiText);
+        teleporterSetupStage="confirmation instructions";
         ShowTeleporterStage(confirmationDialog,token);
-        await RepairCountdown("Teleporter 2/3: switch to the game with Move to Location open",token);Validate(foreground:true);
-        using var confirmationImage=RepairScreen.Capture(world);Validate(foreground:true);Activate();
-        if(selectionImage.Size!=confirmationImage.Size||!select.Marker.Matches(confirmationImage))
-            throw new InvalidOperationException("The selected map recognition area must remain visible in the same location behind Move to Location. Capture again with static map text/artwork outside the dialog.");
+        teleporterSetupStage="confirmation countdown";
+        await RepairCountdown("Teleporter 2/3: switch to the game with Move to Location open",token);
+        teleporterSetupStage="confirmation capture";
+        var beforeConfirmation=Read(foreground:true);TeleporterSetupPolicy.RequireDeparture(capturedDeparture,beforeConfirmation);
+        using var confirmationImage=RepairScreen.Capture(world);
+        var afterConfirmation=Read(foreground:true);TeleporterSetupPolicy.RequireDeparture(capturedDeparture,afterConfirmation);
+        TeleporterSetupPolicy.RequireCaptureStable(original,beforeConfirmation,afterConfirmation);
+        if(selectionImage.Size!=confirmationImage.Size)
+            throw new InvalidOperationException("Keep the same game window size for both teleporter images.");
+        Activate();teleporterSetupStage="confirmation selection";
         using var confirmationEditor=RepairSetupForm.ForTeleporter(confirmationImage,true,destination,UiWindow,UiText);
-        var confirm=SelectTeleporterStep(confirmationEditor,confirmationImage.Size,token);Validate();
+        var confirm=SelectTeleporterStep(confirmationEditor,confirmationImage.Size,token);
+        TeleporterSetupPolicy.RequireDeparture(capturedDeparture,Read());
         if(confirm.Marker.Matches(selectionImage))
             throw new InvalidOperationException("The confirmation marker also appears before Move to Location opens. Choose distinctive dialog text.");
 
         using var landingDialog=TeleporterStageDialog.Instruction("Teleporter setup · 3 of 3",
             $"Now manually press OK in the captured Move to Location dialog and wait until the character has landed at {destination} with living HP. Close the map, remain still at the landing and use the same game window.\n\nThe selected {SavedNavigationSlotName(slot)} for {target} must already contain a recorded path through the departure, then this landing, then the farming anchor. Both ends must be close to the path. An unrecorded handoff stops setup.\n\nAfter Capture in 5s, switch to the game. Setup reads the live landing; it sends no game input. The complete link is saved only after this final check.","Capture landing · 5s",UiWindow,UiText);
-        ShowTeleporterStage(landingDialog,token);
+        teleporterSetupStage="landing instructions";ShowTeleporterStage(landingDialog,token);
+        teleporterSetupStage="landing countdown";
         await RepairCountdown("Teleporter 3/3: switch to the game and remain at the landing",token);
-        var landed=Validate(landing:true,foreground:true);
-        var landing=new TeleporterPosition(world.ActiveZone(),landed.Position,landed.Height);
+        teleporterSetupStage="landing capture";
+        var landedSample=Read(foreground:true);TeleporterSetupPolicy.RequireLanding(capturedDeparture,landedSample);
+        var landed=landedSample.Body;
+        var landing=new TeleporterPosition(landedSample.Zone,landed.Position,landed.Height);
         if((landing.Position-departure.Position).Length<=TeleporterProfile.SourceRadius+TeleporterProfile.LandingRadius+2)
             throw new InvalidOperationException("The live landing is still near the departure point. Complete the manual teleport before capturing the landing.");
         RequireTeleporterHandoff(navigation.GetSavedRoute(slot),landing,landed.Name,slot,CurrentRouteCorridorRadius());
-        var stable=Validate(landing:true,foreground:true);
-        if(stable.Address!=landed.Address||stable.Generation!=landed.Generation||(stable.Position-landed.Position).Length>.5||Math.Abs(stable.Height-landed.Height)>.5)
-            throw new InvalidOperationException("The landing is still changing. Wait for the character to settle, then configure again.");
+        var stable=Read(foreground:true);TeleporterSetupPolicy.RequireLanding(capturedDeparture,stable);
+        TeleporterSetupPolicy.RequireCaptureStable(original,landedSample,stable);
         var profile=new TeleporterProfile(1,client,size.Width,size.Height,destination,original.Name,original.Id,targetSelection,slot,departure,landing,select,confirm);
         profile.Validate(client,size);_=TeleporterJourney.Create(navigation.GetSavedRoute(slot)!,profile,CurrentRouteCorridorRadius());
-        token.ThrowIfCancellationRequested();profile.Save();
+        teleporterSetupStage="saving link";ValidateContext(foreground:true);token.ThrowIfCancellationRequested();profile.Save();
         message=$"Captured teleporter to {destination} for {target} · {SavedNavigationSlotName(slot)}. All three stages are saved; hunting remains stopped.";
         TraceLog.Record("teleporter setup saved",new{Destination=destination,TargetSelection=targetSelection,TargetLabel=target,DestinationSlot=slot,Departure=departure,Landing=landing,
-            Width=size.Width,Height=size.Height,HardwareInputEmitted=false,ManualGenerationChanged=original.Generation!=landed.Generation});
+            Width=size.Width,Height=size.Height,HardwareInputEmitted=false,ManualGenerationChanged=capturedDeparture.Body.Generation!=landed.Generation});
         Activate();
     }
 
@@ -243,7 +270,7 @@ public sealed partial class HunterForm
         readonly TextBox? destination;
         internal string DestinationName=>destination?.Text.Trim()??"";
         internal static TeleporterStageDialog Destination(string target,string slot,Color background,Color foreground)=>
-            new("Configure teleporter",$"Enter the destination name shown by the intended blue marker, for example Clauzhuz.\n\nThis link belongs to {target} · {slot}. Before setup, record a continuous walking path through the departure, destination landing and farming anchor in that order. The captured link replaces the middle portion; a teleport jump cannot be recorded as a walking segment.\n\nThree capture stages follow. You open the map, select the marker and press its Move to Location / OK manually. Setup sends no game input.","Begin captures",background,foreground,true);
+            new("Configure teleporter",$"Enter the destination name shown by the intended blue marker, for example Clauzhuz.\n\nThis link belongs to {target} · {slot}. Before setup, record a continuous walking path through the departure, destination landing and farming anchor in that order. The captured link replaces the middle portion; a teleport jump cannot be recorded as a walking segment.\n\nThree capture stages follow. Walk to the portal to open its map automatically, select the marker and press its Move to Location / OK manually. The departure is read when the first image is captured. Setup sends no game input.","Begin captures",background,foreground,true);
         internal static TeleporterStageDialog Instruction(string title,string text,string action,Color background,Color foreground)=>
             new(title,text,action,background,foreground,false);
         internal bool PreviewOnly;
