@@ -16,6 +16,8 @@ internal sealed class NavigationOverlay3DRenderer : IDisposable
     readonly Navigation3DView view;
     readonly int threadId=Environment.CurrentManagedThreadId;
     Bitmap? frame;bool disposed,failed,sceneReady;string failure="";
+    long capturedVersion=-1;internal int CaptureCount{get;private set;}
+    internal int ReadbackAllocations=>view.ReadbackAllocations;
     Vec? radarCenter;double radarHeight,radarRadius;bool fitRoutes;Vec? fitPlayer;
     internal bool Failed=>failed||view.Failed;
     internal string Status=>failed?failure:view.Status;
@@ -67,13 +69,14 @@ internal sealed class NavigationOverlay3DRenderer : IDisposable
             if(view.Failed){DropFrame();return null;}
             if(fitRoutes)view.FitPassiveRoutes(fitPlayer);
             else if(radarCenter is Vec point)view.SetPassiveRadarCamera(point,radarHeight,radarRadius);
-            var next=view.CaptureFrame();if(next==null){DropFrame();return null;}
-            DropFrame();frame=next;return frame;
+            if(frame?.Size==size&&capturedVersion==view.PresentationVersion)return frame;
+            var next=view.CaptureReusableFrame();if(next==null){DropFrame();return null;}
+            frame=next;capturedVersion=view.PresentationVersion;CaptureCount++;return frame;
         }
         catch(Exception error) when(error is InvalidOperationException or ExternalException or OutOfMemoryException or Win32Exception)
         {failed=true;failure="3D overlay unavailable · "+error.Message;DropFrame();return null;}
     }
     void CheckThread(){ObjectDisposedException.ThrowIf(disposed,this);if(Environment.CurrentManagedThreadId!=threadId)throw new InvalidOperationException("Use the 3D overlay renderer on its UI thread");}
-    void DropFrame(){frame?.Dispose();frame=null;}
+    void DropFrame(){frame=null;capturedVersion=-1;}
     public void Dispose(){if(disposed)return;CheckThread();disposed=true;DropFrame();host.Dispose();}
 }

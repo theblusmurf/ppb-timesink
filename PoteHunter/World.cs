@@ -349,7 +349,16 @@ public sealed partial class World : IDisposable
         return null;
     }
     public List<Entity> Poll()
+        => PollScene(enrichPlayerNames: true);
+
+    // Control reads must never walk the optional UID name list. Display names
+    // may be copied from a recent, identity-bound UI observation only.
+    public List<Entity> PollBodies()
+        => PollScene(enrichPlayerNames: false);
+
+    List<Entity> PollScene(bool enrichPlayerNames)
     {
+        Interlocked.Increment(ref bodyPollCount);
         var result = new List<Entity>();
         var active = ActiveMap();
         addresses = active.Values.ToList();
@@ -358,7 +367,8 @@ public sealed partial class World : IDisposable
             var entity = ReadEntity(address, id);
             if (entity != null) result.Add(entity);
         }
-        AttachPlayerNames(result);
+        if (enrichPlayerNames) AttachPlayerNames(result);
+        else AttachObservedPlayerNames(result);
         return result;
     }
     Entity? ReadEntity(long address, uint expectedId)
@@ -427,6 +437,7 @@ public sealed partial class World : IDisposable
     }
     public Dictionary<uint, Health> HealthSnapshot()
     {
+        Interlocked.Increment(ref healthSnapshotCount);
         var result = new Dictionary<uint, Health>();
         uint manager = Pointer(moduleBase + profile.UidDataManager);
         if (manager < 0x10000) return result;
@@ -457,6 +468,7 @@ public sealed partial class World : IDisposable
     }
     public Health TargetHealth(uint id)
     {
+        Interlocked.Increment(ref targetHealthReadCount);
         if (healthRecords.TryGetValue(id, out uint record))
         {
             try
@@ -753,6 +765,7 @@ public sealed partial class World : IDisposable
     }
     public void Dispose()
     {
+        durabilityScreening.Reset();
         ConnectionVerified=false;
         ResetCamera();
         ResetMana();

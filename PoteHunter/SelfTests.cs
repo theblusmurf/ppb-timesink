@@ -9,6 +9,8 @@ static class SelfTests
         try
         {
             DiagnosticIoChecks.Run();
+            DiagnosticPersistenceChecks.Run();
+            CoreReadPerformanceChecks.Run();
             SelectedFeatureChecks.Run();
             ItemGradeTable.SelfTest();ItemGradePlanner.SelfTest();ItemStatKinds.SelfTest();ItemGradeDiscovery.SelfTest();ItemGradeHotkeys.SelfTest();ItemGradeOverlay.SelfTest();
             MapToolWorldRenderer.SelfTest();
@@ -374,6 +376,7 @@ static class SelfTests
             // run these CPU-only viewport checks after the asynchronous suite.
             Navigation3DRenderChecks.Run();
             NavigationOverlay3DRendererChecks.Run();
+            OverlayPerformanceChecks.Run();
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test.txt"), "PASS: anti-kill-stealing damaged/nearby-player/own-fight handling; name avoidance and point/segment geometry; protection settings persistence; movement/heading math and faster steering convergence; held-input and release lifecycle; monster classification and HP death; exact priority box/barrel/Treasure Box detection, selection, filter override, radius and HP exclusions, mandatory pickup; persistent object recording, throttling, log rotation and damaged-catalog preservation; difficulty boundaries; hotbar cooldown/rotation; recovery descriptions and healing thresholds; unknown-build rejection."); return 0;
         }
         catch (Exception ex) { File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "self-test.txt"), "FAIL: " + ex.Message); return 1; }

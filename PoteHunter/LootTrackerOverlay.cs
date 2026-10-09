@@ -17,6 +17,10 @@ internal sealed partial class LootTrackerOverlay : Form
     const uint SwpNomove=0x0002;
     const uint SwpNosize=0x0001;
     readonly Func<LootTrackerSnapshot> snapshotProvider;
+    readonly LootPresentationGate presentationGate=new();
+    readonly LootLayeredSurface layeredSurface=new();
+    LootTrackerSnapshot? presentedSnapshot;
+    internal int LayeredSurfaceAllocations=>layeredSurface.Allocations;
     readonly Action<Point>? positionCommitted;
     readonly Action? resetLoot;
     readonly Action? resetTimer;
@@ -57,7 +61,7 @@ internal sealed partial class LootTrackerOverlay : Form
     internal void SetBackgroundOpacity(int value)
     {
         value=Math.Clamp(value,0,100);if(backgroundOpacityPercent==value)return;
-        backgroundOpacityPercent=value;RefreshSnapshot();
+        backgroundOpacityPercent=value;RefreshSnapshot(force:true);
     }
 
     internal void SetScale(int value)
@@ -77,9 +81,12 @@ internal sealed partial class LootTrackerOverlay : Form
 
     int AreaScaleLimit(Size available)=>Math.Clamp((int)Math.Min((long)available.Width*100/TransparentLogicalSize.Width,(long)available.Height*100/TransparentLogicalSize.Height),50,200);
 
-    internal void RefreshSnapshot()
+    internal void RefreshSnapshot(bool force=false)
     {
-        if(IsTransparentDesign && IsHandleCreated && Visible)PresentTransparentOverlay();
+        var snapshot=snapshotProvider();
+        if(!presentationGate.Changed(snapshot,design,EffectiveScalePercent,backgroundOpacityPercent,force))return;
+        presentedSnapshot=snapshot;
+        if(IsTransparentDesign && IsHandleCreated && Visible)PresentTransparentOverlay(snapshot);
         else Invalidate();
     }
 
@@ -124,7 +131,7 @@ internal sealed partial class LootTrackerOverlay : Form
         base.SetVisibleCore(true);
         if(IsHandleCreated)
         {
-            if(IsTransparentDesign)PresentTransparentOverlay();
+            if(IsTransparentDesign)PresentTransparentOverlay(presentedSnapshot=snapshotProvider());
             ShowWindow(Handle,SwShownoactivate);
             SetWindowPos(Handle,new IntPtr(HWndTopmost),0,0,0,0,SwpNomove|SwpNosize|SwpNoactivate);
         }
@@ -145,15 +152,15 @@ internal sealed partial class LootTrackerOverlay : Form
     {
         if(IsTransparentDesign)
         {
-            if(design==1)RunicFoldRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
-            else RunicStripRenderer.Draw(e.Graphics,snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
+            if(design==1)RunicFoldRenderer.Draw(e.Graphics,presentedSnapshot??snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
+            else RunicStripRenderer.Draw(e.Graphics,presentedSnapshot??snapshotProvider(),EffectiveScalePercent,backgroundOpacityPercent);
             return;
         }
         base.OnPaint(e);
         e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
         e.Graphics.Clear(BackColor);
-        if(design!=0)DrawParchment(e.Graphics,snapshotProvider());
-        else DrawImperialHud(e.Graphics,snapshotProvider());
+        if(design!=0)DrawParchment(e.Graphics,presentedSnapshot??snapshotProvider());
+        else DrawImperialHud(e.Graphics,presentedSnapshot??snapshotProvider());
         LootOverlayResetButtons.Draw(e.Graphics,design,ClientSize);
     }
 
@@ -169,7 +176,7 @@ internal sealed partial class LootTrackerOverlay : Form
     internal void InvokeReset(int action)
     {
         if(action==1)resetLoot?.Invoke();else if(action==2)resetTimer?.Invoke();
-        RefreshSnapshot();
+        RefreshSnapshot(force:true);
     }
 
     protected override void OnPaintBackground(PaintEventArgs e)
@@ -246,7 +253,7 @@ internal sealed partial class LootTrackerOverlay : Form
 
     protected override void Dispose(bool disposing)
     {
-        if(disposing){titleFont.Dispose();rowFont.Dispose();detailFont.Dispose();framePen.Dispose();}
+        if(disposing){layeredSurface.Dispose();titleFont.Dispose();rowFont.Dispose();detailFont.Dispose();framePen.Dispose();}
         base.Dispose(disposing);
     }
 

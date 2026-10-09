@@ -10,7 +10,7 @@ public sealed partial class HunterForm
     {
         if(Environment.TickCount64<nextDurabilityRead)return;
         nextDurabilityRead=Environment.TickCount64+1000;
-        latestDurability=world.ReadDurability();
+        latestDurability=world.ReadDurabilityScreening();
         durabilityStatus.Text=latestDurability.LowestPercent is decimal lowest
             ? $"Lowest equipped durability: {lowest:0.#}% · repair at {durabilityThreshold.Value:0.#}% or lower."
             : "Durability unavailable: "+latestDurability.Status;
@@ -22,10 +22,16 @@ public sealed partial class HunterForm
     async Task<bool> TryDurabilityRepair(Options options,CancellationToken token,bool pendingReturn=false)
     {
         if(!options.AutoRepairLowDurability)return false;
+        var screening=world.ReadDurabilityScreening();latestDurability=screening;
+        durabilityRepairPolicy.Observe(screening,options.RepairDurabilityPercent,DateTime.UtcNow);
+        if(screening.LowestPercent is not decimal screenedLowest || screenedLowest>options.RepairDurabilityPercent)return false;
+        if(DurabilityRepairDeferred(options,pendingReturn))return false;
+        // A screen can only suggest an opportunity. Capture a fresh two-pass
+        // baseline and renew living/focus/activity guards before claiming it.
         var before=world.ReadDurability();latestDurability=before;
         durabilityRepairPolicy.Observe(before,options.RepairDurabilityPercent,DateTime.UtcNow);
-        if(before.LowestPercent is not decimal lowest || lowest>options.RepairDurabilityPercent)return false;
-        if(DurabilityRepairDeferred(options,pendingReturn))return false;
+        if(before.LowestPercent is not decimal lowest || lowest>options.RepairDurabilityPercent ||
+            DurabilityRepairDeferred(options,pendingReturn))return false;
         if(!durabilityRepairPolicy.TryBegin(before,options.RepairDurabilityPercent,DateTime.UtcNow))return false;
         var self=world.LocalPlayer();
         void ValidateCombatRepair()

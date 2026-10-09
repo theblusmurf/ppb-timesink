@@ -19,7 +19,7 @@ internal static class MapSceneGeometry
     internal static double? Height(MapScene3D? scene,Vec point)
     {
         if(scene==null||!point.Finite)return null;
-        foreach(var patch in scene.Terrain)
+        foreach(var patch in MapTerrainHeightIndex.Candidates(scene,point))
         {
             var v=patch.Vertices;if(v.Length!=Grid*Grid)continue;
             double minX=v[0].X,minZ=v[0].Z,maxX=v[^1].X,maxZ=v[^1].Z;

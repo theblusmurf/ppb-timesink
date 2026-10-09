@@ -14,6 +14,10 @@ internal sealed class Navigation3DView : Control
     const double CellStep=MapSceneGeometry.CellStep;
     readonly System.Windows.Forms.Timer frameTimer=new(){Interval=34};
     readonly Stopwatch frameClock=Stopwatch.StartNew();
+    readonly OverlayReadbackBuffer readback=new();
+    readonly PassiveRouteBounds passiveRouteBounds=new();
+    internal long PresentationVersion {get;private set;}
+    internal int ReadbackAllocations=>readback.Allocations;
     IntPtr dc,context;uint terrainList,artworkList,objectList,routeList,fontLists,texture;
     uint[] meshLists=[];MapScene3D? scene;MapRoute3D[] routes=[];MapMarker3D[] markers=[];
     Bitmap? artwork;GameMapLayout.Extent? artworkBounds;
@@ -61,7 +65,7 @@ internal sealed class Navigation3DView : Control
     {
         if(ReferenceEquals(scene,value))return;
         bool refit=scene==null||value==null||scene.Zone!=value.Zone||scene.Source!=value.Source;
-        scene=value;sceneDirty=artworkDirty=routesDirty=true;
+        scene=value;sceneDirty=artworkDirty=routesDirty=true;passiveRouteBounds.Invalidate();readback.Dispose();
         if(refit&&scene!=null)FitMap();else RequestRender();
         SetStatus(scene?.Status??"No verified 3D terrain for this map");
     }
@@ -75,12 +79,16 @@ internal sealed class Navigation3DView : Control
     {
         value??=[];
         if(routes.Length==value.Length&&routes.Zip(value).All(p=>p.First.Slot==p.Second.Slot&&ReferenceEquals(p.First.Route,p.Second.Route)))return;
-        routes=value.ToArray();routesDirty=true;RequestRender();
+        routes=value.ToArray();routesDirty=true;passiveRouteBounds.Invalidate();RequestRender();
     }
-    internal void SetMarkers(MapMarker3D[] value){markers=(value??[]).ToArray();RequestRender();}
+    internal void SetMarkers(MapMarker3D[] value)
+    {value??=[];if(markers.SequenceEqual(value))return;markers=value.ToArray();RequestRender();}
     internal void SetAnnotations(MapPolyline3D[] lines,MapArea3D[] rings,MapCone3D? direction)
     {
-        annotations=(lines??[]).ToArray();areas=(rings??[]).ToArray();cone=direction;RequestRender();
+        lines??=[];rings??=[];
+        bool same=annotations.Length==lines.Length&&annotations.Zip(lines).All(p=>p.First.Name==p.Second.Name&&p.First.Color==p.Second.Color&&p.First.Width==p.Second.Width&&p.First.Points.SequenceEqual(p.Second.Points));
+        if(same&&areas.SequenceEqual(rings)&&cone==direction)return;
+        annotations=lines.Select(line=>line with{Points=line.Points.ToArray()}).ToArray();areas=rings.ToArray();cone=direction;RequestRender();
     }
     internal void SetRouteRadii(double corridor,double? farming,Vec? anchor)
     {
@@ -93,25 +101,24 @@ internal sealed class Navigation3DView : Control
     internal void SetPassiveRadarCamera(Vec point,double height,double radius)
     {
         if(!point.Finite||!double.IsFinite(height)||!double.IsFinite(radius))return;
+        var previous=(passiveProjection,yaw,pitch,center,span,distance);
         passiveProjection=true;yaw=0;pitch=1.10;center=Reflect(new((float)point.X,(float)height,(float)point.Y));
         span=Math.Clamp(radius,10,2000)*2;
         double aspect=ClientSize.Height>0?(double)ClientSize.Width/ClientSize.Height:1;
-        distance=Math.Clamp(span*.5*1.12/.41421356237/Math.Min(1,Math.Max(.2,aspect)),3,50000);RequestRender();
+        distance=Math.Clamp(span*.5*1.12/.41421356237/Math.Min(1,Math.Max(.2,aspect)),3,50000);
+        if(previous!=(passiveProjection,yaw,pitch,center,span,distance))RequestRender();
     }
     internal void FitPassiveRoutes(Vec? player)
     {
+        var previous=(passiveProjection,yaw,pitch,center,span,distance);
         passiveProjection=true;yaw=0;pitch=1.10;
-        var points=routes.SelectMany(r=>r.Route.Points.Append(r.Route.Anchor)).ToList();
-        if(player is Vec p&&p.Finite)points.Add(p);
-        var positions=points.Where(p=>p.Finite).Select(p=>(p,h:MapSceneGeometry.Height(scene,p))).Where(p=>p.h.HasValue)
-            .Select(p=>Reflect(new((float)p.p.X,(float)p.h!.Value,(float)p.p.Y))).ToArray();
-        if(positions.Length==0){FitMap();return;}
-        var min=positions.Aggregate(Vector3.Min);var max=positions.Aggregate(Vector3.Max);
+        if(!passiveRouteBounds.Get(scene,routes,player,out var min,out var max)){FitMap();return;}
         center=(min+max)/2;double margin=Math.Max(12,corridorRadius+2);
         double width=max.X-min.X+margin*2,depth=max.Z-min.Z+margin*2,height=max.Y-min.Y;
         double aspect=ClientSize.Height>0?(double)ClientSize.Width/ClientSize.Height:1;
         double halfSpan=Math.Max(width/Math.Max(.2,aspect),topView?depth:depth*Math.Sin(pitch)+height*Math.Cos(pitch))*.5;
-        span=Math.Max(width,Math.Max(depth,height));distance=Math.Clamp(halfSpan*1.06/.41421356237,3,50000);RequestRender();
+        span=Math.Max(width,Math.Max(depth,height));distance=Math.Clamp(halfSpan*1.06/.41421356237,3,50000);
+        if(previous!=(passiveProjection,yaw,pitch,center,span,distance))RequestRender();
     }
     internal void CenterOn(Vec point,double height)
     {
@@ -153,7 +160,7 @@ internal sealed class Navigation3DView : Control
     void SetStatus(string value){if(Failed&&context==IntPtr.Zero&&!value.StartsWith("3D unavailable",StringComparison.Ordinal))return;if(status==value)return;status=value;StatusChanged?.Invoke(value);}
     void RequestRender()
     {
-        if(disposed)return;pending=true;
+        if(disposed)return;pending=true;PresentationVersion++;
         if(!passive&&IsHandleCreated&&Visible&&!Failed){Invalidate();if(!frameTimer.Enabled)frameTimer.Start();}
     }
     protected override void OnHandleCreated(EventArgs e)
@@ -198,22 +205,20 @@ internal sealed class Navigation3DView : Control
         try{Render(true);pending=false;frameTimer.Stop();lastFrame=frameClock.ElapsedMilliseconds;}
         catch(Exception error) when(error is InvalidOperationException or ExternalException or OutOfMemoryException){Fail(error.Message);}
     }
+    // Diagnostic callers retain ownership of their copy; passive overlays reuse the view-owned frame.
     internal Bitmap? CaptureFrame()
+    {var image=CaptureReusableFrame();return image==null?null:new Bitmap(image);}
+    internal Bitmap? CaptureReusableFrame()
     {
         if(Failed||!IsHandleCreated||context==IntPtr.Zero||ClientSize.Width<1||ClientSize.Height<1)return null;
         if(InvokeRequired)throw new InvalidOperationException("Capture the 3D map on its UI thread");
         Render(false);if(!Native.wglMakeCurrent(dc,context))return null;
         try
         {
-            int w=ClientSize.Width,h=ClientSize.Height;var rgb=new byte[checked(w*h*4)];var pinned=GCHandle.Alloc(rgb,GCHandleType.Pinned);
+            int w=ClientSize.Width,h=ClientSize.Height;readback.Ensure(new(w,h));var pinned=GCHandle.Alloc(readback.Pixels,GCHandleType.Pinned);
             try{GL.glReadBuffer(GL.BACK);GL.glPixelStorei(GL.PACK_ALIGNMENT,1);GL.glReadPixels(0,0,w,h,GL.RGBA,GL.UNSIGNED_BYTE,pinned.AddrOfPinnedObject());GL.glFinish();}
             finally{pinned.Free();}
-            var image=new Bitmap(w,h,PixelFormat32);var bits=image.LockBits(new Rectangle(0,0,w,h),ImageLockMode.WriteOnly,PixelFormat32);
-            try
-            {
-                var row=new byte[w*4];for(int y=0;y<h;y++){for(int x=0;x<w;x++){int a=((h-y-1)*w+x)*4,b=x*4;row[b]=rgb[a+2];row[b+1]=rgb[a+1];row[b+2]=rgb[a];row[b+3]=255;}Marshal.Copy(row,0,bits.Scan0+y*bits.Stride,row.Length);}
-            }
-            finally{image.UnlockBits(bits);}return image;
+            readback.CopyBottomUpRgba();return readback.Image;
         }
         finally{Native.wglMakeCurrent(IntPtr.Zero,IntPtr.Zero);}
     }
@@ -529,7 +534,7 @@ internal sealed class Navigation3DView : Control
     protected override void OnMouseUp(MouseEventArgs e){if(passive)return;base.OnMouseUp(e);dragButton=MouseButtons.None;Capture=false;}
     protected override void OnMouseCaptureChanged(EventArgs e){if(passive)return;base.OnMouseCaptureChanged(e);if(!Capture)dragButton=MouseButtons.None;}
     protected override void OnMouseWheel(MouseEventArgs e){if(passive)return;base.OnMouseWheel(e);distance=Math.Clamp(distance*Math.Pow(.84,e.Delta/120.0),3,50000);RequestRender();}
-    protected override void Dispose(bool disposing){if(disposing&&!disposed){disposed=true;frameTimer.Stop();frameTimer.Dispose();ReleaseContext();artwork?.Dispose();artwork=null;}base.Dispose(disposing);}
+    protected override void Dispose(bool disposing){if(disposing&&!disposed){disposed=true;frameTimer.Stop();frameTimer.Dispose();readback.Dispose();ReleaseContext();artwork?.Dispose();artwork=null;}base.Dispose(disposing);}
 
     [StructLayout(LayoutKind.Sequential)]struct PixelFormat
     {

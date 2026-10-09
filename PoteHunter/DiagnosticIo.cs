@@ -23,7 +23,6 @@ internal static class DiagnosticIo
     sealed class State(string auditPath)
     {
         public readonly string AuditPath = auditPath;
-        public readonly object AuditGate = new();
         public readonly Queue<DiagnosticFailure> Recent = new();
         public readonly Dictionary<string, DiagnosticFailure> Active = new(StringComparer.Ordinal);
         public readonly Dictionary<string, (long Count, long LastAuditAt)> Counts = new(StringComparer.Ordinal);
@@ -37,7 +36,7 @@ internal static class DiagnosticIo
         {
             lock (gate)
             {
-                if (state.Active.Count == 0) return null;
+                if (state.Active.Count == 0) return DiagnosticPersistence.StatusSummary;
                 var newest = state.Active.Values.MaxBy(failure => failure.TimeUtc)!;
                 return "Diagnostic persistence delayed: " + newest.Operation +
                     (state.Active.Count > 1 ? $" ({state.Active.Count} operations)" : "");
@@ -136,6 +135,14 @@ internal static class DiagnosticIo
     }
 
     public static void RecordFailure(string operation, string? path, Exception error)
+        =>RecordFailureCore(operation,path,error,true);
+
+    // The worker's own failure must not recursively enqueue another audit.
+    internal static void RecordBackgroundFailure(string operation,string path,Exception error)
+        =>RecordFailureCore(operation,path,error,false);
+    internal static void RecordBackgroundSuccess(string operation,string path)=>RecordSuccess(operation,path);
+
+    static void RecordFailureCore(string operation,string? path,Exception error,bool writeAudit)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operation);
         ArgumentNullException.ThrowIfNull(error);
@@ -166,7 +173,7 @@ internal static class DiagnosticIo
             owner.Recent.Enqueue(failure);
             if (!audit) owner.AuditSuppressed++;
         }
-        if (audit) AppendAudit(owner, failure);
+        if (audit && writeAudit) AppendAudit(owner, failure);
     }
 
     public static void RecordSuccess(string operation)
@@ -237,24 +244,13 @@ internal static class DiagnosticIo
 
     static void AppendAudit(State owner, DiagnosticFailure failure)
     {
-        // Never call another diagnostic writer from this sink: its own failure is counted, without recursive logging.
-        byte[] line = utf8.GetBytes(JsonSerializer.Serialize(failure) + Environment.NewLine);
-        lock (owner.AuditGate)
-        {
-            try
+        DiagnosticPersistence.Enqueue("append diagnostic audit",new(owner.AuditPath,AuditSizeLimit,1),
+            JsonSerializer.Serialize(failure)+Environment.NewLine,true,error=>
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(owner.AuditPath)!);
-                if (File.Exists(owner.AuditPath) && new FileInfo(owner.AuditPath).Length + line.Length > AuditSizeLimit)
-                    File.Move(owner.AuditPath, owner.AuditPath + ".1", overwrite: true);
-                using (var output = new FileStream(owner.AuditPath, FileMode.Append, FileAccess.Write,
-                    FileShare.ReadWrite | FileShare.Delete)) output.Write(line);
-                lock (gate) owner.AuditRecords++;
-            }
-            catch (Exception error) when (IsIoFailure(error))
-            {
-                lock (gate) owner.AuditFailures++;
-            }
-        }
+                // Capture this state: a late completion from an offline check
+                // must never alter the restored application's counters.
+                lock(gate){if(error==null)owner.AuditRecords++;else owner.AuditFailures++;}
+            });
     }
 
     static string? Bound(string? value, int length) => value?.Length > length ? value[..length] : value;
@@ -276,6 +272,8 @@ internal static class DiagnosticIo
         bool disposed;
         public void Dispose()
         {
+            if(!DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)))
+                throw new IOException("Offline diagnostic audit did not drain before its state was restored.");
             lock (gate)
             {
                 if (disposed) return;

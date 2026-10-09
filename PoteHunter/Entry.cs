@@ -7,6 +7,12 @@ static class Entry
     [STAThread]
     static int Main(string[] args)
     {
+        try { return Run(args); }
+        finally { DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)); }
+    }
+
+    static int Run(string[] args)
+    {
         // The copied patch worker must run before game access or the GUI mutex.
         if (args.Length > 0 && args[0] == "--apply-patch")
             return args.Length == 2 ? AutoPatcher.Run(args[1]).GetAwaiter().GetResult() : 2;

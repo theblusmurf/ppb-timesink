@@ -212,7 +212,7 @@ public sealed partial class HunterForm
         var anchor = CompactCard("ANCHOR & ROUTE"); CompactAdd(left, anchor);
         var anchorText = Detail("overviewAnchor"); CompactAdd(anchor, anchorText);
         var routeMap = new OrbitalScanner { Height = 285 };
-        updates.Add(() => UpdateOrbitalScanner(routeMap));
+        updates.Add(() => { if(page.Visible || offlinePreviewMode)UpdateOrbitalScanner(routeMap); });
         CompactAdd(anchor, routeMap);
         var mapOptions = CompactFlow(Toggle("overviewShowRoutes", "Show route overlay", showRouteOverlay));
         var mapFollow = Link("Follow player", () => followMapPlayer.PerformClick(), "overviewFollowPlayer");
@@ -359,7 +359,7 @@ public sealed partial class HunterForm
             try
             {
                 foreach(var update in updates) update();
-                routeMap.Invalidate();
+                if(page.Visible || offlinePreviewMode)routeMap.Invalidate();
                 if(targetFilter.Text != filter.Text) targetFilter.Text = filter.Text;
                 targetFilter.Enabled = CanEdit(filter, true);
                 foreach(var (family, button) in targetPresets)
@@ -404,13 +404,18 @@ public sealed partial class HunterForm
                 }
                 routes.Summary = selectedTitle + " · " + navigation.RouteTargetLabel + " · " + recorded + " recorded";
                 routeFallback.Text = recorded > 1 ? "Recovery can choose a free compatible alternative using the shared origin." : "Record alternative routes for occupied-spot fallback.";
-                var snapshot = lootTracker.Snapshot();
-                refreshOrbitalTelemetry?.Invoke(snapshot);
-                string duration = $"{(int)snapshot.RateElapsed.TotalHours:00}:{snapshot.RateElapsed.Minutes:00}:{snapshot.RateElapsed.Seconds:00}";
-                sessionInfo.Text = $"Active time  {duration}     ·     Gold / hour  {snapshot.RateText("Gold")}     ·     Net wallet gold";
-                foreach(var (name, label) in resourceLabels) label.Text = snapshot.AmountText(name);
-                priorityHint.SetToolTip(resourceLabels["Gold"], snapshot.Wallet.Known ? $"Wallet {snapshot.Wallet.Current:N0} · Baseline {snapshot.Wallet.Baseline:N0} · {snapshot.Wallet.Status}" : snapshot.Wallet.Status);
-                refreshSessionDesk?.Invoke();
+                // The shared rail above stays synchronized on every page. The
+                // scanner, ledger and mirrored body need presentation only here.
+                if(page.Visible || offlinePreviewMode)
+                {
+                    var snapshot = lootTracker.Snapshot();
+                    refreshOrbitalTelemetry?.Invoke(snapshot);
+                    string duration = $"{(int)snapshot.RateElapsed.TotalHours:00}:{snapshot.RateElapsed.Minutes:00}:{snapshot.RateElapsed.Seconds:00}";
+                    sessionInfo.Text = $"Active time  {duration}     ·     Gold / hour  {snapshot.RateText("Gold")}     ·     Net wallet gold";
+                    foreach(var (name, label) in resourceLabels) label.Text = snapshot.AmountText(name);
+                    priorityHint.SetToolTip(resourceLabels["Gold"], snapshot.Wallet.Known ? $"Wallet {snapshot.Wallet.Current:N0} · Baseline {snapshot.Wallet.Baseline:N0} · {snapshot.Wallet.Status}" : snapshot.Wallet.Status);
+                    refreshSessionDesk?.Invoke();
+                }
             }
             finally { syncing = false; }
         };

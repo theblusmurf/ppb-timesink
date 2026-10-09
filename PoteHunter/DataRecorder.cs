@@ -8,7 +8,7 @@ public record ObjectTypeObservation(string Key, uint? PrototypeId, string Name, 
 public sealed class DataRecorder
 {
     const long MaximumFileBytes = 20L * 1024 * 1024;
-    readonly object gate = new();
+    readonly object gate = new(),captureGate=new();
     readonly string directory;
     readonly string observationsPath;
     readonly string catalogPath;
@@ -19,8 +19,23 @@ public sealed class DataRecorder
     DateTime lastCatalogFlushUtc = DateTime.MinValue;
     bool catalogDirty;
     bool catalogLoaded;
+    bool capturePending;
+    long skippedPendingCaptures;
+    readonly IDiagnosticStorage captureStorage=new DiagnosticFileStorage();
 
-    public string? LastError { get; private set; }
+    string? lastError;
+    public string? LastError { get=>Volatile.Read(ref lastError); private set=>Volatile.Write(ref lastError,value); }
+    public long SkippedPendingCaptures=>Interlocked.Read(ref skippedPendingCaptures);
+
+    sealed class FrozenCapture(byte[] line,ObjectTypeObservation[] observations,DateTime seenUtc)
+    {
+        public readonly byte[] Line=line;
+        public readonly ObjectTypeObservation[] Observations=observations;
+        public readonly DateTime SeenUtc=seenUtc;
+        public bool CatalogApplied;
+        public int ChargedBytes=>Line.Length+Observations.Sum(item=>96+2*(item.Key.Length+item.Name.Length+
+            item.Model.Length+item.DefinitionName.Length));
+    }
 
     public DataRecorder(string directory)
     {
@@ -40,13 +55,19 @@ public sealed class DataRecorder
         }
     }
 
+    internal DataRecorder(string directory,IDiagnosticStorage storage):this(directory)=>captureStorage=storage;
+
     public bool Capture(object snapshot, IEnumerable<ObjectTypeObservation> observations)
     {
-        lock (gate)
+        lock(captureGate)
         {
             long now = Environment.TickCount64;
-            if (now < retryAt || now < nextCaptureAt) return false;
-            try
+            if(capturePending || now < retryAt || now < nextCaptureAt)return false;
+            capturePending=true;
+        }
+        try
+        {
+            lock(gate)
             {
                 if (!catalogLoaded) LoadCatalog();
                 DateTime seenUtc = DateTime.UtcNow;
@@ -61,16 +82,68 @@ public sealed class DataRecorder
                 using (var stream = new FileStream(observationsPath, FileMode.Append, FileAccess.Write, FileShare.Read))
                     stream.Write(line);
 
-                nextCaptureAt = Environment.TickCount64 + 1000;
+                lock(captureGate){nextCaptureAt=Environment.TickCount64+1000;retryAt=0;}
                 LastError = null;
                 return true;
             }
-            catch (Exception ex)
+        }
+        catch(Exception ex){LastError=ex.Message;lock(captureGate)retryAt=Environment.TickCount64+5000;return false;}
+        finally{lock(captureGate)capturePending=false;}
+    }
+
+    // Optional UI capture: at most one accepted immutable frame per recorder.
+    // A busy/retrying recorder does not accept another catalog count; callers
+    // can see the skipped-frame counter without queuing mutable observations.
+    public bool EnqueueCapture(object snapshot,IEnumerable<ObjectTypeObservation> observations)
+    {
+        FrozenCapture captured;
+        lock(captureGate)
+        {
+            long now=Environment.TickCount64;
+            if(capturePending){Interlocked.Increment(ref skippedPendingCaptures);return false;}
+            if(now<retryAt || now<nextCaptureAt)return false;
+            try
             {
-                LastError = ex.Message;
-                retryAt = Environment.TickCount64 + 5000;
-                return false;
+                captured=new(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(snapshot)+Environment.NewLine),observations.ToArray(),DateTime.UtcNow);
+                if(captured.ChargedBytes>BoundedDiagnosticWriter.MaximumRecordBytes)
+                    throw new InvalidOperationException("Observation frame exceeds the bounded asynchronous diagnostic payload limit.");
+                capturePending=true;nextCaptureAt=now+1000;
             }
+            catch(Exception ex){LastError=ex.Message;retryAt=now+5000;return false;}
+        }
+        // Admission never shares the worker's catalog/I/O gate.
+        bool accepted=DiagnosticPersistence.EnqueueWork("capture object observations",observationsPath,captured.ChargedBytes,
+            ()=>PersistCapture(captured),error=>
+            {
+                lock(captureGate)
+                {
+                    LastError=error?.Message;
+                    if(error==null){capturePending=false;retryAt=0;}
+                }
+                if(error==null)DiagnosticIo.RecordBackgroundSuccess("capture object observations",observationsPath);
+                else DiagnosticIo.RecordBackgroundFailure("capture object observations",observationsPath,error);
+            });
+        if(!accepted)lock(captureGate){capturePending=false;retryAt=Environment.TickCount64+5000;}
+        return accepted;
+    }
+
+    void PersistCapture(FrozenCapture captured)
+    {
+        lock(gate)
+        {
+            if(!catalogLoaded)LoadCatalog();
+            // Retry persistence, never apply an accepted catalog observation
+            // twice when a catalog/append was temporarily blocked.
+            if(!captured.CatalogApplied)
+            {
+                UpdateCatalog(captured.Observations,captured.SeenUtc);
+                captured.CatalogApplied=true;
+            }
+            // This already-throttled worker persists every accepted count,
+            // including the final capture before shutdown, off the UI thread.
+            if(catalogDirty)
+                FlushCatalog(captured.SeenUtc);
+            captureStorage.Append(new(observationsPath,MaximumFileBytes,4),[captured.Line]);
         }
     }
 

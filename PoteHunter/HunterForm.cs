@@ -649,7 +649,9 @@ public sealed partial class HunterForm : Form
             position.Text = $"HP {(selfHealth.Known ? $"{Math.Max(0,selfHealth.Current)}/{selfHealth.Maximum}" : "unknown")} · MP {(selfMana.Known ? $"{selfMana.Current}/{selfMana.Maximum}" : "unknown")}";
             priorityHint.SetToolTip(position,$"{self.Name} · Lv. {level} · {pos.X:F2}, {pos.Y:F2} · {entities.Count(e=>e.Monster)} monsters");
             string[] allowedColors = difficultyBoxes.Where(kv => kv.Value.Checked).Select(kv => kv.Key.ToString()).ToArray();
-            list.BeginUpdate(); list.Items.Clear();
+            if(list.Visible)
+            {
+            var monsterRows=new List<ListViewItem>();
             foreach (var e in entities.Where(e => e.Targetable).OrderByDescending(e => Targeting.PriorityRank(e,prioritizeGamekeeper.Checked,prioritizeBreakables.Checked)).ThenBy(e => (e.Position - pos).Length).Take(30))
             {
                 Threat threat = world.Difficulty(e, level);
@@ -663,32 +665,35 @@ public sealed partial class HunterForm : Form
                 string? areaReason=outsideArea && allowed ? $"{(e.Position-activeHuntAnchor!.Value).Length:F1} units from original hunt center; home radius {targetLimit:F0}."+
                     (leaveAreaWhenEmpty.Checked ? $" Outside targets up to {targetLimit*2:F0} are considered only when no approved targets remain inside; return follows each outside fight." : " Distance column is from your character.") : null;
                 string protectedLabel=protectedReason?.StartsWith("Player nearby") == true ? "Player near" : protectedReason?.StartsWith("Already damaged") == true ? "Damaged" : "Avoid";
-                var row = new ListViewItem([e.DisplayName, e.PriorityLootObject ? "Breakable" : threat.ToString(), hp.Known ? $"{Math.Max(0,hp.Current)}/{hp.Maximum}" : "Unknown", hp.Dead ? "Dead" : protectedReason!=null ? protectedLabel : allowed ? engaged ? "Engaged" : outsideArea ? "Outside area" : Targeting.PriorityRank(e,prioritizeGamekeeper.Checked,prioritizeBreakables.Checked)>0 ? "Priority" : "Yes" : "No", e.Position.X.ToString("F2"), e.Position.Y.ToString("F2"), (e.Position - pos).Length.ToString("F1"), $"{e.Id:X8}"]) {ToolTipText=protectedReason??areaReason??""};
+                var row = new ListViewItem([e.DisplayName, e.PriorityLootObject ? "Breakable" : threat.ToString(), hp.Known ? $"{Math.Max(0,hp.Current)}/{hp.Maximum}" : "Unknown", hp.Dead ? "Dead" : protectedReason!=null ? protectedLabel : allowed ? engaged ? "Engaged" : outsideArea ? "Outside area" : Targeting.PriorityRank(e,prioritizeGamekeeper.Checked,prioritizeBreakables.Checked)>0 ? "Priority" : "Yes" : "No", e.Position.X.ToString("F2"), e.Position.Y.ToString("F2"), (e.Position - pos).Length.ToString("F1"), $"{e.Id:X8}"]) {Name=$"{e.Id:X8}:{e.Generation:X8}:{e.Address:X}",ToolTipText=protectedReason??areaReason??""};
                 row.ForeColor = e.PriorityLootObject ? Color.LightSkyBlue : MonsterDefinition.DisplayColor(threat);
                 if (lockedTarget?.Id == e.Id) row.BackColor = Color.FromArgb(53, 61, 78);
-                list.Items.Add(row);
+                monsterRows.Add(row);
             }
-            list.EndUpdate();
+            ListViewPresentation.Reconcile(list,monsterRows,row=>row.Name);
+            }
             groundLoot = world.Loot();
             Vec? lootCenter=working?activeHuntAnchor:null;
             double? lootRadius=working?(double?)(activeGuardOptions?.HuntRadius ?? radius.Value):null;
             lootTracker.ObserveDrops(groundLoot,navigationZone,lootCenter,lootRadius); lootPage.Text = $"Ground loot ({groundLoot.Count})";
-            string? lootTop = lootList.TopItem?.Tag as string;
-            lootList.BeginUpdate(); lootList.Items.Clear();
+            if(lootList.Visible)
+            {
+            var lootRows=new List<ListViewItem>();
             foreach (var item in groundLoot.OrderBy(item => (item.Position-pos).Length).Take(100))
             {
-                string key=$"{item.KeyA}:{item.KeyB}"; var row=new ListViewItem([item.Name,(item.Position-pos).Length.ToString("F1"),item.Position.X.ToString("F2"),item.Position.Y.ToString("F2")]) {Tag=key};
-                lootList.Items.Add(row); if (key==selectedGroundKey) row.Selected=true;
+                string key=$"{item.KeyA}:{item.KeyB}"; var row=new ListViewItem([item.Name,(item.Position-pos).Length.ToString("F1"),item.Position.X.ToString("F2"),item.Position.Y.ToString("F2")]) {Name=key,Tag=key};
+                lootRows.Add(row); if (key==selectedGroundKey) row.Selected=true;
             }
-            if (lootTop!=null) { var top=lootList.Items.Cast<ListViewItem>().FirstOrDefault(r=>(r.Tag as string)==lootTop); if (top!=null) lootList.TopItem=top; }
-            lootList.EndUpdate();
+            ListViewPresentation.Reconcile(lootList,lootRows,row=>row.Name);
+            }
             tickOperation = "read hotbar and skill guards";
             currentHotbar = world.Hotbar(); UpdateSkillKeys(currentHotbar); UpdateHealingSkillKeys(currentHotbar); hotbarPage.Text = $"Hotbar Â· {currentHotbar.Page}";
             ObserveBuffs(activeGuardOptions??CurrentOptions(),currentHotbar);
             supportSettings.Enabled=!working;
             if (working && !deathRecovery.Pending && !deathReturnInProgress && !repairInProgress && runHotbarPage.HasValue && currentHotbar.PageBase != runHotbarPage.Value) Stop("Hotbar page changed; stopped. Check the selected keys before restarting.");
-            string? hotbarTop = hotbarList.TopItem?.Text;
-            hotbarList.BeginUpdate(); hotbarList.Items.Clear();
+            if(hotbarList.Visible)
+            {
+            var hotbarRows=new List<ListViewItem>();
             foreach (var slot in currentHotbar.Slots)
             {
                 string state = slot.Kind == SlotKind.Empty ? "Empty" : slot.Locked ? $"Locked ({Math.Max(0,slot.LockRemaining)/1000.0:F1}s)" : slot.Ready ? "Ready" : $"{slot.RemainingCooldown/1000.0:F1}s";
@@ -697,13 +702,13 @@ public sealed partial class HunterForm : Form
                 var buff=buffDecisions.FirstOrDefault(b=>b.Key==slot.Key && b.SkillId==slot.Id);
                 if(buff!=null)role=buff.Eligible?$"Party {(slot.SkillUse==SkillUseKind.Chant?"chant":"buff")}":"Effect: monitor only";
                 else if(HealerPolicy.IsHealingSkill(slot))role="Healing skill";
-                var row = new ListViewItem([slot.Key, slot.Name, slot.Kind==SlotKind.Skill?slot.SkillUse.ToString():slot.Kind.ToString(), role, state, slot.TotalCooldown > 0 ? $"{slot.TotalCooldown/1000.0:F1}s" : "None reported", slot.Id == 0 ? "" : slot.Id.ToString()]);
+                var row = new ListViewItem([slot.Key, slot.Name, slot.Kind==SlotKind.Skill?slot.SkillUse.ToString():slot.Kind.ToString(), role, state, slot.TotalCooldown > 0 ? $"{slot.TotalCooldown/1000.0:F1}s" : "None reported", slot.Id == 0 ? "" : slot.Id.ToString()]) {Name=slot.Key};
                 if (slot.Ready) row.ForeColor = Color.FromArgb(93,222,179);
-                hotbarList.Items.Add(row);
+                hotbarRows.Add(row);
                 if (slot.Key==selectedHotbarKey) row.Selected=true;
             }
-            if (hotbarTop!=null) { var top=hotbarList.Items.Cast<ListViewItem>().FirstOrDefault(r=>r.Text==hotbarTop); if (top!=null) hotbarList.TopItem=top; }
-            hotbarList.EndUpdate();
+            ListViewPresentation.Reconcile(hotbarList,hotbarRows,row=>row.Name);
+            }
             UpdateItemDescriptions();
             if (Environment.TickCount64 - lastEvidence > 1000)
             {
@@ -742,7 +747,7 @@ public sealed partial class HunterForm : Form
                     HP = health.GetValueOrDefault(e.Id), PrototypeId = prototype, Definition = definition,
                     e.Monster, e.PriorityLootObject, e.Targetable };
             }).ToArray();
-            recorder.Capture(new { TimeUtc = DateTime.UtcNow, ClientSha256 = world.ClientHash, ProcessId = world.Pid,
+            recorder.EnqueueCapture(new { TimeUtc = DateTime.UtcNow, ClientSha256 = world.ClientHash, ProcessId = world.Pid,
                 Working = working, PlayerId = self.Id, PlayerLevel = level, LoadedObjectCount = world.CandidateCount,
                 ReadableObjectCount = observed.Length, Objects = observed, GroundItems = groundLoot, LootTracker = lootTracker.Snapshot(), Hotbar = currentHotbar,
                 LockedTargetId = lockedTarget?.Id, Status = message, Protection = ProtectionState(), Combat = CombatState(), Group = GroupState(), Navigation = navigation.Snapshot() },
@@ -779,13 +784,16 @@ public sealed partial class HunterForm : Form
         }
         tankPicker.Enabled=!working && currentParty.Available;
         groupEnabled.Enabled=!working&&!rangedPullEnabled.Checked;groupFollow.Enabled=!working&&!rangedPullEnabled.Checked;groupAttack.Enabled=!working&&!rangedPullEnabled.Checked;groupLimit.Enabled=!working&&!rangedPullEnabled.Checked;
-        partyList.BeginUpdate();partyList.Items.Clear();
+        if(partyList.Visible)
+        {
+        var partyRows=new List<ListViewItem>();
         foreach(var member in currentParty.Members)
         {
             var entity=entities.FirstOrDefault(e=>e.Id==member.Id);
-            partyList.Items.Add(new ListViewItem([member.Name,member.Leader?"Leader":"Member",entity!=null?"Yes":"Not loaded",entity==null?"â€”":(entity.Position-self.Position).Length.ToString("F1"),$"{member.Id:X8}"]));
+            partyRows.Add(new ListViewItem([member.Name,member.Leader?"Leader":"Member",entity!=null?"Yes":"Not loaded",entity==null?"â€”":(entity.Position-self.Position).Length.ToString("F1"),$"{member.Id:X8}"]) {Name=$"{member.Id:X8}"});
         }
-        partyList.EndUpdate();
+        ListViewPresentation.Reconcile(partyList,partyRows,row=>row.Name);
+        }
         partyStatus.Text=currentParty.Status+" Â· "+(string.IsNullOrWhiteSpace(selectedTankName)?"Select a tank from the party list.":"Selected tank: "+selectedTankName)+Environment.NewLine+
             (working && activeGuardOptions?.GroupMode==true?groupDecision.Status:healerMode.Checked?"Healbot: follows the selected tank and heals nearby party members. Attack radius is unused; pickup is off.":"Follows the tank and attacks allowed targets inside the attack radius. Other-party players and avoidance rules still apply. Group pickup is off.");
     }
@@ -831,11 +839,14 @@ public sealed partial class HunterForm : Form
         state["InputCompatibilityEnabled"]=WindowsClientInput.Enabled;
         state["SessionLog"]=JsonSerializer.SerializeToNode(new {Path=HuntingSessionLog.Current?.FilePath,Error=HuntingSessionLog.Current?.LastError});
         state["DiagnosticPersistence"]=JsonSerializer.SerializeToNode(DiagnosticIo.Snapshot());
+        state["DiagnosticWriter"]=JsonSerializer.SerializeToNode(DiagnosticPersistence.Snapshot());
+        state["CoreReads"]=JsonSerializer.SerializeToNode(world.ReadCounts);
+        state["ObservationPersistence"]=JsonSerializer.SerializeToNode(new { recorder.SkippedPendingCaptures });
         state["Hotkeys"]=JsonSerializer.SerializeToNode(new { Ready=hotkeys, Failure=hotkeyFailure, Registrations=hotkeyRegistrations });
         state["Status"]=DisplayMessage;
         state["TargetSearch"]=working ? JsonSerializer.SerializeToNode(targetSearch) : null;
         state["HuntingArea"]=JsonSerializer.SerializeToNode(new {Mode=(activeGuardOptions?.GroupMode ?? groupEnabled.Checked)?"Group":(activeGuardOptions?.LeaveAreaWhenEmpty ?? leaveAreaWhenEmpty.Checked)?"Fixed with outside trips":"Fixed",Center=activeHuntAnchor,Radius=activeGuardOptions?.HuntRadius ?? radius.Value,OutsideSearchRadius=(activeGuardOptions?.HuntRadius ?? radius.Value)*2,OutsideTrip=working && activeExcursion?.OutsideTrip==true,ReturnPending=working && completionReturnPending,CompletionRadius=working?activeCompletionBoundary:(double?)null});
-        DiagnosticIo.TryAtomicWrite("write live status", path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        DiagnosticPersistence.EnqueueSnapshot("write live status", path, state.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
     void UpdateItemDescriptions()
     {
@@ -1137,10 +1148,11 @@ public sealed partial class HunterForm : Form
     {
         if(!options.PrioritizeGamekeeper || activeHuntAnchor is not Vec anchor)return null;
         if(Environment.TickCount64-guardRefreshedAt>=100)RefreshGuardScene();
-        var health=world.HealthSnapshot();var position=world.PlayerPosition();
+        var candidates=entities.Where(e=>Targeting.IsGamekeeper(e)).ToArray();
+        if(candidates.Length==0)return null;
+        var health=PriorityHealthRead.Read(candidates,world.TargetHealth);var position=world.PlayerPosition();
         var retained=lockedTarget is Entity locked && Targeting.IsGamekeeper(locked) ? locked : pendingPriorityGamekeeper;
         double? retainedRadius=retained!=null && (encounter.IsEngaged(retained) || courtesy.StartedHere(retained)) ? activeCompletionBoundary : null;
-        var candidates=entities.Where(e=>Targeting.IsGamekeeper(e)).ToArray();
         var selected=GamekeeperPriority.Choose(candidates.Where(e=>TargetGuardReason(e,health.GetValueOrDefault(e.Id),position,options)==null),
             health,position,anchor,(double)options.HuntRadius,(double)options.GamekeeperResponseRadius,true,retained,retainedRadius);
         if(selected!=null)return selected;
@@ -1329,7 +1341,7 @@ public sealed partial class HunterForm : Form
 
     void RefreshGuardScene()
     {
-        entities=world.Poll(); guardSelfId=world.LocalPlayer().Id;
+        entities=world.PollBodies(); guardSelfId=world.LocalPlayer().Id;
         if(activeGuardOptions?.GroupMode==true){currentParty=world.Party();ApplyPartyNames();}
         avoidZones=Avoidance.BuildZones(avoidRules,entities,guardSelfId);
         guardRefreshedAt=Environment.TickCount64;
@@ -1421,6 +1433,9 @@ public sealed partial class HunterForm : Form
 
     void ProtectionPreflight()
     {
+        // Broad group observations share one immutable reading only within
+        // this synchronous call. Local/locked HP and input guards stay fresh.
+        var healthPass=new ControlHealthPass(world.ControlReadContext,world.HealthSnapshot);
         if(activeTeleporter is {} portal)
         {
             if(portal.ConfirmationWasSent)throw new InvalidOperationException("Input is released while verifying the teleporter landing.");
@@ -1513,7 +1528,7 @@ public sealed partial class HunterForm : Form
             if(Environment.TickCount64>=nextEngagementObservation)
             {
                 nextEngagementObservation=Environment.TickCount64+100;
-                ObserveEncounter(o,world.HealthSnapshot(),position,world.PlayerLevel());
+                ObserveEncounter(o,healthPass.Read(),position,world.PlayerLevel());
                 ObserveCombatPressure(o,playerHealth,position);
             }
             if(priority==null && encounter.HasEngaged && (defenseRepositioning || lootGuardPosition.HasValue || buffInProgress || !returningFromPriority && !rangedTagging && !(RangedPullEnabled(o) && rangedPull.Phase==RangedPullPhase.Clearing) && lockedTarget!=null && !encounter.IsEngaged(lockedTarget) &&
@@ -1547,7 +1562,7 @@ public sealed partial class HunterForm : Form
             {
                 nextInsideTargetCheck=Environment.TickCount64+100;
                 int level=world.PlayerLevel();
-                if(HuntingArea.HasApprovedInside(entities,world.HealthSnapshot(),excursion,e=>MatchesRequestedTarget(e,o,level)))
+                if(HuntingArea.HasApprovedInside(entities,healthPass.Read(),excursion,e=>MatchesRequestedTarget(e,o,level)))
                 {
                     ReleaseCombatPickup();movement?.StopApproach();Input.Release(preserveNearbyPickup:true);
                     throw new ReturnToHuntingAreaException();
@@ -1561,7 +1576,7 @@ public sealed partial class HunterForm : Form
         {
             if(encounter.Active)
             {
-                ObserveEncounter(o,world.HealthSnapshot(),position,world.PlayerLevel());
+                ObserveEncounter(o,healthPass.Read(),position,world.PlayerLevel());
                 if(encounter.Candidates.Count>0 || encounter.HasUnresolvedNearby) throw new EncounterInterruptedException();
             }
             string? blocked=o.AutomaticRouting ? Avoidance.BlockedPoint(lootPoint,avoidZones) : Avoidance.BlockedSegment(position,lootPoint,avoidZones);
@@ -1684,7 +1699,7 @@ public sealed partial class HunterForm : Form
             while(true)
             {
                 await Input.Delay(100,token);
-                var self=world.LocalPlayer();UpdateDetectedCharacter(self);entities=world.Poll();guardSelfId=self.Id;currentParty=world.Party();ApplyPartyNames();
+                var self=world.LocalPlayer();UpdateDetectedCharacter(self);entities=world.PollBodies();guardSelfId=self.Id;currentParty=world.Party();ApplyPartyNames();
                 if (TryGreetNearbyPlayer(o, self.Position, entities, self.Id)) { await Input.Delay(250, token); continue; }
                 var health=world.HealthSnapshot();currentHotbar=CheckedHotbar();
                 if(o.GroupMode && await TryHealbotRecovery(o,token))continue;
@@ -1786,7 +1801,7 @@ public sealed partial class HunterForm : Form
             // activated, choose the first free alternative instead of entering
             // another player's spot. The activation point is otherwise kept as
             // the normal anchor so existing profiles behave unchanged.
-            entities=world.Poll();
+            entities=world.PollBodies();
             guardSelfId=runCharacter.Id;
             bool RouteCompatible(SavedNavigationRoute route) =>
                 RecoveryRouting.Compatible(route,runZone.Value,runCharacter.Name,savedHuntHeight);
@@ -2917,7 +2932,7 @@ public sealed partial class HunterForm : Form
                     if(deathRecovery.Pending)continue;
                 }
                 var pos = world.PlayerPosition();
-                entities = world.Poll();
+                RefreshGuardScene();
                 if (TryGreetNearbyPlayer(o, pos, entities, guardSelfId)) { await Input.Delay(250, token); continue; }
                 long now = Environment.TickCount64;
                 if(now>=nextLootTrackerRead)
@@ -2926,7 +2941,6 @@ public sealed partial class HunterForm : Form
                     ObserveLootTrackerDrops(o,world.Loot());
                 }
                 int level = world.PlayerLevel();
-                RefreshGuardScene();
                 var health = world.HealthSnapshot();
                 ObserveEncounter(o,health,pos,level);
                 gamekeeper=PriorityGamekeeper(o);

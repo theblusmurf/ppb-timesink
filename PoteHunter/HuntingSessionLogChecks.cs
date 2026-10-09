@@ -76,13 +76,15 @@ internal static class HuntingSessionLogChecks
             // the complete header must survive, and failure must not stop HP tracking.
             using var appendRecovery = new HuntingSessionLog(root, () => now);
             appendRecovery.Observe(1, self, 8, new(100, 100));
+            _=Read(appendRecovery.FilePath);
             using (var exclusive = File.Open(appendRecovery.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             {
                 appendRecovery.Observe(1, self, 8, new(0, 100));
-                Require(appendRecovery.LastError != null, "A locked append path did not expose a nonfatal error.");
+                Require(SpinWait.SpinUntil(()=>appendRecovery.LastError!=null,2000), "A locked append path did not expose a nonfatal error.");
             }
             appendRecovery.Observe(1, self, 8, new(100, 100));
-            Require(appendRecovery.LastError == null && Read(appendRecovery.FilePath).Last()["Revivals"] == "1", "Append failure did not recover cleanly or lost the pending HP transition.");
+            Require(DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)) && appendRecovery.LastError == null && Read(appendRecovery.FilePath).Last()["Revivals"] == "1", "Append failure did not recover cleanly or lost the pending HP transition.");
+            Require(Read(appendRecovery.FilePath).Count(row=>row["Event"]=="Death observed")==1,"A retained append failure lost or duplicated its original death event.");
 
             using var laterHunt = new HuntingSessionLog(root, () => now);
             laterHunt.BeginHunt("Solo", "Mimic", 1, self, 8, new(100, 100));
@@ -95,16 +97,17 @@ internal static class HuntingSessionLogChecks
             string denied = Path.Combine(root, "blocked-root"); File.WriteAllText(denied, "existing file");
             using var unavailable = new HuntingSessionLog(denied, () => now);
             unavailable.BeginHunt("Solo", "Mimic", 1, self, 8, new(100, 100)); unavailable.Observe(1, self, 8, new(0, 100));
-            Require(unavailable.LastError != null, "An unwritable log path did not expose a nonfatal error.");
+            Require(SpinWait.SpinUntil(()=>unavailable.LastError!=null,2000), "An unwritable log path did not expose a nonfatal error.");
             File.Delete(denied); Directory.CreateDirectory(denied);
             unavailable.Observe(1, self, 8, new(100, 100));
-            Require(unavailable.LastError == null && Read(unavailable.FilePath).Single()["Event"] == "Revival confirmed", "A recovered constructor failure created a headerless CSV.");
+            Require(DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)) && unavailable.LastError == null && Read(unavailable.FilePath).Single(row=>row["Event"]=="Revival confirmed")["Revivals"]=="1", "A recovered constructor failure created a headerless CSV.");
+            Require(Read(unavailable.FilePath).Count(row=>row["Event"]=="Death observed")==1,"Constructor recovery discarded an accepted death event.");
             HuntingSessionLog.Current = unavailable;
             try { unavailable.Dispose(); Require(HuntingSessionLog.Current == null, "Disposal retained the live global logger reference."); }
             finally { HuntingSessionLog.Current = liveGlobal; }
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "hunting-session-log-checks.json"), JsonSerializer.Serialize(new { Passed = true, Checks = new[] { "death/positive-HP revival deduplication", "unknown HP preserves pending death", "existing dead baseline", "manual revival retains stopped hunt", "post-revival repair/return cycle attribution", "new hunt clears former recovery attribution", "allocation/generation recreation", "disconnect/identity gaps", "recovery input is not revival", "explicit hunt/healer lifecycle and close", "CSV quotes/commas/newlines", "actual wallet net separate from drop estimate", "unknown wallet remains blank", "loot/timer reset IDs", "quiet per-tick loot update", "zero-duration elapsed", "nonfatal constructor/append errors and header recovery", "disposal clears owned global logger" } }, new JsonSerializerOptions { WriteIndented = true }));
         }
-        finally { Directory.Delete(root, true); }
+        finally {Require(DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)),"Session fixtures did not drain before cleanup.");Directory.Delete(root, true);}
     }
 
     static LootTrackerSnapshot Snapshot(bool known, long net) => new(8, 0, [new("Mimic", 3, 4, [])], [], [new("Gold", net), new("Silvin", 2)], DateTime.UtcNow, TimeSpan.FromMinutes(3), DateTime.UtcNow, TimeSpan.FromMinutes(2), [new("Gold", net * 30d), new("Silvin", 60)])
@@ -113,6 +116,7 @@ internal static class HuntingSessionLogChecks
     // A real CSV parser exercises embedded newlines and doubled quotes, not line splitting.
     static List<Dictionary<string, string>> Read(string path)
     {
+        if(!DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)))throw new Exception("Session CSV did not drain before inspection.");
         string text = File.ReadAllText(path);
         var records = new List<List<string>>(); var row = new List<string>(); var field = new StringBuilder(); bool quoted = false;
         for (int n = 0; n < text.Length; n++)

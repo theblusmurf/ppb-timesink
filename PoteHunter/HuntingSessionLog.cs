@@ -19,7 +19,8 @@ internal sealed class HuntingSessionLog : IDisposable
         "repair blocked saved-route return", "recovery destination selected", "recovery spots occupied",
         "saved hunt anchor reached", "saved hunt anchor return retry", "saved hunt anchor return blocked",
         "fault death recovery completed", "movement fault death watch started", "hunt stopped", "hunt failed",
-        "healer stopped", "healer failed", "stop requested"
+        "healer stopped", "healer failed", "stop requested", "recovery return delay started",
+        "recovery return delay completed", "recovery return delay interrupted", "saved-route recovery resumed"
     };
     readonly object gate = new();
     readonly Func<DateTimeOffset> clock;
@@ -36,7 +37,8 @@ internal sealed class HuntingSessionLog : IDisposable
     PendingDeath? pending, lastRecovery;
     LootTrackerSnapshot? loot;
     public string FilePath { get; }
-    public string? LastError { get; private set; }
+    string? lastError;
+    public string? LastError=>Volatile.Read(ref lastError);
 
     sealed class HuntContext(string mode, string targets, DateTimeOffset started)
     {
@@ -170,7 +172,6 @@ internal sealed class HuntingSessionLog : IDisposable
     {
         try
         {
-            EnsureHeader();
             DateTimeOffset now = clock();
             var row = new List<string>
             {
@@ -183,23 +184,17 @@ internal sealed class HuntingSessionLog : IDisposable
             row.AddRange(Items.Select(name => loot == null || name == "Gold" && !loot.Wallet.Known ? "" : Number(name == "Gold" ? loot.Wallet.Net : loot.TrackedLoot.FirstOrDefault(item => item.Name == name)?.Count ?? 0)));
             row.AddRange(Items.Select(name => loot == null || name == "Gold" && !loot.Wallet.Known ? "" : Number(loot.HourlyLoot.FirstOrDefault(item => item.Name == name)?.PerHour ?? 0)));
             row.AddRange([loot == null ? "" : loot.Wallet.Known.ToString(), Number(loot?.Wallet.Known == true ? loot.Wallet.Current : null), Number(loot?.Wallet.Baseline), Number(loot?.Wallet.Known == true ? loot.Wallet.Net : null), Number(loot?.DetectedGoldEstimate), loot == null ? "" : Seconds(loot.Elapsed), loot == null ? "" : Seconds(loot.RateElapsed), loot == null ? "" : Number(loot.Sources.Sum(source => source.Kills)), loot == null ? "" : Number(loot.Sources.Sum(source => source.Drops)), JsonSerializer.Serialize(details)]);
-            File.AppendAllText(FilePath, string.Join(',', row.Select(Escape)) + Environment.NewLine, new UTF8Encoding(false));
-            LastError = null;
+            // User session/loot history remains untrimmed. Admission failures
+            // are explicit in writer counters/status, never silent retention.
+            DiagnosticPersistence.Enqueue("append hunting session",new(FilePath,long.MaxValue,0,header),
+                string.Join(',',row.Select(Escape))+Environment.NewLine,true,error=>
+                {
+                    Volatile.Write(ref lastError,error?.Message);
+                    if(error==null)DiagnosticIo.RecordBackgroundSuccess("append hunting session",FilePath);
+                    else DiagnosticIo.RecordBackgroundFailure("append hunting session",FilePath,error);
+                });
         }
-        catch (Exception ex) when (LogFailure(ex)) { LastError = ex.Message; }
-    }
-    void EnsureHeader()
-    {
-        // A temporarily unwritable folder must recover with a complete header;
-        // append APIs alone would otherwise silently create a headerless CSV.
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        if (!File.Exists(FilePath) || new FileInfo(FilePath).Length == 0)
-        {
-            File.WriteAllText(FilePath, header + Environment.NewLine, new UTF8Encoding(false));
-            return;
-        }
-        using var reader = new StreamReader(FilePath, Encoding.UTF8, true);
-        if (reader.ReadLine() != header) throw new IOException("Session CSV header is incomplete or changed; the existing file was preserved.");
+        catch (Exception ex) when (LogFailure(ex)) { Volatile.Write(ref lastError,ex.Message); }
     }
     static string Number(object? value) => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
     static string Seconds(TimeSpan duration) => Math.Max(0, duration.TotalSeconds).ToString("0.###", CultureInfo.InvariantCulture);

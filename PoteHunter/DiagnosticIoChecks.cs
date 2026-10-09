@@ -345,13 +345,13 @@ internal static class DiagnosticIoChecks
             Require(!DiagnosticIo.TryAtomicWrite("check locked audit", blocked, "{}"),
                 "unwritable diagnostic fixture unexpectedly succeeded");
             AssertFailure("check locked audit", blocked);
-            Require(DiagnosticIo.Snapshot().AuditWriteFailureCount == 1,
+            Require(SpinWait.SpinUntil(()=>DiagnosticIo.Snapshot().AuditWriteFailureCount>0,2000),
                 "error sink failure was not bounded/nonfatal or did not retain its own failure count");
             using var original = new StreamReader(lockFile, Encoding.UTF8, true, 1024, leaveOpen: true);
             Require(original.ReadToEnd() == "original audit\n", "failed error audit changed previous history");
         }
         DiagnosticIo.RecordFailure("check audit recovery", blocked, new IOException("later audit fixture"));
-        Require(DiagnosticIo.Snapshot().AuditRecordCount == 1 &&
+        Require(DiagnosticPersistence.Drain(TimeSpan.FromSeconds(5)) && DiagnosticIo.Snapshot().AuditRecordCount == 2 &&
             File.ReadAllText(audit).StartsWith("original audit\n", StringComparison.Ordinal),
             "later unlocked audit did not recover while preserving its existing history");
     }

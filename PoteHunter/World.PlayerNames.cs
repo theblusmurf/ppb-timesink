@@ -152,13 +152,14 @@ internal static class PlayerNameReader
 
 public sealed partial class World
 {
+    readonly PlayerNameDisplayCache playerNameDisplay = new();
     PlayerNameCodeLayout? playerNameLayout;
     public bool PlayerNamesSupported => playerNameLayout != null;
     public string PlayerNamesStatus { get; private set; } = "Other-player name layout has not been checked";
     public int PlayerNamesLastAttachedCount { get; private set; }
 
     void ResetPlayerNames()
-    { playerNameLayout = null; PlayerNamesLastAttachedCount = 0; PlayerNamesStatus = "Other-player name reader is unavailable"; }
+    { playerNameDisplay.Reset(); playerNameLayout = null; PlayerNamesLastAttachedCount = 0; PlayerNamesStatus = "Other-player name reader is unavailable"; }
 
     void ConfigurePlayerNames()
     {
@@ -193,15 +194,44 @@ public sealed partial class World
         try
         {
             var context = ReadPlayerNameContext();
+            long started = Environment.TickCount64;
+            Interlocked.Increment(ref playerNameScanCount);
             var snapshot = PlayerNameReader.Read(accepted, context.SelfId, context.Manager, checked((uint)(moduleBase + CreatureRva)),
                 (address, count) => Native.Read(handle, (nint)address, count), () => context == ReadPlayerNameContext());
             PlayerNamesStatus = snapshot.Status;
-            if (!snapshot.Consistent) return;
+            if (!snapshot.Consistent) { playerNameDisplay.Reset(); return; }
+            playerNameDisplay.Store(PlayerNameDisplayContext(context), accepted, snapshot, started);
             for (int i = 0; i < accepted.Count; i++)
                 if (PlayerNameReader.Eligible(accepted[i], context.SelfId) && snapshot.Names.TryGetValue(accepted[i].Id, out string? name))
                 { accepted[i] = accepted[i] with { VerifiedPlayerName = name }; PlayerNamesLastAttachedCount++; }
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or OverflowException)
-        { PlayerNamesStatus = "Other-player name snapshot unavailable; keeping observed body labels"; }
+        { playerNameDisplay.Reset(); PlayerNamesStatus = "Other-player name snapshot unavailable; keeping observed body labels"; }
+    }
+
+    string PlayerNameDisplayContext(PlayerNameContext context) => $"{ClientHash}:{Pid}:{moduleBase:X}:{context}";
+
+    void AttachObservedPlayerNames(List<Entity> accepted)
+    {
+        PlayerNamesLastAttachedCount = 0;
+        if (playerNameLayout == null || handle is null || !ConnectionVerified) { playerNameDisplay.Reset(); return; }
+        try
+        {
+            var context = ReadPlayerNameContext();
+            int count = playerNameDisplay.Apply(PlayerNameDisplayContext(context), accepted, context.SelfId, Environment.TickCount64);
+            if (context != ReadPlayerNameContext())
+            {
+                playerNameDisplay.Reset();
+                for (int i = 0; i < accepted.Count; i++) accepted[i] = accepted[i] with { VerifiedPlayerName = "" };
+                return;
+            }
+            PlayerNamesLastAttachedCount = count;
+            if (count > 0) Interlocked.Increment(ref playerNameReuseCount);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException or OverflowException)
+        {
+            playerNameDisplay.Reset();
+            for (int i = 0; i < accepted.Count; i++) accepted[i] = accepted[i] with { VerifiedPlayerName = "" };
+        }
     }
 }

@@ -1,3 +1,15 @@
+## Release1.144
+
+Reduce repeated game reads, diagnostic disk stalls and optional presentation work while retaining the existing control and recovery protections.
+
+- Control polls read creature bodies separately from display-name enrichment. Verified display names can be reused for at most one second only on matching process, scene, zone and body identity. Gamekeeper priority reads health only for observed, unambiguous candidates. Broad group health is shared within one synchronous preflight; fresh local and selected-target checks remain before input. Slow optional reads bypass reuse rather than adding a new hunt timeout.
+- Equipped-durability screening reuses a sample for at most one second only after rereading every captured equipment field and context. Changed wear, equipment, unavailable data or expiry requires the normal full reader. Repair still requires a fresh full preflight and post-repair verification.
+- Frozen diagnostic events use a bounded background writer with ordered batches, reserved critical capacity, explicit overflow/error counters and latest-only live-status replacement. Required settings writes remain synchronous. Trace files retain an eight-MiB active file plus four archives; a preexisting oversized trace is preserved separately as calibration-trace.jsonl.legacy. User hunting-session CSV history remains untrimmed. Shutdown drains pending diagnostics under a bounded wait. Saturated or failed storage is reported; unlimited retention cannot be guaranteed with bounded memory.
+- Safety, health, hotbar, recovery and loot observations keep their existing cadence. Hidden list presentation is skipped, visible rows are reconciled by identity, and selection/scroll position are retained. Hidden overview scanner/ledger presentation is deferred until the page is visible.
+- The 3D overlays reuse bounded readback buffers and skip unchanged captures on their owning UI thread. Terrain lookup and static route bounds are cached without changing interpolation or routing decisions. Transparent loot overlays reuse their drawing surface and redraw timer-only changes once per displayed second; loot, wallet, reset, design, scale and transparency changes update promptly. Existing in-game item images remain unchanged.
+
+Offline checks compare read counts, batching, resource reuse and presentation work and exercise identity changes, delayed reads, equipment wear, queue overflow, write failure, rotation, rollback, data preservation and renderer invalidation. These are synthetic workloads; live CPU, frame-rate and gameplay improvements remain unmeasured. Existing settings, routes, local profiles, session totals and game-input guards are preserved.
+
 ## Release1.143
 
 Add an optional wait after revival and repair before returning along the saved route.

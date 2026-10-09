@@ -44,19 +44,29 @@ internal static class NavigationOverlay3DRendererChecks
         if(renderer.Failed)return "SKIP: "+renderer.Status;
         Require(radar!=null&&HasGeometry(radar),"Hidden radar renderer must produce tilted 3D terrain and copied annotations");
         Require(radar!=null&&HasPlayerDiamond(radar),"The native radar omitted the pink enemy-player diamond and label.");
+        int firstCaptures=renderer.CaptureCount,firstAllocations=renderer.ReadbackAllocations;
+        for(int i=0;i<5;i++)Require(ReferenceEquals(radar,renderer.Capture(new(480,320))),"Unchanged optional overlay captures should retain the same borrowed frame");
+        Require(renderer.CaptureCount==firstCaptures&&renderer.ReadbackAllocations==firstAllocations,"Unchanged frames must issue zero additional native readbacks or storage allocations");
         radar!.Save(Path.Combine(outputDirectory,"native-overlay-radar-tilted.png"));
         using var comparison=new Bitmap(radar);renderer.TopView=true;var top=renderer.Capture(new(480,320));
         Require(top!=null&&Different(comparison,top),"Top view must change camera while retaining the hidden native context");
+        Require(renderer.CaptureCount==firstCaptures+1&&renderer.ReadbackAllocations==firstAllocations,"Changed camera must redraw immediately while borrowing the same-sized storage");
         top!.Save(Path.Combine(outputDirectory,"native-overlay-radar-top.png"));
+        int beforeMove=renderer.CaptureCount;
+        renderer.SetRadarCamera(new(9,8),5,10);Require(renderer.Capture(new(480,320))!=null&&renderer.CaptureCount==beforeMove+1,"Player motion must bypass the unchanged-frame gate");
+        renderer.MapOpacity=55;int beforeStyle=renderer.CaptureCount;
+        Require(renderer.Capture(new(480,320))!=null&&renderer.CaptureCount==beforeStyle+1,"Overlay layer/style changes must bypass the unchanged-frame gate");renderer.MapOpacity=65;
         renderer.TopView=false;renderer.SetMarkers([new("Player",new(8,8),5,Color.White,0)]);renderer.SetAnnotations([],[],null);
         renderer.FitRoutes(2,100,new(3,3),new(8,8));var route=renderer.Capture(new(640,400));Require(route!=null&&HasGeometry(route),"Full route fit must retain geometry and radius annotations");
         route!.Save(Path.Combine(outputDirectory,"native-overlay-routes-tilted.png"));
+        Require(renderer.ReadbackAllocations==firstAllocations+1,"Bounded resize must replace the readback storage once");
         using var largeArea=new Bitmap(route);var fittedCamera=renderer.CameraState;renderer.FitRoutes(2,1,new(3,3),new(8,8));var smallArea=renderer.Capture(new(640,400));
         Require(smallArea!=null&&Different(largeArea,smallArea),"Farming area radius changes must affect annotation pixels");
         Require(renderer.CameraState==fittedCamera,"Farming radius must annotate the fitted route without changing camera bounds or zoom");
         Require(!renderer.WindowsVisible&&!renderer.AutomaticFrames&&foreground==NavigationOverlay.ForegroundWindow,"Hidden overlay rendering must preserve foreground window and stay timer-free");
         renderer.Clear();Require(renderer.Frame==null&&renderer.Capture(new(640,400))==null,"Zone clear must remove stale readback before any new scene");
-        File.WriteAllText(Path.Combine(outputDirectory,"native-overlay-checks.json"),JsonSerializer.Serialize(new{Passed=true,Hidden=true,TimerFree=true,ForegroundPreserved=true,PlayerDiamondVisible=true},new JsonSerializerOptions{WriteIndented=true}));
+        File.WriteAllText(Path.Combine(outputDirectory,"native-overlay-checks.json"),JsonSerializer.Serialize(new{Passed=true,HardwareInputEmitted=false,LiveGameplayVerified=false,Hidden=true,TimerFree=true,ForegroundPreserved=true,PlayerDiamondVisible=true,
+            UnchangedAdditionalCaptures=0,SameSizeReadbackAllocations=firstAllocations,TotalCaptures=renderer.CaptureCount,TotalReadbackAllocations=renderer.ReadbackAllocations},new JsonSerializerOptions{WriteIndented=true}));
         return "PASS: passive hidden radar/route readback, tilted/top cameras, engagement/cone/trail/radius annotations, bounded resize, foreground and stale-frame guards";
     }
     internal static string RunLocal(string clientDirectory,string outputDirectory)
