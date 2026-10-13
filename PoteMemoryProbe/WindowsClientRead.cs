@@ -11,7 +11,11 @@ namespace PoteMemoryProbe;
 // The executable stub lives only in this process; installed modules are never patched.
 internal static class WindowsClientRead
 {
-    const string SystemDllHash="a74f7482085eab125ccc09152ab7e0b5994bcb13e1a7b29880bdbb24179ecb8b";
+    // Both reviewed Microsoft-signed Windows builds retain the checked read-entry layout.
+    static readonly string[] SystemDllHashes = [
+        "a74f7482085eab125ccc09152ab7e0b5994bcb13e1a7b29880bdbb24179ecb8b",
+        "a378d703c3f155d71b57ac53891b5905dc1036d3e763d82980705d1e2a8dd17d"
+    ];
     sealed class VerifiedTarget { }
     static readonly ConditionalWeakTable<SafeProcessHandle,VerifiedTarget> verified=new();
     static readonly Lazy<Reader> reader=new(()=>new Reader());
@@ -61,7 +65,8 @@ internal static class WindowsClientRead
         {
             string path=Path.Combine(Environment.SystemDirectory,"ntdll.dll");
             byte[] image=File.ReadAllBytes(path);
-            if(!Convert.ToHexString(SHA256.HashData(image)).Equals(SystemDllHash,StringComparison.OrdinalIgnoreCase))
+            string hash=Convert.ToHexStringLower(SHA256.HashData(image));
+            if(!SystemDllHashes.Contains(hash,StringComparer.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Windows changed; this build's native-read compatibility path is unavailable.");
             nint module=NativeLibrary.Load(path);
             byte[] stub;

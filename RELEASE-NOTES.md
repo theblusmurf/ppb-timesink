@@ -1,3 +1,11 @@
+## Release1.146
+
+Restore connection on the newer Windows 11 system DLL build after Release1.145 recognized the updated game client.
+
+- Allow the reviewed Microsoft-signed `ntdll.dll` SHA-256 for the existing native-read compatibility path. The executable `NtReadVirtualMemory` entry still must match the verified instruction layout, and game executable identity and client signature checks remain mandatory.
+- Allow the corresponding reviewed `win32u.dll` SHA-256 for the native-input readiness check. The `NtUserSendInput` export still must match its exact known bytes before input can be enabled. The older verified Windows build remains supported.
+- Validate connection and input-backend readiness without sending game input. Existing settings, routes, profiles and game textures are unchanged.
+
 ## Release1.145
 
 Restore connection after the October 12 game update.
