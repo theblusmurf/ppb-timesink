@@ -1,3 +1,13 @@
+## Release1.145
+
+Restore connection after the October 12 game update.
+
+- Add a separately verified client catalog for the shifted scene state, hotbar page and ground-item list fields. Keep the original and September 30 catalogs, independent root agreement, mandatory member checks, loaded-image signatures and live character/table validation. Unknown or conflicting layouts still leave controls disabled.
+- Verify the shifted optional active-effect scene selector while retaining its unchanged timer array. Party recognition continues to require its own matching disk and loaded-code evidence. No client hash bypass or relaxed signature wildcarding is used.
+- Extend synthetic catalog checks to the new layout, including incomplete hotbar/ground/slot evidence and conflicting scene roots.
+
+Existing settings, routes, recovery profiles, loot history and game textures are preserved. Connection verification reads game state only and sends no game input.
+
 ## Release1.144
 
 Reduce repeated game reads, diagnostic disk stalls and optional presentation work while retaining the existing control and recovery protections.

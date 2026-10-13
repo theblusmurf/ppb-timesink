@@ -12,6 +12,7 @@ public static partial class ProfileDiscovery
     sealed record Manifest(int Version, Rule[] Roots, Rule[] Checks);
     static readonly Lazy<Manifest> signatures = new(() => LoadManifest("BuildSignatures.json"));
     static readonly Lazy<Manifest> september30Signatures = new(() => LoadManifest("BuildSignatures-20260930.json"));
+    static readonly Lazy<Manifest> october12Signatures = new(() => LoadManifest("BuildSignatures-20261012.json"));
     static Manifest LoadManifest(string name)
     {
         using var stream=typeof(ProfileDiscovery).Assembly.GetManifestResourceStream("PoteHunter."+name)
@@ -49,7 +50,8 @@ public static partial class ProfileDiscovery
         var matches=new List<ProfileDetection>();
         var failures=new List<string>();
         foreach(var catalog in new[]{(signatures.Value,SceneLayout.Legacy,"original"),
-            (september30Signatures.Value,SceneLayout.September30,"September 30")})
+            (september30Signatures.Value,SceneLayout.September30,"September 30"),
+            (october12Signatures.Value,SceneLayout.October12,"October 12")})
         {
             try { matches.Add(Discover(bytes,catalog.Item1,catalog.Item2)); }
             catch(InvalidOperationException ex) { failures.Add(catalog.Item3+": "+ex.Message); }
@@ -117,9 +119,9 @@ public static partial class ProfileDiscovery
         var image=new PeImage(File.ReadAllBytes(path));
         var rules=new[]{
             new Rule("Effect scene root","A1 ?? ?? ?? ?? 33 C9 8B 3D ?? ?? ?? ?? 89 85 C0 FC FF FF 89 8D BC FC FF FF 8B 80 "+
-                (layout==SceneLayout.September30?"74":"4C")+" 36 00 00",1),
+                (layout==SceneLayout.October12?"D4":layout==SceneLayout.September30?"74":"4C")+" 36 00 00",1),
             new Rule("Effect timer array","8B 85 C0 FC FF FF 8D 93 00 04 00 00 05 "+
-                (layout==SceneLayout.September30?"AC":"84")+" 06 00 00 89 95 AC FC FF FF BE 01 00 00 00 89 85 B8 FC FF FF"),
+                (layout==SceneLayout.September30 || layout==SceneLayout.October12?"AC":"84")+" 06 00 00 89 95 AC FC FF FF BE 01 00 00 00 89 85 B8 FC FF FF"),
             new Rule("Effect magnitude","0F B7 98 64 FF FF FF 66 85 DB 0F 84 ?? ?? ?? ?? 83 3A 00"),
             new Rule("Effect seconds","8B 85 B8 FC FF FF 8B D3 33 DB 0F B7 00 83 F8 01 8D 48 FF 8D 46 FF 0F 43 D9"),
             new Rule("Effect stride","46 83 C2 04 83 C0 02 89 95 AC FC FF FF 89 85 B8 FC FF FF 83 FE 4E"),
@@ -336,7 +338,8 @@ public static partial class ProfileDiscovery
     static void CheckLayoutCatalogs()
     {
         foreach(var catalog in new[]{(signatures.Value,SceneLayout.Legacy),
-            (september30Signatures.Value,SceneLayout.September30)})
+            (september30Signatures.Value,SceneLayout.September30),
+            (october12Signatures.Value,SceneLayout.October12)})
         {
             byte[] fixture=new byte[0xb000];
             void U16(int at,ushort value)=>BitConverter.TryWriteBytes(fixture.AsSpan(at,2),value);
@@ -387,11 +390,21 @@ public static partial class ProfileDiscovery
             var scene=catalog.Item1.Roots.First(r=>r.Name=="Scene");
             BitConverter.TryWriteBytes(disagree.AsSpan(locations[scene.Pattern]+scene.CaptureOffset,4),0x400000+roots["Scene"]+0x10);
             Reject(disagree);
-            if(catalog.Item2==SceneLayout.September30)
+            foreach(var rule in catalog.Item1.Checks)
             {
-                foreach(var rule in catalog.Item1.Checks.Where(r=>r.Name.StartsWith("Slot ") || r.Name.StartsWith("Ground ") || r.Name=="Selected hotbar slot"))
+                byte[] corrupt=(byte[])fixture.Clone();corrupt[locations[rule.Pattern]]=0xcc;Reject(corrupt);
+            }
+            if(catalog.Item2==SceneLayout.October12)
+            {
+                // Old member offsets mixed into otherwise complete new roots
+                // must not select either layout or authorize memory reads.
+                foreach(var member in new[]{("Hotbar slots and page",SceneLayout.September30.HotbarPage),
+                    ("Ground list sentinel",SceneLayout.September30.GroundItems)})
                 {
-                    byte[] corrupt=(byte[])fixture.Clone();corrupt[locations[rule.Pattern]]=0xcc;Reject(corrupt);
+                    byte[] mixed=(byte[])fixture.Clone();
+                    var rule=catalog.Item1.Checks.Single(r=>r.Name==member.Item1);
+                    BitConverter.TryWriteBytes(mixed.AsSpan(locations[rule.Pattern]+2,4),member.Item2);
+                    Reject(mixed);
                 }
             }
         }
