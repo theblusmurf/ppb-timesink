@@ -8,11 +8,6 @@ namespace PoteHunter;
 // it never changes installed code, creates executable memory, or loads a driver.
 internal static class WindowsClientInput
 {
-    // Both reviewed Microsoft-signed Windows builds retain the exact checked input entry.
-    static readonly string[] DllHashes = [
-        "9cd636e8a1b300e2f4b16f339d650eda71fa02b92b100e4b2f89ce7c04811767",
-        "aa252b1dbce963eaa7094132c611c1e05a0a373dc9d5e9a04016c10c361d4606"
-    ];
     static readonly byte[] ExpectedEntry = Convert.FromHexString("4C8BD1B87A100000F604250803FE7F0175030F05C3CD2EC3");
     static readonly Lazy<VerifiedExport> export = new(() => new VerifiedExport());
     static World? target;
@@ -92,9 +87,7 @@ internal static class WindowsClientInput
                 throw new InvalidOperationException("Input compatibility requires the reviewed 64-bit input layout.");
             string path = Path.Combine(Environment.SystemDirectory, "win32u.dll");
             byte[] image = File.ReadAllBytes(path);
-            string hash = Convert.ToHexStringLower(SHA256.HashData(image));
-            if (!DllHashes.Contains(hash, StringComparer.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Windows changed; input compatibility needs a new check.");
+            PoteMemoryProbe.WindowsSystemDllTrust.Verify(path,image,"win32u.dll");
             module = NativeLibrary.Load(path);
             try
             {

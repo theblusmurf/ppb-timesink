@@ -46,6 +46,21 @@ internal static class CompatibilityChecks
 
     internal static void Run()
     {
+        // Exercise the signature policy on the actual local system files in
+        // every packaged self-test. This does not open the game or send input.
+        foreach (string name in new[]{"ntdll.dll","win32u.dll"})
+        {
+            string path=Path.Combine(Environment.SystemDirectory,name);
+            byte[] image=File.ReadAllBytes(path);
+            WindowsSystemDllTrust.Verify(path,image,name);
+            byte[] changed=(byte[])image.Clone();changed[0]^=1;
+            bool refused=false;
+            try{WindowsSystemDllTrust.Verify(path,changed,name);}catch(InvalidOperationException){refused=true;}
+            if(!refused)throw new Exception("A changed Windows DLL image passed native compatibility validation.");
+            refused=false;
+            try{WindowsSystemDllTrust.Verify(path,image,"not-"+name);}catch(InvalidOperationException){refused=true;}
+            if(!refused)throw new Exception("Native compatibility accepted a different DLL path.");
+        }
         if(!Entry.NativeInputForGui([]) || !Entry.NativeInputForGui(["--native-read-compat","--native-input-compat"]) ||
             !Entry.NativeInputForGui(["--native-input-compat","--native-read-compat"]) ||
             Entry.NativeInputForGui(["--native-read-compat"]) || Entry.NativeInputForGui(["--native-input-compat"]) ||
@@ -75,7 +90,7 @@ internal static class CompatibilityChecks
         if(!rejected || ClientCompatibility.SupportsRead(malformedHash))throw new Exception("Failed discovery granted a compatibility-read approval.");
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"client-compatibility-checks.json"),System.Text.Json.JsonSerializer.Serialize(new
         {
-            Passed=true,HardwareInputEmitted=false,Checks=new[]{"session-discovered patches accepted","previous read approvals retained","case-insensitive hashes","undiscovered files rejected","failed discovery grants no approval","read opt-in required","completed live validation required","fresh/disposed world not verified"}
+            Passed=true,HardwareInputEmitted=false,Checks=new[]{"signed system DLLs accepted","changed DLL image rejected","alternate DLL path rejected","session-discovered patches accepted","previous read approvals retained","case-insensitive hashes","undiscovered files rejected","failed discovery grants no approval","read opt-in required","completed live validation required","fresh/disposed world not verified"}
         }));
     }
 }

@@ -15,6 +15,7 @@
   </PropertyGroup>
   <ItemGroup><Compile Include="../PoteMemoryProbe/Program.cs" Link="Diagnostic.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../PoteMemoryProbe/WindowsClientRead.cs" Link="WindowsClientRead.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../PoteMemoryProbe/WindowsSystemDllTrust.cs" Link="WindowsSystemDllTrust.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../PoteMemoryProbe/ClientCompatibility.cs" Link="ClientCompatibility.cs" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="BuildSignatures.json" LogicalName="PoteHunter.BuildSignatures.json" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="BuildSignatures-20260930.json" LogicalName="PoteHunter.BuildSignatures-20260930.json" /></ItemGroup>

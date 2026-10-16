@@ -1,3 +1,13 @@
+## Release1.147
+
+Restore connection after another Windows servicing update changed the system DLL hashes while the game client and required native entry points stayed compatible.
+
+- Verify that `ntdll.dll` and `win32u.dll` come from the Windows system directory, have a valid Microsoft Windows Authenticode signature, and remain byte-identical throughout verification. A changed, unsigned or substituted DLL fails closed without needing a new whole-file hash for each signed Windows update.
+- Keep the exact native-read instruction layout and native-input export-byte checks, the verified game executable and live client-layout checks, and the existing focus and input guards. No game code or installed DLL is modified.
+- Add offline signed-file, changed-image and wrong-path checks. A read-only live connection check on the updated Windows build sampled character health and position and confirmed input-backend readiness without sending input.
+
+Existing settings, routes, profiles, loot history and game textures are preserved.
+
 ## Release1.146
 
 Restore connection on the newer Windows 11 system DLL build after Release1.145 recognized the updated game client.
