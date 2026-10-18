@@ -3,6 +3,7 @@ namespace PoteHunter;
 public sealed partial class HunterForm
 {
     Action? refreshSessionDesk;
+    Action? refreshTacticalVitals;
 
     // Overview mirrors the existing, guarded Farming controls; it owns no settings.
     void ApplySessionDesk(TabPage page, TableLayoutPanel body, TableLayoutPanel columns,
@@ -101,45 +102,62 @@ public sealed partial class HunterForm
         var priority = Mirror(orbitalRailBody!.Controls.Find("overviewGamekeeper", true).Single());
         priority.Margin = new Padding(0, 22, 0, 0); quick.Controls.Add(priority, 2, 0); CompactAdd(body, quick);
 
-        var telemetry = new TableLayoutPanel { Name = "orbitalTelemetry", Dock = DockStyle.Top, Height = 110, ColumnCount = 3, RowCount = 1, Margin = new Padding(0, 0, 0, 8) };
-        foreach(int weight in new[] { 46, 29, 25 }) telemetry.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, weight));
-        telemetry.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        Label Value(string name) => new() { Name = name, Dock = DockStyle.Fill, ForeColor = UiText, Font = new Font("Segoe UI Semibold", 23), AutoEllipsis = true, Margin = Padding.Empty };
-        Label Note(string name) => new() { Name = name, Dock = DockStyle.Fill, ForeColor = UiMuted, AutoEllipsis = true, Margin = Padding.Empty };
-        var gold = totals["Gold"]; gold.Dock = DockStyle.Fill; gold.Padding = Padding.Empty;
-        gold.TextAlign = ContentAlignment.MiddleLeft; gold.Font = new Font("Segoe UI Semibold", 23);
-        var rate = Note("orbitalGoldRate"); rate.ForeColor = UiAccent;
-        var elapsed = Value("orbitalActiveTime"); var kills = Value("orbitalTrackedKills");
-        foreach(var item in new[] { ("NET GOLD", gold, rate), ("ACTIVE TIME", elapsed, Note("deskTimeNote")), ("TRACKED KILLS", kills, Note("deskKillsNote")) }.Select((item, i) => (item, i)))
-        {
-            var card = CompactCard(item.item.Item1); card.Dock = DockStyle.Fill; card.AutoSize = false;
-            card.Margin = new Padding(0, 0, item.i == 2 ? 0 : 10, 0); card.Padding = new Padding(12, 9, 12, 7);
-            CompactAdd(card, item.item.Item2); CompactAdd(card, item.item.Item3);
-            // Empty startup readings must not collapse AutoSize rows to zero.
-            card.RowStyles.Clear(); card.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            card.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); card.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-            telemetry.Controls.Add(card, item.i, 0);
-        }
-        telemetry.Controls.Find("deskTimeNote", true).Single().Text = "Active farming time";
-        telemetry.Controls.Find("deskKillsNote", true).Single().Text = "Detected this session";
+        var elapsed = new Label { Name="orbitalActiveTime", AutoSize=true, ForeColor=UiText };
+        var kills = new Label { Name="orbitalTrackedKills", AutoSize=true, ForeColor=UiText };
+        var rate = new Label { Name="orbitalGoldRate", AutoSize=true, ForeColor=UiAccent };
         refreshOrbitalTelemetry = snapshot =>
         {
-            rate.Text = snapshot.RateText("Gold") + " / active hour";
-            var time = snapshot.RateElapsed; elapsed.Text = $"{(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}";
-            kills.Text = snapshot.Sources.Sum(s => s.Kills).ToString("N0");
+            rate.Text = "Gold / active hour: " + snapshot.RateText("Gold");
+            var time = snapshot.RateElapsed; elapsed.Text = $"Active session: {(int)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}";
+            kills.Text = "Tracked kills: " + snapshot.Sources.Sum(s => s.Kills).ToString("N0");
         };
-        CompactAdd(body, telemetry);
 
         var routeNotes = new[] { "overviewRouteTarget", "overviewMapLegend", "overviewAnchor" }
             .Select(name => anchor.Controls.Find(name, true).OfType<Label>().Single()).ToArray();
         columns.Controls.Clear(); columns.RowStyles.Clear(); columns.ColumnStyles.Clear();
         columns.AutoSize = true; columns.AutoSizeMode = AutoSizeMode.GrowAndShrink; columns.Dock = DockStyle.Top; columns.RowCount = 1;
         columns.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        left.Controls.Clear(); left.RowStyles.Clear(); left.RowCount = 0; left.AutoSize = true; left.Dock = DockStyle.Top; left.Margin = new Padding(0, 0, 7, 10);
-        right.Controls.Clear(); right.RowStyles.Clear(); right.RowCount = 0; right.AutoSize = true; right.Dock = DockStyle.Top; right.Margin = new Padding(7, 0, 0, 10);
+        left.Controls.Clear(); left.RowStyles.Clear(); left.RowCount = 0; left.AutoSize = true; left.Dock = DockStyle.Top; left.Margin = new Padding(5, 0, 0, 10);
+        right.Controls.Clear(); right.RowStyles.Clear(); right.RowCount = 0; right.AutoSize = true; right.Dock = DockStyle.Top; right.Margin = new Padding(5, 0, 5, 10);
+        var statusColumn = CompactTable(); statusColumn.Name="tacticalStatusColumn";
+        statusColumn.Margin=new Padding(0,0,5,10);
+        var vitals=CompactCard("CHARACTER STATUS"); vitals.Name="tacticalVitals";
+        var health=new TacticalVitalMeter("HP",Color.FromArgb(218,54,51));
+        var mana=new TacticalVitalMeter("MP",Color.FromArgb(56,139,253));
+        var live=new Label{Name="tacticalLiveState",AutoSize=true,ForeColor=UiMuted,Margin=new Padding(0,3,0,4)};
+        CompactAdd(vitals,health);CompactAdd(vitals,mana);CompactAdd(vitals,live);
+        CompactAdd(statusColumn,vitals);
+        var protection=CompactCard("PROTECTION & RECOVERY");protection.Name="tacticalProtection";
+        Label StateRow(string name){var label=new Label{Name=name,AutoSize=true,ForeColor=UiText,Margin=new Padding(0,3,0,7)};CompactAdd(protection,label);return label;}
+        var selfHealState=StateRow("tacticalSelfHeal");var reviveState=StateRow("tacticalRevive");
+        var repairState=StateRow("tacticalRepair");var resumeState=StateRow("tacticalResume");
+        CompactAdd(statusColumn,protection);
+        var signal=CompactCard("SESSION SIGNAL");signal.Name="tacticalSessionSignal";
+        CompactAdd(signal,elapsed);CompactAdd(signal,kills);CompactAdd(signal,rate);
+        CompactAdd(statusColumn,signal);
+        refreshTacticalVitals=()=>
+        {
+            string reading=connected?position.Text:"";
+            health.SetReading(reading);mana.SetReading(reading);
+            live.Text=working?"Hunting · input guarded":busy?"Operation in progress":connected?"Game connected":"Game offline · readings unavailable";
+        };
+        synchronize.Add(()=>
+        {
+            selfHealState.Text="Self-heal rule: "+(healthSkillCondition.Checked?"ON":"OFF");
+            reviveState.Text="Auto revive + return: "+(autoRevive.Checked?"ON":"OFF");
+            repairState.Text="Repair after revival: "+(autoRepair.Checked?"ON":"OFF");
+            resumeState.Text="Resume on arrival: "+(farmOnArrival.Checked?"ON":"OFF");
+            refreshTacticalVitals?.Invoke();
+        });
         session.Controls.Clear(); session.RowStyles.Clear(); session.RowCount = 0; session.AutoSize = true; session.Dock = DockStyle.Top; session.Margin = Padding.Empty;
         session.Padding = new Padding(12, 8, 12, 8);
-        CompactAdd(session, new Label { Text = "SESSION RESOURCES", AutoSize = true, ForeColor = UiMuted, Font = new Font("Segoe UI Semibold", 9), Margin = new Padding(0, 0, 0, 12) });
+        CompactAdd(session, new Label { Text = "LOOT & RESOURCES", AutoSize = true, ForeColor = UiAccent, Font = new Font("Segoe UI Semibold", 10), Margin = new Padding(0, 0, 0, 12) });
+        var goldRow=new TableLayoutPanel { Name="deskResourceRowGold", Dock=DockStyle.Top, Height=40,ColumnCount=2,RowCount=1,BackColor=UiRaised,Margin=new Padding(0,0,0,5),Padding=new Padding(12,0,12,0) };
+        goldRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,60));goldRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,40));
+        goldRow.RowStyles.Add(new RowStyle(SizeType.Percent,100));
+        goldRow.Controls.Add(new Label{Text="Gold (net)",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleLeft,ForeColor=UiText,Margin=Padding.Empty},0,0);
+        var gold=totals["Gold"];gold.Dock=DockStyle.Fill;gold.Margin=Padding.Empty;gold.Padding=Padding.Empty;gold.TextAlign=ContentAlignment.MiddleRight;
+        gold.Font=new Font("Segoe UI Semibold",12);goldRow.Controls.Add(gold,1,0);CompactAdd(session,goldRow);
         foreach(string name in new[] { "Silvin", "Mithril", "Iternium", "Fehu", "Gems" })
         {
             var row = new TableLayoutPanel { Name = "deskResourceRow" + name, Dock = DockStyle.Top, Height = 38, ColumnCount = 2, RowCount = 1, BackColor = UiRaised, Margin = new Padding(0, 0, 0, 5), Padding = new Padding(40, 0, 12, 0) };
@@ -154,7 +172,15 @@ public sealed partial class HunterForm
         foreach(var hidden in ledgerActions.Controls.OfType<Label>().ToArray()) ledgerActions.Controls.Remove(hidden);
         CompactAdd(session, ledgerActions); CompactAdd(left, session);
 
-        var route = CompactCard("ROUTE SNAPSHOT"); route.Name = "deskRouteSnapshot"; route.Margin = Padding.Empty;
+        var targeting=CompactCard("TARGETING & BEHAVIOR");targeting.Name="tacticalTargeting";
+        var shortcuts = (TableLayoutPanel)Mirror(presets); shortcuts.Name = "deskTargetShortcuts"; shortcuts.AutoSize = false; shortcuts.Height = 54;
+        shortcuts.RowStyles.Clear(); shortcuts.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); CompactAdd(targeting, shortcuts);
+        var targetSummary=new Label{Name="tacticalTargetSummary",AutoSize=true,ForeColor=UiMuted,Margin=new Padding(0,4,0,2)};
+        CompactAdd(targeting,targetSummary);
+        synchronize.Add(()=>targetSummary.Text="Gamekeeper "+(prioritizeGamekeeper.Checked?"priority ON":"priority OFF")+" · "+compactMode.Text+" · Range "+melee.Value.ToString("0.#"));
+        CompactAdd(right,targeting);
+
+        var route = CompactCard("ANCHOR ROUTE"); route.Name = "deskRouteSnapshot"; route.Margin = Padding.Empty;
         route.Padding = new Padding(12, 8, 12, 8);
         route.Controls.OfType<Label>().Single().Font = new Font("Segoe UI Semibold", 9);
         scanner.CompactSnapshot = true; scanner.Dock = DockStyle.Top; scanner.Height = 145; scanner.Margin = new Padding(0, 0, 0, 5); CompactAdd(route, scanner);
@@ -167,9 +193,17 @@ public sealed partial class HunterForm
             route.RowStyles[^1].SizeType = SizeType.Absolute; route.RowStyles[^1].Height = 22;
         }
         CompactAdd(route, Mirror(mapOptions));
-        var shortcuts = (TableLayoutPanel)Mirror(presets); shortcuts.Name = "deskTargetShortcuts"; shortcuts.AutoSize = false; shortcuts.Height = 54;
-        shortcuts.RowStyles.Clear(); shortcuts.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); CompactAdd(route, shortcuts);
-        CompactAdd(right, route); CompactAdd(body, columns);
+        CompactAdd(right, route);
+        var huntControls=CompactCard("HUNT CONTROLS");huntControls.Name="tacticalHuntControls";
+        var huntStatus=new Label{Name="tacticalHuntStatus",AutoSize=true,ForeColor=UiText,Margin=new Padding(0,2,0,6)};
+        var lootStatus=new Label{Name="tacticalLootStatus",AutoSize=true,ForeColor=UiText,Margin=new Padding(0,2,0,6)};
+        CompactAdd(huntControls,huntStatus);CompactAdd(huntControls,lootStatus);CompactAdd(right,huntControls);
+        synchronize.Add(()=>
+        {
+            huntStatus.Text="Attack skills: "+(autoSkills.Checked?"automatic":"configured keys");
+            lootStatus.Text="Nearby loot: "+(nearbyLootPickup.Checked?"collect and return":"pickup off");
+        });
+        CompactAdd(body, columns);
 
         var toolbar = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 2, 0, 2) };
         toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -196,13 +230,22 @@ public sealed partial class HunterForm
         {
             int width = Math.Max(1, page.ClientSize.Width - SystemInformation.VerticalScrollBarWidth);
             body.MinimumSize = new Size(width, 0); body.MaximumSize = new Size(width, 0); body.Width = width;
-            bool stack = width < 800 * DeviceDpi / 96;
-            int foldColumns = width >= 1140 * DeviceDpi / 96 ? 3 : stack ? 1 : 2;
-            if(previousColumns == foldColumns) return; previousColumns = foldColumns;
-            columns.SuspendLayout(); columns.Controls.Clear(); columns.ColumnStyles.Clear(); columns.RowStyles.Clear(); columns.ColumnCount = stack ? 1 : 2; columns.RowCount = stack ? 2 : 1;
-            columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, stack ? 100 : 52)); if(!stack) columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
-            columns.RowStyles.Add(new RowStyle(SizeType.AutoSize)); if(stack) columns.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            columns.Controls.Add(left, 0, 0); columns.Controls.Add(right, stack ? 0 : 1, stack ? 1 : 0); columns.ResumeLayout(true);
+            int mainColumns=width>=1060*DeviceDpi/96?3:width>=740*DeviceDpi/96?2:1;
+            int foldColumns = width >= 1140 * DeviceDpi / 96 ? 3 : mainColumns==1 ? 1 : 2;
+            int configuration=mainColumns*10+foldColumns;
+            if(previousColumns == configuration) return; previousColumns = configuration;
+            columns.SuspendLayout(); columns.Controls.Clear(); columns.ColumnStyles.Clear(); columns.RowStyles.Clear(); columns.ColumnCount=mainColumns;
+            columns.RowCount=mainColumns==3?1:mainColumns==2?2:3;
+            if(mainColumns==3){foreach(int weight in new[]{28,39,33})columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,weight));}
+            else if(mainColumns==2){columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,46));columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,54));}
+            else columns.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));
+            for(int i=0;i<columns.RowCount;i++)columns.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            columns.SetColumnSpan(left,1);
+            columns.Controls.Add(statusColumn,0,0);
+            columns.Controls.Add(right,mainColumns==1?0:1,mainColumns==1?1:0);
+            columns.Controls.Add(left,mainColumns==3?2:0,mainColumns==3?0:mainColumns==2?1:2);
+            columns.SetColumnSpan(left,mainColumns==2?2:1);
+            columns.ResumeLayout(true);
             groups.SuspendLayout(); groups.Controls.Clear(); groups.ColumnStyles.Clear(); groups.RowStyles.Clear(); groups.ColumnCount = foldColumns; groups.RowCount = 1;
             foreach(var column in groupColumns) { column.Controls.Clear(); column.RowStyles.Clear(); column.RowCount = 0; }
             for(int i = 0; i < foldColumns; i++) { groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / foldColumns)); groups.Controls.Add(groupColumns[i], i, 0); }

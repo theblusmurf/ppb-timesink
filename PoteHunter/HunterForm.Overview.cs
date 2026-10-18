@@ -72,7 +72,7 @@ public sealed partial class HunterForm
                 if(Find<Label>("overviewResource"+name).Text != lootTracker.Snapshot().AmountText(name)) throw new Exception("Overview resource differs from tracker: "+name);
             if(Find<Label>("overviewResourceGold").Text!="—")throw new Exception("Unavailable Overview wallet was shown as earnings");
             PerformLayout(); Application.DoEvents();
-            if(Text!="PlayPoteBot · Orbital Ops")throw new Exception("PlayPoteBot title branding was lost.");
+            if(Text!="PlayPoteBot · Tactical Command Console")throw new Exception("PlayPoteBot title branding was lost.");
             Find<CollapsibleSection>("overviewFoldRecovery").Expanded = true;
             PerformLayout(); Application.DoEvents();
             foreach(string name in new[]{"overviewGamekeeper","overviewRevive","overviewRepair"})

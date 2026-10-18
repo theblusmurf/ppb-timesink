@@ -139,7 +139,7 @@ jobs:
             '## Included features'
             'Download the installer or portable ZIP with its SHA256 sidecar. For the ZIP, extract the complete PoteHunter folder and run PoteHunter.exe.'
             ''
-            'Includes the PlayPoteBot Orbital Ops interface, saved routes, recovery setup, loot tracking, public updater, combined group healer mode and HP/MP recovery. See the version patch notes for changes and validation limits.'
+          'Includes the PlayPoteBot Tactical Command Console, saved routes, recovery setup, loot tracking, public updater, combined group healer mode and HP/MP recovery. See the version patch notes for changes and validation limits.'
           ) | Set-Content -LiteralPath $notesPath -Encoding utf8
 
           $arguments = @(

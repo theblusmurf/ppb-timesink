@@ -50,6 +50,51 @@ internal sealed class FieldVitalMeter : Control
     }
 }
 
+/// <summary>A larger, segmented display of the existing position reading.</summary>
+internal sealed class TacticalVitalMeter : Control
+{
+    readonly string resource;
+    readonly Color fill;
+    string reading;
+    double fraction;
+
+    internal TacticalVitalMeter(string resource, Color fill)
+    {
+        this.resource=resource;this.fill=fill;reading=resource+" unknown";
+        Name="tactical"+resource;Height=56;Dock=DockStyle.Top;Margin=new Padding(0,0,0,8);
+        AccessibleName=resource+" status";AccessibleRole=AccessibleRole.StaticText;
+        Font=new Font("Consolas",10f);
+        SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer,true);
+    }
+
+    internal string ReadingText=>reading;
+    internal void SetReading(string text)
+    {
+        var next=FieldVitalMeter.Read(resource,text);
+        if(reading==next.Text&&fraction==next.Fraction)return;
+        reading=next.Text;fraction=next.Fraction;AccessibleDescription=reading;Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g=e.Graphics;
+        TextRenderer.DrawText(g,resource=="HP"?"HEALTH":"MANA",Font,new Rectangle(0,0,Width/2,25),ImperialTheme.Muted,
+            TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.SingleLine);
+        TextRenderer.DrawText(g,reading,Font,new Rectangle(Width/2,0,Width-Width/2,25),ImperialTheme.Text,
+            TextFormatFlags.Right|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis|TextFormatFlags.SingleLine);
+        int segments=14,gap=2,available=Math.Max(0,Width-gap*(segments-1));
+        using var empty=new SolidBrush(ImperialTheme.Raised);
+        using var active=new SolidBrush(fill);
+        for(int i=0;i<segments;i++)
+        {
+            int x=i*(available/segments+gap);
+            int width=i==segments-1?Math.Max(0,Width-x):Math.Max(0,available/segments);
+            g.FillRectangle((i+1d)/segments<=fraction+0.001?active:empty,new Rectangle(x,33,width,12));
+        }
+    }
+}
+
 public sealed partial class HunterForm
 {
     void CheckFieldConsoleUi(TabControl tabs)
@@ -73,17 +118,20 @@ public sealed partial class HunterForm
             menu.ScrollControlIntoView(group);Application.DoEvents();
             var page=tabs.SelectedTab;bool expanded=group.Expanded;
             group.Header.AccessibilityObject.DoDefaultAction();Application.DoEvents();
+            var expectedState=expanded?AccessibleStates.Collapsed:AccessibleStates.Expanded;
             if(group.Expanded==expanded || group.Items.Visible==expanded || tabs.SelectedTab!=page ||
-                (group.Header.AccessibilityObject.State&AccessibleStates.Collapsed)==0)
+                (group.Header.AccessibilityObject.State&expectedState)==0)
                 throw new Exception("Collapsing a menu group changed the page or lost accessibility.");
-            if(group.Header.Width<140 || group.Width!=menu.Controls.OfType<SidebarButton>().Single().Width)
+            if(group.Header.Width<140 || group.Width!=menu.Controls.OfType<SidebarButton>().First().Width)
                 throw new Exception("Collapsed menu heading shrank or clips its label: "+group.Name);
             group.Header.PerformClick();Application.DoEvents();
-            if(!group.Expanded || (group.Header.AccessibilityObject.State&AccessibleStates.Expanded)==0)
+            expectedState=expanded?AccessibleStates.Expanded:AccessibleStates.Collapsed;
+            if(group.Expanded!=expanded || (group.Header.AccessibilityObject.State&expectedState)==0)
                 throw new Exception("Menu group cannot be reopened.");
         }
         foreach(var button in menu.Controls.OfType<SidebarButton>().Concat(menu.Controls.OfType<SidebarGroup>().SelectMany(g=>g.Items.Controls.OfType<SidebarButton>())))
         {
+            if(button.Parent is FlowLayoutPanel owner && owner.Parent is SidebarGroup group && !group.Expanded)group.Expanded=true;
             menu.ScrollControlIntoView(button);Application.DoEvents();
             var rect=menu.RectangleToClient(button.RectangleToScreen(button.ClientRectangle));
             if(!button.Visible || !menu.ClientRectangle.Contains(rect) || button.Width<140)
@@ -116,6 +164,13 @@ public sealed partial class HunterForm
             if(FieldVitalMeter.Read("HP",input).Fraction!=expected)throw new Exception("Invalid vital bar reading.");
         if(FieldVitalMeter.Read("MP","HP unknown · MP 25/50")!=("MP 25/50",.5d) ||
             FieldVitalMeter.Read("HP","").Text!="HP unknown")throw new Exception("Unknown/disconnected vitals were shown as known.");
+        using(var tactical=new TacticalVitalMeter("HP",Color.FromArgb(218,54,51)))
+        {
+            tactical.SetReading("");
+            if(tactical.ReadingText!="HP unknown")throw new Exception("Tactical status invented disconnected HP.");
+            tactical.SetReading("HP 50/100 · MP 25/50");
+            if(tactical.ReadingText!="HP 50/100")throw new Exception("Tactical status lost the existing HP reading.");
+        }
         CheckFieldOverview(tabs);
         CheckOrbitalUi(tabs);
         CheckSessionDesk(tabs);

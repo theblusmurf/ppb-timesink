@@ -1,3 +1,14 @@
+## Release1.148
+
+Replace the Orbital Ops dashboard with the selected Tactical Command Console layout.
+
+- Put Connect, Start and Stop in the command header. Add direct Overview, Hunt, Routes, Recovery and Settings navigation; keep detailed feature groups one click away.
+- Show the existing HP/MP readings as segmented status meters and organize the overview into status/recovery, targeting/route, and loot/resource columns. Narrow windows stack these panels without hiding controls.
+- Keep every setting, route, target shortcut, reset action and input guard bound to its existing implementation. Unknown or disconnected vitals remain unknown; the dashboard performs no extra game reads or input.
+- Validate the native layout at normal and minimum window sizes, guarded settings, navigation access, and disconnected renderings. Live gameplay and connected visual placement remain unverified.
+
+Existing settings, routes, profiles and session history are preserved.
+
 ## Release1.147
 
 Restore connection after another Windows servicing update changed the system DLL hashes while the game client and required native entry points stayed compatible.

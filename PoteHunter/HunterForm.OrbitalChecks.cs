@@ -9,7 +9,8 @@ public sealed partial class HunterForm
         var folds=orbitalRailBody!.Controls.OfType<CollapsibleSection>().ToArray();
         var expanded=folds.Select(f=>f.Expanded).ToArray();
         var cargoLayouts=new List<object>();
-        T Find<T>(string name) where T:Control => Controls.Find(name,true).OfType<T>().Single();
+        T Find<T>(string name) where T:Control => Controls.Find(name,true).OfType<T>().SingleOrDefault()
+            ?? throw new Exception("Tactical command control is unavailable: "+name);
         void Layout(){PerformLayout();Application.DoEvents();}
         void CheckCargoReachable(TabPage page,string scenario)
         {
@@ -62,12 +63,20 @@ public sealed partial class HunterForm
                         throw new Exception("Left navigation overlaps or leaves the operation rail.");
                     if(section=="Overview")
                     {
-                        var telemetry=Find<TableLayoutPanel>("orbitalTelemetry");
+                        var telemetry=Find<TableLayoutPanel>("tacticalSessionSignal");
+                        foreach(string resource in new[]{"HP","MP"})
+                        {
+                            var meter=Find<TacticalVitalMeter>("tactical"+resource);
+                            if(meter.Height<50 || !meter.Parent!.ClientRectangle.Contains(meter.Bounds))
+                                throw new Exception("Tactical vital meter clips: "+resource);
+                        }
                         foreach(string name in new[]{"overviewResourceGold","orbitalActiveTime","orbitalTrackedKills"})
                         {
-                            var value=Find<Label>(name);var bounds=telemetry.RectangleToClient(value.RectangleToScreen(value.ClientRectangle));
-                            if(!value.Visible || value.Height < value.Font.Height || !value.Parent!.ClientRectangle.Contains(value.Bounds) || !telemetry.ClientRectangle.Contains(bounds))
-                                throw new Exception($"Session Desk metric clips: {name}; value={value.Bounds}; font={value.Font.Height}; card={value.Parent!.ClientRectangle}; rows={string.Join(',', ((TableLayoutPanel)value.Parent).RowStyles.Cast<RowStyle>().Select(s=>s.Height))}");
+                            var value=Find<Label>(name);
+                            if(!value.Visible || value.Height < value.Font.Height || !value.Parent!.ClientRectangle.Contains(value.Bounds))
+                                throw new Exception("Tactical metric clips: "+name);
+                            if(name!="overviewResourceGold" && !telemetry.ClientRectangle.Contains(telemetry.RectangleToClient(value.RectangleToScreen(value.ClientRectangle))))
+                                throw new Exception("Session signal metric leaves its card: "+name);
                         }
                         if(Find<OrbitalScanner>("overviewRouteMap").Height<140*DeviceDpi/96)
                             throw new Exception("The compact route snapshot lost its readable canvas.");
@@ -77,7 +86,7 @@ public sealed partial class HunterForm
             Size=new Size(1480,1000);Find<Button>("fieldNavOverview").PerformClick();
             foreach(var fold in folds)fold.Expanded=false;
             Find<Panel>("orbitalRailScroll").AutoScrollPosition=Point.Empty;refreshOverview?.Invoke();Layout();
-            if(Find<Label>("orbitalPageTitle").Text!="The Endless Pursuit")throw new Exception("The requested philosophical Overview headline was lost.");
+            if(Find<Label>("orbitalPageTitle").Text!="Command overview")throw new Exception("Tactical Overview heading was lost.");
             var scanner=Find<OrbitalScanner>("overviewRouteMap");
             foreach(string name in new[]{"overviewAnchor","overviewMapLegend","overviewRouteTarget"})
                 if(Find<Label>(name).Width<Find<TableLayoutPanel>("deskRouteSnapshot").ClientSize.Width-40)
@@ -93,7 +102,7 @@ public sealed partial class HunterForm
             railScroll.AutoScrollPosition=Point.Empty;Layout();
             if(scanner.PlayerKnown || scanner.RouteCount!=0 || !scanner.ReadingStatus.StartsWith("Connect"))
                 throw new Exception("The disconnected scanner invented live coordinates or routes.");
-            if(Find<Label>("overviewResourceGold").Text!="—" || Find<Label>("orbitalGoldRate").Text!="— / active hour")
+            if(Find<Label>("overviewResourceGold").Text!="—" || Find<Label>("orbitalGoldRate").Text!="Gold / active hour: —")
                 throw new Exception("Unknown wallet values were presented as known telemetry.");
             Find<Button>("fieldNavOverview").PerformClick();Layout();
             Capture("orbital-ops-overview.png");

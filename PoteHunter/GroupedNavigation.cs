@@ -75,7 +75,14 @@ public sealed partial class HunterForm
             b.Click+=(_,_)=>{selected=b;tabs.SelectedTab=page;anchor?.Invoke();Refresh();};
         }
         SidebarGroup Group(string key,string title){var group=new SidebarGroup(key,title);nav.Controls.Add(group);return group;}
+        nav.Controls.Add(new Label { Name="tacticalOperationsLabel", Text="OPERATIONS", Height=28,
+            TextAlign=ContentAlignment.BottomLeft, Padding=new Padding(10,0,0,3),
+            ForeColor=ImperialTheme.Muted, Font=new Font("Segoe UI Semibold",8f), Margin=Padding.Empty });
         Entry("Overview","Overview",overview,glyph:"Overview");
+        Entry("CommandHunt","Hunt",farming,glyph:"Hunt");
+        Entry("CommandRoutes","Routes",navigationPage,glyph:"Routes");
+        Entry("CommandRecovery","Recovery",setup,anchor:()=>setup.ScrollControlIntoView(autoRevive),glyph:"Recovery");
+        Entry("CommandSettings","Settings",features[0],glyph:"Settings");
         var hunting=Group("Hunting","Hunting");
         Entry("Farming","Farming",farming,hunting,glyph:"Hunt");Entry("Hunt","Hunt setup",setup,hunting,glyph:"Hunt");
         if(packs!=null)Entry("RangedPacks","Ranged packs",packs,hunting,glyph:"Hunt");
@@ -87,6 +94,7 @@ public sealed partial class HunterForm
         Entry("Recovery","Death recovery",setup,safety,()=>setup.ScrollControlIntoView(autoRevive),"Recovery");
         var preferences=Group("Settings","Settings");Entry("Settings","Options",features[0],preferences);Entry("Profiles","Profiles",features[1],preferences);
         Entry("Overlays","Overlays",overlays,preferences);Entry("Help","Help & logs",help,preferences);
+        foreach(var group in nav.Controls.OfType<SidebarGroup>())group.Expanded=false;
         void Fit()
         {
             int width=Math.Max(140,nav.ClientSize.Width-SystemInformation.VerticalScrollBarWidth-2);

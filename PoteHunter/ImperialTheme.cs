@@ -3,16 +3,16 @@ namespace PoteHunter;
 /// <summary>Shared presentation colors; no settings or game state.</summary>
 internal static class ImperialTheme
 {
-    internal static readonly Color Window = Color.FromArgb(16,22,25);
-    internal static readonly Color Surface = Color.FromArgb(22,30,34);
-    internal static readonly Color Raised = Color.FromArgb(32,43,49);
-    internal static readonly Color Border = Color.FromArgb(52,64,72);
-    internal static readonly Color Accent = Color.FromArgb(214,236,119);
-    internal static readonly Color AccentDark = Color.FromArgb(42,53,31);
+    internal static readonly Color Window = Color.FromArgb(13,17,23);
+    internal static readonly Color Surface = Color.FromArgb(22,27,34);
+    internal static readonly Color Raised = Color.FromArgb(29,39,50);
+    internal static readonly Color Border = Color.FromArgb(48,54,61);
+    internal static readonly Color Accent = Color.FromArgb(212,175,55);
+    internal static readonly Color AccentDark = Color.FromArgb(59,48,26);
     // Currency artwork retains its original gold; UI selection uses Accent.
-    internal static readonly Color Gold = Color.FromArgb(231,188,112);
-    internal static readonly Color Text = Color.FromArgb(239,242,239);
-    internal static readonly Color Muted = Color.FromArgb(164,177,184);
+    internal static readonly Color Gold = Color.FromArgb(240,197,83);
+    internal static readonly Color Text = Color.FromArgb(237,242,247);
+    internal static readonly Color Muted = Color.FromArgb(153,171,190);
     internal static readonly Color RouteBlue = Color.FromArgb(167,154,220);
     internal static readonly Color RouteRose = Color.FromArgb(230,151,142);
     internal static readonly Lazy<Bitmap> Logo = new(()=>Load("playpotebot-orbital"));

@@ -95,11 +95,14 @@ public sealed partial class HunterForm
             var tabs=Controls.Find("fieldConsoleShell",true).Single().Controls.Find("orbitalPageContent",true).Single().Controls.OfType<TabControl>().Single();
             var previousPage=tabs.SelectedTab;tabs.SelectedTab=tabs.TabPages.Cast<TabPage>().Single(p=>p.Text=="Overview");Layout();
             var columns = Find<TableLayoutPanel>("overviewColumns");
-            var left = Find<TableLayoutPanel>("overviewMapColumn");
-            var right = Find<TableLayoutPanel>("overviewHuntColumn");
-            bool stacked = columns.ColumnCount == 1;
-            if((stacked ? left.Bottom > right.Top : left.Right > right.Left) || right.Right > columns.ClientSize.Width || left.Width < 320 || right.Width < 200)
-                throw new Exception("Collapsible Overview columns overlap or overflow at minimum size.");
+            var statusColumn = Find<TableLayoutPanel>("tacticalStatusColumn");
+            var routeColumn = Find<TableLayoutPanel>("overviewHuntColumn");
+            var lootColumn = Find<TableLayoutPanel>("overviewMapColumn");
+            var dashboardColumns = new[] { statusColumn, routeColumn, lootColumn };
+            if(dashboardColumns.Any(c => c.Width < 250 || c.Left < 0 || c.Right > columns.ClientSize.Width) ||
+                dashboardColumns.SelectMany((c, i) => dashboardColumns.Skip(i + 1).Select(other => (c, other)))
+                    .Any(pair => pair.c.Bounds.IntersectsWith(pair.other.Bounds)))
+                throw new Exception("Tactical Overview columns overlap or overflow at minimum size.");
             tabs.SelectedTab=previousPage;Layout();
             foreach(var fold in folds)
                 if(fold.Header.Width < 270 || fold.Header.Height < 55 || !fold.ClientRectangle.Contains(fold.Header.Bounds))

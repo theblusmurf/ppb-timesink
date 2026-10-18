@@ -60,6 +60,12 @@ public sealed partial class HunterForm
             Find<Button>("deskCollapseAll").PerformClick(); Layout();
             if(folds.Any(f => f.Expanded || f.Content.Visible || string.IsNullOrWhiteSpace(f.Summary))) throw new Exception("Session Desk collapse all discarded a summary.");
             tabs.SelectedTab!.AutoScrollPosition = Point.Empty; Capture("session-desk-overview.png");
+            var menu = Find<FlowLayoutPanel>("fieldNavigation");
+            var groups = menu.Controls.OfType<SidebarGroup>().ToArray();
+            var groupStates = groups.Select(g => g.Expanded).ToArray();
+            for(int i=0;i<groups.Length;i++)groups[i].Expanded=false;
+            tabs.SelectedTab.AutoScrollPosition=Point.Empty;Capture("tactical-command-preview.png");
+            for(int i=0;i<groups.Length;i++)groups[i].Expanded=groupStates[i];
             folds[3].Expanded = true; tabs.SelectedTab.ScrollControlIntoView(folds[3]); Capture("session-desk-recovery-expanded.png");
             foreach(var size in new[] { new Size(1480, 1000), MinimumSize })
             {

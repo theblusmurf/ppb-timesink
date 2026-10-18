@@ -17,7 +17,7 @@ internal sealed class HeaderlessTabControl : TabControl
 public sealed partial class HunterForm
 {
     const int UiCornerRadius = 4;
-    // Orbital Ops: graphite instruments and a phosphor-lime operation accent.
+    // Tactical Command Console: graphite instruments and brass operation accents.
     static readonly Color UiWindow = ImperialTheme.Window;
     static readonly Color UiSidebar = ImperialTheme.Surface;
     static readonly Color UiSurface = ImperialTheme.Surface;
@@ -27,7 +27,7 @@ public sealed partial class HunterForm
     static readonly Color UiMuted = ImperialTheme.Muted;
     static readonly Color UiAccent = ImperialTheme.Accent;
     static readonly Color UiAccentDark = ImperialTheme.AccentDark;
-    static readonly Color UiDanger = Color.FromArgb(226, 146, 121);
+    static readonly Color UiDanger = Color.FromArgb(237, 111, 105);
 
     /// <summary>
     /// Rehomes the constructor-built controls in the compact application shell.
@@ -37,7 +37,7 @@ public sealed partial class HunterForm
     {
         SuspendLayout();
 
-        Text = "PlayPoteBot · Orbital Ops";
+        Text = "PlayPoteBot · Tactical Command Console";
         using(var stream=typeof(HunterForm).Assembly.GetManifestResourceStream("PoteHunter.PlayPoteBotIcon"))
             if(stream!=null)Icon=new Icon(stream);
         FormClosed+=(_,_)=>Icon?.Dispose();
@@ -106,7 +106,7 @@ public sealed partial class HunterForm
         masthead.RowStyles.Add(new RowStyle(SizeType.Percent,100));
         masthead.Controls.Add(new Label
         {
-            Name = "ironboundMasthead", Text = "PlayPoteBot   /   ORBITAL OPS", Dock = DockStyle.Fill,
+            Name = "ironboundMasthead", Text = "PlayPoteBot   /   TACTICAL COMMAND", Dock = DockStyle.Fill,
             Padding = new Padding(64, 0, 0, 0),
             Font = new Font("Segoe UI Semibold",16f), ForeColor = UiText,
             TextAlign = ContentAlignment.MiddleLeft, Margin = Padding.Empty
@@ -173,8 +173,8 @@ public sealed partial class HunterForm
         status.Dock=DockStyle.Fill;status.ForeColor=UiMuted;status.TextAlign=ContentAlignment.MiddleLeft;
         status.Font=new Font("Segoe UI",9f);status.AutoEllipsis=true;
         if(string.IsNullOrWhiteSpace(status.Text))status.Text="Connect the game to begin.";
-        var hpMeter=new FieldVitalMeter("HP",Color.FromArgb(179,109,91));
-        var mpMeter=new FieldVitalMeter("MP",Color.FromArgb(110,150,159));
+        var hpMeter=new FieldVitalMeter("HP",Color.FromArgb(218,54,51));
+        var mpMeter=new FieldVitalMeter("MP",Color.FromArgb(56,139,253));
         footer.Controls.Add(status,0,0);footer.Controls.Add(hpMeter,1,0);footer.Controls.Add(mpMeter,2,0);
         footer.Controls.Add(new Label{Text="F8 START / F9 STOP",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=UiMuted,Font=new Font("Consolas",8f)},3,0);
         var help=new Label{Text="?",Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=UiAccent,Cursor=Cursors.Help};
@@ -188,6 +188,7 @@ public sealed partial class HunterForm
             string details=connected?priorityHint.GetToolTip(position)??"":"Connect the game to read vitals.";
             priorityHint.SetToolTip(hpMeter,hpMeter.ReadingText+"\n"+details);
             priorityHint.SetToolTip(mpMeter,mpMeter.ReadingText+"\n"+details);
+            refreshTacticalVitals?.Invoke();
         }
         position.TextChanged+=(_,_)=>RefreshVitals();
         var subtitles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -217,8 +218,8 @@ public sealed partial class HunterForm
         }
         overlayPage.Controls.Add(overlayBody);tabs.TabPages.Add(overlayPage);
         var navigation=BuildGroupedNavigation(nav,tabs,overviewPage,farming,setupPage,packs,featurePages,indexPage,overlayPage,
-            (title)=>{pageTitle.Text=title=="Overview"?"The Endless Pursuit":title;
-                pageSubtitle.Text=title=="Overview"?"Session Desk · earnings, resources and route controls.":
+            (title)=>{pageTitle.Text=title=="Overview"?"Command overview":title;
+                pageSubtitle.Text=title=="Overview"?"Live status · targets · route · resources":
                     title=="Farming"?"Your targets, automatic actions and saved routes.":
                     title=="Death recovery"?"Revival, return routes and recovery settings.":
                     subtitles.GetValueOrDefault(tabs.SelectedTab?.Text??"","Your settings and live details.");pageSubtitle.AutoEllipsis=true;});
@@ -227,7 +228,7 @@ public sealed partial class HunterForm
 
         ThemeTree(shell);
         StyleActionButton(connect, UiRaised, UiText);
-        StyleActionButton(start, UiAccent, UiWindow);
+        StyleActionButton(start, Color.FromArgb(46,160,67), Color.White);
         start.Font=new Font("Segoe UI Semibold",9f);
         RoundControl(connectionBadge,UiCornerRadius);
         RoundControl(footer,UiCornerRadius);
