@@ -109,6 +109,17 @@ public sealed partial class HunterForm
         if(ImperialTheme.Logo.Value.Width<1)
             throw new Exception("Embedded application branding is unavailable.");
         var menu=(FlowLayoutPanel)nav;
+        var primary=menu.Controls.OfType<SidebarButton>().ToArray();
+        if(!primary.Select(button=>button.Text).SequenceEqual(new[]{"Overview","Hunt","Routes","Recovery","Settings"}))
+            throw new Exception("The five direct destinations changed or were duplicated.");
+        var allLinks=primary.Concat(menu.Controls.OfType<SidebarGroup>()
+            .SelectMany(group=>group.Items.Controls.OfType<SidebarButton>())).ToArray();
+        foreach(var button in primary.Where(button=>button.Text!="Recovery"))
+            if(allLinks.Count(link=>ReferenceEquals(link.Tag,button.Tag))!=1)
+                throw new Exception("A direct destination is repeated in a feature group: "+button.Text);
+        if(allLinks.Count(link=>ReferenceEquals(link.Tag,primary.Single(button=>button.Text=="Recovery").Tag))!=2 ||
+            allLinks.Single(link=>link.Text=="Hunt setup").Tag!=primary.Single(button=>button.Text=="Recovery").Tag)
+            throw new Exception("Setup and its distinct Recovery anchor are not both reachable.");
         var menuWindow=Size;
         foreach(var menuSize in new[]{Size,MinimumSize})
         {

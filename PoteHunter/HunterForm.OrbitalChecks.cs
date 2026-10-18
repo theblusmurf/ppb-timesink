@@ -91,7 +91,7 @@ public sealed partial class HunterForm
             foreach(string name in new[]{"overviewAnchor","overviewMapLegend","overviewRouteTarget"})
                 if(Find<Label>(name).Width<Find<TableLayoutPanel>("deskRouteSnapshot").ClientSize.Width-40)
                     throw new Exception("A scanner note retained a stale width constraint: "+name);
-            Find<Button>("fieldNavFarming").PerformClick();Layout();
+            Find<Button>("fieldNavHunt").PerformClick();Layout();
             var railScroll=Find<Panel>("orbitalRailScroll");
             foreach(string name in new[]{"overviewResetLoot","overviewResetTimer"})
             {
@@ -106,7 +106,7 @@ public sealed partial class HunterForm
                 throw new Exception("Unknown wallet values were presented as known telemetry.");
             Find<Button>("fieldNavOverview").PerformClick();Layout();
             Capture("orbital-ops-overview.png");
-            Find<Button>("fieldNavFarming").PerformClick();Layout();
+            Find<Button>("fieldNavHunt").PerformClick();Layout();
             Find<CollapsibleSection>("overviewFoldSkills").Expanded=true;Capture("orbital-ops-expanded-controls.png");
             Find<CollapsibleSection>("overviewFoldSkills").Expanded=false;
             Find<Button>("fieldNavRoutes").PerformClick();Capture("orbital-ops-routes.png");

@@ -175,9 +175,6 @@ public sealed partial class HunterForm
         var targeting=CompactCard("TARGETING & BEHAVIOR");targeting.Name="tacticalTargeting";
         var shortcuts = (TableLayoutPanel)Mirror(presets); shortcuts.Name = "deskTargetShortcuts"; shortcuts.AutoSize = false; shortcuts.Height = 54;
         shortcuts.RowStyles.Clear(); shortcuts.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); CompactAdd(targeting, shortcuts);
-        var targetSummary=new Label{Name="tacticalTargetSummary",AutoSize=true,ForeColor=UiMuted,Margin=new Padding(0,4,0,2)};
-        CompactAdd(targeting,targetSummary);
-        synchronize.Add(()=>targetSummary.Text="Gamekeeper "+(prioritizeGamekeeper.Checked?"priority ON":"priority OFF")+" · "+compactMode.Text+" · Range "+melee.Value.ToString("0.#"));
         CompactAdd(right,targeting);
 
         var route = CompactCard("ANCHOR ROUTE"); route.Name = "deskRouteSnapshot"; route.Margin = Padding.Empty;
@@ -213,12 +210,15 @@ public sealed partial class HunterForm
         var groupColumns = new[] { CompactTable(), CompactTable(), CompactTable() };
         foreach(var column in groupColumns) column.Margin = new Padding(0, 0, 10, 0);
         var deskFolds = new List<CollapsibleSection>();
-        foreach(var item in new[] { ("Targets", "Targets & combat", "Hunt"), ("Skills", "Skills & healing", "Support"), ("Movement", "Movement & loot", "Routes"), ("Recovery", "Death & client recovery", "Recovery"), ("Radii", "Route & anchor radius", "Routes"), ("Routes", "Saved route options", "Routes") }.Select((item, i) => (item, i)))
+        foreach(var item in new[] { ("Targets", "Combat details", "Hunt"), ("Skills", "Skills & healing", "Support"), ("Movement", "Movement & loot", "Routes"), ("Recovery", "Death & client recovery", "Recovery"), ("Radii", "Route & anchor radius", "Routes"), ("Routes", "Saved route options", "Routes") }.Select((item, i) => (item, i)))
         {
             var source = folds.Single(f => f.Name == "overviewFold" + item.item.Item1);
             var fold = new CollapsibleSection("deskFold" + item.item.Item1, item.item.Item2, item.item.Item3);
             foreach(Control child in source.Content.Controls)
-                if(child != presets && child != mapOptions) CompactAdd(fold.Content, Mirror(child));
+                if(child != presets && child != mapOptions &&
+                    (item.item.Item1 != "Targets" || !new[] { "overviewTargetFilter", "overviewGamekeeper", "overviewMode" }
+                        .Any(name => child.Name == name || child.Controls.Find(name, true).Length > 0)))
+                    CompactAdd(fold.Content, Mirror(child));
             synchronize.Add(() => fold.Summary = source.Summary);
             deskFolds.Add(fold);
         }

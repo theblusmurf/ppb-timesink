@@ -1,3 +1,14 @@
+## Release1.149
+
+Simplify the Tactical Command Console without changing hunt behavior or saved settings.
+
+- Keep one direct link each for Hunt, Routes and Settings; remove their repeated links from the detailed groups. Keep Recovery's direct jump and the separate Hunt setup entry, which lead to different parts of Setup.
+- Show Hunt mode, target filter and Gamekeeper priority only once on the Overview. Combat details still contains attack range and the link to advanced targeting.
+- Remove the Overview's repeated target summary. Preserve the Hunt Controls status card so the full loot list remains scrollable at the minimum window size.
+- Validate navigation reachability, unique quick controls, settings guards, offline rendering and minimum-size scrolling. No game input or live gameplay was used.
+
+Existing settings, routes, profiles and session history are preserved.
+
 ## Release1.148
 
 Replace the Orbital Ops dashboard with the selected Tactical Command Console layout.

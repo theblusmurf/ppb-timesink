@@ -79,20 +79,19 @@ public sealed partial class HunterForm
             TextAlign=ContentAlignment.BottomLeft, Padding=new Padding(10,0,0,3),
             ForeColor=ImperialTheme.Muted, Font=new Font("Segoe UI Semibold",8f), Margin=Padding.Empty });
         Entry("Overview","Overview",overview,glyph:"Overview");
-        Entry("CommandHunt","Hunt",farming,glyph:"Hunt");
-        Entry("CommandRoutes","Routes",navigationPage,glyph:"Routes");
-        Entry("CommandRecovery","Recovery",setup,anchor:()=>setup.ScrollControlIntoView(autoRevive),glyph:"Recovery");
-        Entry("CommandSettings","Settings",features[0],glyph:"Settings");
+        Entry("Hunt","Hunt",farming,glyph:"Hunt");
+        Entry("Routes","Routes",navigationPage,glyph:"Routes");
+        Entry("Recovery","Recovery",setup,anchor:()=>setup.ScrollControlIntoView(autoRevive),glyph:"Recovery");
+        Entry("Settings","Settings",features[0],glyph:"Settings");
         var hunting=Group("Hunting","Hunting");
-        Entry("Farming","Farming",farming,hunting,glyph:"Hunt");Entry("Hunt","Hunt setup",setup,hunting,glyph:"Hunt");
+        Entry("HuntSetup","Hunt setup",setup,hunting,glyph:"Hunt");
         if(packs!=null)Entry("RangedPacks","Ranged packs",packs,hunting,glyph:"Hunt");
         var party=Group("Party","Party");Entry("Support","Support & buffs",supportPage,party,glyph:"Recovery");Entry("Group","Group",groupPage,party,glyph:"Hunt");
         var world=Group("World","World & tools");
-        Entry("Routes","Navigation",navigationPage,world,glyph:"Routes");Entry("Targets","Targets",monstersPageFor(tabs),world,glyph:"Hunt");
+        Entry("Targets","Targets",monstersPageFor(tabs),world,glyph:"Hunt");
         Entry("Loot","Ground loot",lootPage,world);Entry("Hotbar","Hotbar",hotbarPage,world);Entry("ItemGrades","Item grades",features[2],world);
         var safety=Group("Safety","Safety");Entry("Protection","Protection",protectionPage,safety,glyph:"Recovery");
-        Entry("Recovery","Death recovery",setup,safety,()=>setup.ScrollControlIntoView(autoRevive),"Recovery");
-        var preferences=Group("Settings","Settings");Entry("Settings","Options",features[0],preferences);Entry("Profiles","Profiles",features[1],preferences);
+        var preferences=Group("Settings","Settings");Entry("Profiles","Profiles",features[1],preferences);
         Entry("Overlays","Overlays",overlays,preferences);Entry("Help","Help & logs",help,preferences);
         foreach(var group in nav.Controls.OfType<SidebarGroup>())group.Expanded=false;
         void Fit()

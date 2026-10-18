@@ -22,6 +22,12 @@ public sealed partial class HunterForm
             compactMode.SelectedIndex = 0; refreshOverview?.Invoke();
             Size = new Size(1480, 1000); Layout();
             if(folds.Any(f => f.Expanded || string.IsNullOrWhiteSpace(f.Summary))) throw new Exception("Session Desk must start with six collapsed summaries.");
+            var targetDetails=Find<CollapsibleSection>("deskFoldTargets").Content;
+            foreach(string name in new[]{"deskMode","deskTargetFilter","deskGamekeeper"})
+                if(Controls.Find(name,true).Length!=1 || targetDetails.Controls.Find(name,true).Length!=0)
+                    throw new Exception("A quick target control is repeated in Combat details: "+name);
+            if(targetDetails.Controls.Find("deskAttackRange",true).Length!=1)
+                throw new Exception("Combat details lost its attack range control.");
             Find<Button>("deskTargetMimic").PerformClick();
             if(filter.Text != "Mimic" || Find<TextBox>("overviewTargetFilter").Text != "Mimic") throw new Exception("Session Desk shortcut lost its shared target binding.");
             Find<TextBox>("deskTargetFilter").Text = "Tribal";
@@ -91,7 +97,7 @@ public sealed partial class HunterForm
             Size = MinimumSize; foreach(var fold in folds) fold.Expanded = false;
             tabs.SelectedTab.AutoScrollPosition = Point.Empty; Capture("session-desk-minimum.png");
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "session-desk-checks.json"), System.Text.Json.JsonSerializer.Serialize(new
-            { Passed = true, Checks = new[] { "six accessible collapsed sections", "target presets and shared route filtering", "two-way Farming synchronization", "radius slider and mana bindings", "working/busy/client/healer mutation guards", "collapse all preserves summaries", "minimum-size quick fields, group headings and route notes", "offline native screenshots; no game input" } }));
+            { Passed = true, Checks = new[] { "six accessible collapsed sections", "target controls occur once, with attack range retained in Combat details", "target presets and shared route filtering", "two-way Farming synchronization", "radius slider and mana bindings", "working/busy/client/healer mutation guards", "collapse all preserves summaries", "minimum-size quick fields, group headings and route notes", "offline native screenshots; no game input" } }));
         }
         finally
         {
