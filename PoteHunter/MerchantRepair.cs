@@ -11,15 +11,26 @@ internal sealed record MerchantRepairUi(int Width,int Height,RecognitionSelectio
     {
         if(size!=new Size(Width,Height))throw new InvalidOperationException("The game window size changed. Capture Hoys repair controls again.");
         if(Hoys==null||GeneralStore==null||RepairAll==null||CloseShop==null)throw new InvalidOperationException("Merchant setup is incomplete.");
-        foreach(var (selection,target) in new[]{(Hoys,true),(GeneralStore,true),(RepairAll,false),(CloseShop,false),(Confirm,false)})
+        ValidateSelection(Hoys,size,true,"Hoys name");
+        ValidateSelection(GeneralStore,size,true,"General Store Merchant");
+        ValidateSelection(RepairAll,size,false,"Repair All");
+        ValidateSelection(CloseShop,size,false,"shop close");
+        if(Confirm!=null)ValidateSelection(Confirm,size,false,"repair confirmation");
+    }
+    internal static void ValidateSelection(RecognitionSelection selection,Size size,bool target,string stage)
+    {
+        if(selection.Marker==null || !selection.Marker.Valid(size))
+            throw new InvalidOperationException(stage+": select distinctive text or an icon inside the game image.");
+        if(!new Rectangle(Point.Empty,size).Contains(selection.Click))
+            throw new InvalidOperationException(stage+": choose a click point inside the game image.");
+        if(target)
         {
-            if(selection==null)continue;
-            if(selection.Marker==null || !selection.Marker.Valid(size) || !new Rectangle(Point.Empty,size).Contains(selection.Click) ||
-                (target ? selection.Button!=null || !selection.Marker.Bounds.Contains(selection.Click) :
-                    selection.Button==null || !selection.Button.Valid(size) || !selection.Button.Bounds.Contains(selection.Click) ||
-                    selection.Marker.Bounds.IntersectsWith(selection.Button.Bounds)))
-                throw new InvalidOperationException("Merchant setup contains an invalid recognition area or click point. Capture it again.");
+            if(selection.Button!=null || !selection.Marker.Bounds.Contains(selection.Click))
+                throw new InvalidOperationException(stage+": click inside the text rectangle you selected. Reselect the marker if it does not contain the clickable name or menu row.");
         }
+        else if(selection.Button==null || !selection.Button.Valid(size) || !selection.Button.Bounds.Contains(selection.Click) ||
+            selection.Marker.Bounds.IntersectsWith(selection.Button.Bounds))
+            throw new InvalidOperationException(stage+": select the button separately from its static shop or confirmation text.");
     }
 }
 

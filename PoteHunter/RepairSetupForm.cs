@@ -46,9 +46,10 @@ internal sealed class RepairSetupForm : Form
         target?"Drag around the distinctive clickable text '"+stage+"'. Select only this label or menu row. Then choose Next.":
             "Drag around distinctive static "+(stage=="repair confirmation"?"repair-question":"shop-title")+" text, separate from the button. Exclude prices and changing values. Then choose Next.",
         target?"Click inside the selected text at the point used to open '"+stage+"'. This editor sends no game input.":
-            "Select the "+(stage=="shop close"?"shop's close X":stage=="repair confirmation"?"repair confirmation button":"Repair All button")+" in this image. This editor sends no game input.",target);
+            "Select the "+(stage=="shop close"?"shop's close X":stage=="repair confirmation"?"repair confirmation button":"Repair All button")+" in this image. This editor sends no game input.",target,
+        selection=>MerchantRepairUi.ValidateSelection(selection,image.Size,target,stage));
 
-    RepairSetupForm(Bitmap image,Color background,Color foreground,string title,string markerInstruction,string buttonInstruction,bool pointOnly)
+    RepairSetupForm(Bitmap image,Color background,Color foreground,string title,string markerInstruction,string buttonInstruction,bool pointOnly,Action<RecognitionSelection>? validateSelection=null)
     {
         this.image=image;
         Text=title;
@@ -88,7 +89,9 @@ internal sealed class RepairSetupForm : Form
                 if(!new Rectangle(Point.Empty,image.Size).Contains(click))throw new InvalidOperationException("Choose a point inside the game image.");
                 var button=pointOnly?null:RepairPatch.Capture(image,canvas.Selected);
                 if(button!=null && marker.Bounds.IntersectsWith(button.Bounds))throw new InvalidOperationException("The recognition text must be separate from the button. Reselect the marker.");
-                Selection=new(marker,button,click);DialogResult=DialogResult.OK;
+                var selection=new RecognitionSelection(marker,button,click);
+                validateSelection?.Invoke(selection);
+                Selection=selection;DialogResult=DialogResult.OK;
             }
             catch(Exception ex){instruction.Text=ex.Message;}
         };

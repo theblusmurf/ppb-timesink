@@ -17,6 +17,8 @@ At the threshold the owning hunt loop releases movement and attack, submits `/ki
 
 F9 cancels the operation. Unknown controls, blocked travel, missing movement response, changed equipment or unproved repair stop the operation rather than repeating paid actions.
 
+For the Hoys-name and General Store Merchant captures, the second click must be inside the text rectangle selected in the first step. Capture the General Store Merchant **popup menu row**, rather than the subtitle floating over Hoys. For Repair All, shop close and any confirmation, choose a static title/question marker separate from the button. A rejected selection stays in the same editor with the failing stage named. **Save selection** accepts one screenshot's annotation; the complete profile is saved only when the wizard reports **Hoys route and shop setup saved**.
+
 The private **merchant-repair-profile.json** contains the route and UI captures. Preserve it with settings/routes when moving a portable installation. Installers preserve it; packages and Git exclude it. Live travel and repair depend on your captured route and controls and must be checked with the stopped-state test.
 
 After a game-client update, capture Hoys' shop controls again. A changed client fingerprint or window size blocks merchant actions, including threshold `/kill`, until setup is renewed.

@@ -1,3 +1,11 @@
+## Release1.151
+
+Keep invalid merchant calibration clicks in their screenshot editor instead of rejecting the complete capture set at the end.
+
+- Apply the same merchant marker, button and click-point validation before Save selection closes each editor. Identify the failing Hoys/menu/repair/close/confirmation stage and explain how to correct it; existing bounds, text containment and independent button checks remain unchanged.
+- Clarify that Hoys and General Store click points belong inside their selected text, while shop buttons need separate title/question markers. Save selection annotates one capture; the complete profile is saved after the wizard finishes.
+- Add regression checks for accepted captures and stage-specific invalid click errors. No gameplay input, paid repair or automatic recovery was performed for this fix.
+
 ## Release1.150
 
 Restore connection after the October 18 Client.exe update and add a choice of inventory or Hoys merchant repair.

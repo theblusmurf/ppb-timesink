@@ -76,6 +76,14 @@ internal static class MerchantRepairChecks
         RecognitionSelection Target(int x)=>new(Patch(x,10),null,new(x+10,15));
         RecognitionSelection Button(int x)=>new(Patch(200,10),Patch(x,40),new(x+10,45));
         var ui=new MerchantRepairUi(600,400,Target(10),Target(100),Button(250),Button(300),null);ui.Validate(new(600,400));
+        foreach(var (selection,target,stage) in new[]{(ui.Hoys,true,"Hoys name"),(ui.GeneralStore,true,"General Store Merchant"),(ui.RepairAll,false,"Repair All"),(ui.CloseShop,false,"shop close")})
+        {
+            MerchantRepairUi.ValidateSelection(selection,new(600,400),target,stage);
+            string? error=null;
+            try{MerchantRepairUi.ValidateSelection(selection with{Click=new(500,300)},new(600,400),target,stage);}
+            catch(InvalidOperationException ex){error=ex.Message;}
+            Require(error!=null&&error.StartsWith(stage+":",StringComparison.Ordinal),"Merchant capture did not identify the rejected stage before leaving its editor.");
+        }
         foreach(var invalid in new[]{ui with{Hoys=null!},ui with{Width=601},ui with{Hoys=ui.Hoys with{Click=new(500,300)}},
             ui with{RepairAll=ui.RepairAll with{Button=ui.RepairAll.Marker}}})
         {
