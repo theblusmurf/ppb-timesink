@@ -21,7 +21,7 @@ $test=Join-Path $staging 'install-test'
 New-Item -ItemType Directory -Path $test | Out-Null
 $sentinel='preserve-user-settings'
 New-Item -ItemType Directory -Path (Join-Path $test 'hunting-logs/test-session') -Force | Out-Null
-$preservedFiles=@('settings.json','navigation-routes.json','repair-profile.json','revival-profile.json','teleporter-profiles.json','teleporter-profiles.json.backup-fixture','teleporter-profiles.json.fixture.tmp','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv')
+$preservedFiles=@('settings.json','navigation-routes.json','repair-profile.json','merchant-repair-profile.json','merchant-repair-profile.json.fixture.tmp','revival-profile.json','teleporter-profiles.json','teleporter-profiles.json.backup-fixture','teleporter-profiles.json.fixture.tmp','client-recovery-profile.json','loot-history.csv','session-log.txt','hunting-logs/test-session/events.csv')
 function Assert-PreservedUserData {
     param([string]$Stage)
     foreach($name in $preservedFiles){

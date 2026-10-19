@@ -1,3 +1,15 @@
+## Release1.150
+
+Restore connection after the October 18 Client.exe update and add a choice of inventory or Hoys merchant repair.
+
+- Verify the updated scene roots, hotbar, ground-item and repair/durability code through a separate signature catalog. Keep live identity, health, loaded-code, focus and input checks. A read-only connection test and complete equipment-durability observations passed on the updated client; no gameplay input was used. The changed optional active-effect observer remains unavailable until its new layout is verified.
+- Add Setup > Equipment repair > Repair using: Inventory (the existing default) or Merchant · Hoys, Roche Camp. Record a separate route from the shared hunt-route start to Hoys and capture his name, General Store Merchant, Repair All and shop-close controls, plus a cost confirmation when needed. Setup records manual movement and screenshots only.
+- Merchant repair follows that same-map path, clicks each recognized stage once, verifies full durability on the same equipped items, closes the shop and retraces the trip to its departure point and facing. Post-revival recovery then continues along the saved hunt route. Low-durability walking trips wait for owned combat to clear; hunt route slots are preserved.
+- Add an optional Use /kill at durability threshold toggle for Merchant mode. It requires Auto revive + return and Auto repair after revival, submits the fixed command once and requires confirmed death within 15 seconds before the normal revival → Hoys repair → saved-route return sequence. Missing health, focus or setup stops the operation without repeating the command. It is off by default.
+- Validate catalog selection/rejection, merchant stages, profile persistence, durability proof, command cancellation/focus/death guards, settings and native UI offline. Live Hoys travel, paid repair and /kill were not executed during development.
+
+Preserve merchant-repair-profile.json with existing settings, routes and other profiles during portable upgrades. Captured merchant data stays private and is excluded from releases.
+
 ## Release1.149
 
 Simplify the Tactical Command Console without changing hunt behavior or saved settings.

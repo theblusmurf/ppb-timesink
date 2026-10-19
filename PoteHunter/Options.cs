@@ -117,6 +117,9 @@ public sealed partial class Options
     public bool AutoReviveAfterDeath { get; set; } = true;
     public bool AutoRepairAfterDeath { get; set; }
     public bool AutoRepairLowDurability { get; set; }
+    RepairMethod equipmentRepairMethod;
+    public RepairMethod EquipmentRepairMethod { get=>equipmentRepairMethod; set=>equipmentRepairMethod=value is RepairMethod.Inventory or RepairMethod.Merchant?value:RepairMethod.Inventory; }
+    public bool UseKillForMerchantRepair { get; set; }
     decimal repairDurabilityPercent=20;
     public decimal RepairDurabilityPercent { get=>repairDurabilityPercent; set=>repairDurabilityPercent=Math.Clamp(value,1m,99m); }
     public bool VisualRevivalDetection { get; set; } = true;

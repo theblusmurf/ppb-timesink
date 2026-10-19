@@ -218,6 +218,7 @@ public sealed partial class HunterForm
     void RefreshNavigationRecordingControls()
     {
         if (startNavigationRecording.IsDisposed) return;
+        RefreshMerchantRepairSettings();
         bool manualAvailable=connected && !busy && !working;
         startNavigationRecording.Enabled=manualAvailable && !navigation.Recording;
         saveNavigationRoute.Enabled=manualAvailable && navigation.Recording;
@@ -296,6 +297,7 @@ public sealed partial class HunterForm
 
     void SaveNavigationRouteFromNavigationTab(bool spotOnly,bool finishRecording=false)
     {
+        if(recordingMerchantRoute){FinishMerchantRouteRecording();return;}
         try
         {
             if(busy || working) { message="Stop the hunt before saving a route manually."; return; }

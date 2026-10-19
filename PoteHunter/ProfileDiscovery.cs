@@ -13,6 +13,7 @@ public static partial class ProfileDiscovery
     static readonly Lazy<Manifest> signatures = new(() => LoadManifest("BuildSignatures.json"));
     static readonly Lazy<Manifest> september30Signatures = new(() => LoadManifest("BuildSignatures-20260930.json"));
     static readonly Lazy<Manifest> october12Signatures = new(() => LoadManifest("BuildSignatures-20261012.json"));
+    static readonly Lazy<Manifest> october18Signatures = new(() => LoadManifest("BuildSignatures-20261018.json"));
     static Manifest LoadManifest(string name)
     {
         using var stream=typeof(ProfileDiscovery).Assembly.GetManifestResourceStream("PoteHunter."+name)
@@ -51,7 +52,8 @@ public static partial class ProfileDiscovery
         var failures=new List<string>();
         foreach(var catalog in new[]{(signatures.Value,SceneLayout.Legacy,"original"),
             (september30Signatures.Value,SceneLayout.September30,"September 30"),
-            (october12Signatures.Value,SceneLayout.October12,"October 12")})
+            (october12Signatures.Value,SceneLayout.October12,"October 12"),
+            (october18Signatures.Value,SceneLayout.October18,"October 18")})
         {
             try { matches.Add(Discover(bytes,catalog.Item1,catalog.Item2)); }
             catch(InvalidOperationException ex) { failures.Add(catalog.Item3+": "+ex.Message); }
@@ -116,6 +118,9 @@ public static partial class ProfileDiscovery
     }
     public static IReadOnlyList<SignatureEvidence> ActiveEffectEvidence(string path,uint sceneRva,SceneLayout? layout=null)
     {
+        // The October 18 client changed its effect display implementation.
+        // Keep this optional observer unavailable until its arrays are proved.
+        if(layout==SceneLayout.October18)return [];
         var image=new PeImage(File.ReadAllBytes(path));
         var rules=new[]{
             new Rule("Effect scene root","A1 ?? ?? ?? ?? 33 C9 8B 3D ?? ?? ?? ?? 89 85 C0 FC FF FF 89 8D BC FC FF FF 8B 80 "+
@@ -339,7 +344,8 @@ public static partial class ProfileDiscovery
     {
         foreach(var catalog in new[]{(signatures.Value,SceneLayout.Legacy),
             (september30Signatures.Value,SceneLayout.September30),
-            (october12Signatures.Value,SceneLayout.October12)})
+            (october12Signatures.Value,SceneLayout.October12),
+            (october18Signatures.Value,SceneLayout.October18)})
         {
             byte[] fixture=new byte[0xb000];
             void U16(int at,ushort value)=>BitConverter.TryWriteBytes(fixture.AsSpan(at,2),value);
@@ -394,7 +400,7 @@ public static partial class ProfileDiscovery
             {
                 byte[] corrupt=(byte[])fixture.Clone();corrupt[locations[rule.Pattern]]=0xcc;Reject(corrupt);
             }
-            if(catalog.Item2==SceneLayout.October12)
+            if(catalog.Item2==SceneLayout.October12 || catalog.Item2==SceneLayout.October18)
             {
                 // Old member offsets mixed into otherwise complete new roots
                 // must not select either layout or authorize memory reads.

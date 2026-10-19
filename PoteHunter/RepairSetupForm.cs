@@ -41,6 +41,13 @@ internal sealed class RepairSetupForm : Form
         confirmation?"Click the centre of the dialog's OK button in this image. Do not select StartLoc. This editor sends no game input. Then choose Save selection."
             :"Click the centre of the blue destination marker for "+destination+" in this image. This editor sends no game input. Then choose Save selection.",false);
 
+    internal static RepairSetupForm ForMerchant(Bitmap image,string stage,bool target,Color background,Color foreground)=>new(image,background,foreground,
+        "Hoys repair setup · "+stage,
+        target?"Drag around the distinctive clickable text '"+stage+"'. Select only this label or menu row. Then choose Next.":
+            "Drag around distinctive static "+(stage=="repair confirmation"?"repair-question":"shop-title")+" text, separate from the button. Exclude prices and changing values. Then choose Next.",
+        target?"Click inside the selected text at the point used to open '"+stage+"'. This editor sends no game input.":
+            "Select the "+(stage=="shop close"?"shop's close X":stage=="repair confirmation"?"repair confirmation button":"Repair All button")+" in this image. This editor sends no game input.",target);
+
     RepairSetupForm(Bitmap image,Color background,Color foreground,string title,string markerInstruction,string buttonInstruction,bool pointOnly)
     {
         this.image=image;

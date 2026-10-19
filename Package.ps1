@@ -46,8 +46,8 @@ try {
     & (Join-Path $PSScriptRoot 'packaging/Test-AdminManifest.ps1') -Path (Join-Path $applicationRoot 'PoteHunter.exe')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'packaging/README.txt') -Destination (Join-Path $applicationRoot 'README.txt')
     Set-Content -LiteralPath (Join-Path $applicationRoot 'release-version.txt') -Value $Version -Encoding utf8
-    if (Get-ChildItem -LiteralPath $applicationRoot -Recurse -File | Where-Object { $_.Name -like 'teleporter-profiles.json*' }) {
-        throw 'Package payload contains private teleporter setup data. The package cannot be distributed.'
+    if (Get-ChildItem -LiteralPath $applicationRoot -Recurse -File | Where-Object { $_.Name -like 'teleporter-profiles.json*' -or $_.Name -like 'merchant-repair-profile.json*' }) {
+        throw 'Package payload contains private teleporter or merchant setup data. The package cannot be distributed.'
     }
 
     New-Item -ItemType Directory -Path (Split-Path -Parent $testRoot) | Out-Null

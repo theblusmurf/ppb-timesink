@@ -22,6 +22,7 @@ public sealed partial class HunterForm
     async Task<bool> TryDurabilityRepair(Options options,CancellationToken token,bool pendingReturn=false)
     {
         if(!options.AutoRepairLowDurability)return false;
+        if(options.EquipmentRepairMethod==RepairMethod.Merchant&&!options.UseKillForMerchantRepair&&(HasActiveFight()||encounter.Active||lockedTarget!=null))return false;
         var screening=world.ReadDurabilityScreening();latestDurability=screening;
         durabilityRepairPolicy.Observe(screening,options.RepairDurabilityPercent,DateTime.UtcNow);
         if(screening.LowestPercent is not decimal screenedLowest || screenedLowest>options.RepairDurabilityPercent)return false;
@@ -33,6 +34,10 @@ public sealed partial class HunterForm
         if(before.LowestPercent is not decimal lowest || lowest>options.RepairDurabilityPercent ||
             DurabilityRepairDeferred(options,pendingReturn))return false;
         if(!durabilityRepairPolicy.TryBegin(before,options.RepairDurabilityPercent,DateTime.UtcNow))return false;
+        if(options.EquipmentRepairMethod==RepairMethod.Merchant&&options.UseKillForMerchantRepair)
+        {
+            await RequestMerchantRepairDeath(options,token);return true;
+        }
         var self=world.LocalPlayer();
         void ValidateCombatRepair()
         {

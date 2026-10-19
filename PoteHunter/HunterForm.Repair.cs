@@ -19,6 +19,7 @@ public sealed partial class HunterForm
         AddRecoveryReturnDelaySettings(card);
         CompactAdd(equipmentCard,CompactRow("Durability",durabilityRepair,durabilityThreshold,new Label{Text="% or lower",AutoSize=true}));
         CompactAdd(equipmentCard,durabilityStatus);
+        AddMerchantRepairSettings(equipmentCard);
         var actions=CompactFlow(configureRepair,testRepair);CompactAdd(equipmentCard,actions);CompactAdd(equipmentCard,repairStatus);
         priorityHint.SetToolTip(autoRepair,"Recognize the inventory hammer and repair confirmation, repair once after revival, then follow the saved return route. Off by default. Requires the game's repair capability and cost.");
         priorityHint.SetToolTip(configureRepair,"Optional fallback for another inventory layout. Automatic recognition normally uses the included Domitus templates. Saved custom setup survives client updates while the same controls and window size still match. Custom setup sends no game input.");
@@ -31,10 +32,14 @@ public sealed partial class HunterForm
             reviveKey.Enabled=autoRevive.Checked&&!visualRevival.Checked;
             repairStatus.Text=durabilityRepair.Checked?"Repairs at the threshold during combat. Attack pauses for inventory clicks, then resumes after durability is verified. Uses the same setup and preserves the anchor. Unknown readings block repair.":!autoRevive.Checked?"Repair is saved for the next automatic revival; enable Auto revive + return to use it."
                 :"Saved setup must match the inventory layout and UI scale. If recognition fails, capture Inventory + Hammer and Question + Yes again. Test once before automatic recovery.";
+            if(SelectedRepairMethod==RepairMethod.Merchant)
+                repairStatus.Text="Hoys in Roche Camp: saved route → name → General Store Merchant → Repair All → verified durability → retrace to departure. Low-durability trips wait until owned combat clears. Same-map routes must share their start; shop controls and movement calibration are required.";
+            RefreshMerchantRepairSettings();
         }
         autoRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};autoRevive.CheckedChanged+=(_,_)=>Refresh();
         durabilityRepair.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
         durabilityThreshold.ValueChanged+=(_,_)=>QueueCompactSave();
+        repairMethod.SelectedIndexChanged+=(_,_)=>Refresh();
         priorityHint.SetToolTip(durabilityRepair,"Repair the lowest equipped-item durability during combat, including incoming damage. Briefly pause attack for one inventory repair; require living health, recognized controls and verified durability before resuming. Route travel and revival keep priority.");
         visualRevival.CheckedChanged+=(_,_)=>{Refresh();QueueCompactSave();};
         priorityHint.SetToolTip(visualRevival,"Recognize the Revive button before clicking and wait for living HP. Turn off to use the configured revival key instead.");
@@ -45,13 +50,17 @@ public sealed partial class HunterForm
 
     async Task RunRepairTool(bool configure)
     {
-        if(busy || working){message="Stop hunting before configuring or testing repair.";return;}
+        if(busy || working || navigation.Recording){message="Stop hunting and finish route recording before configuring or testing repair.";return;}
         if(!connected){message="Connect to the game before setting up repair.";return;}
         busy=true;settings.Enabled=false;start.Enabled=false;connect.Enabled=false;
         cancel=new CancellationTokenSource();var token=cancel.Token;
         try
         {
-            if(configure)await ConfigureRepairAsync(token);
+            if(configure)
+            {
+                if(SelectedRepairMethod==RepairMethod.Merchant)await ConfigureMerchantRepairAsync(token);
+                else await ConfigureRepairAsync(token);
+            }
             else
             {
                 await RepairCountdown("Repair test: switch to the game",token);
@@ -117,6 +126,10 @@ public sealed partial class HunterForm
         var self=world.LocalPlayer();int zone=world.ActiveZone();
         var durabilityBaseline=world.ReadDurability();
         durabilityRepairPolicy.RecordAttempt(durabilityBaseline,activeGuardOptions?.RepairDurabilityPercent??durabilityThreshold.Value,DateTime.UtcNow);
+        if((activeGuardOptions?.EquipmentRepairMethod??SelectedRepairMethod)==RepairMethod.Merchant)
+        {
+            await RunMerchantRepairAsync(token,additionalValidation,verifyDurability);return;
+        }
         RepairProfile? profile=null;
         if(File.Exists(RepairProfile.PathName))
         {

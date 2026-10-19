@@ -193,6 +193,17 @@ public sealed partial class HunterForm
             !recoverySettings.VisualRevivalDetection || visualRevival.Enabled || revivalDelaySeconds.Enabled || reviveKey.Enabled || farmOnArrival.Enabled || !configureRepair.Visible || !testRepair.Visible)
             throw new Exception("Death recovery controls did not persist.");
         autoRepair.Checked=false;durabilityRepair.Checked=true;durabilityThreshold.Value=23;SaveCompactSettings();
+        repairMethod.SelectedIndex=1;killForMerchantRepair.Checked=true;SaveCompactSettings();
+        if(Options.Read().EquipmentRepairMethod!=RepairMethod.Merchant||!Options.Read().UseKillForMerchantRepair||
+            !recordMerchantRoute.Visible||!finishMerchantRoute.Visible||configureRepair.Text!="Capture Hoys shop"||recordMerchantRoute.Enabled)
+            throw new Exception("Merchant repair UI mismatch: "+System.Text.Json.JsonSerializer.Serialize(new{Saved=Options.Read().EquipmentRepairMethod,Kill=Options.Read().UseKillForMerchantRepair,RecordVisible=recordMerchantRoute.Visible,SaveVisible=finishMerchantRoute.Visible,configureRepair.Text,RecordEnabled=recordMerchantRoute.Enabled,connected}));
+        PerformLayout();Application.DoEvents();
+        var merchantCard=merchantRouteActions!.Parent!;
+        foreach(Control button in merchantRouteActions.Controls)
+            if(!merchantRouteActions.ClientRectangle.Contains(button.Bounds))throw new Exception("A merchant route action is clipped.");
+        using(var image=new Bitmap(merchantCard.Width,merchantCard.Height))
+        {merchantCard.DrawToBitmap(image,new Rectangle(Point.Empty,merchantCard.Size));image.Save(Path.Combine(AppContext.BaseDirectory,"ui-merchant-repair-card.png"));}
+        repairMethod.SelectedIndex=0;killForMerchantRepair.Checked=false;SaveCompactSettings();
         if(!Options.Read().AutoRepairLowDurability || Options.Read().AutoRepairAfterDeath || Options.Read().RepairDurabilityPercent!=23 || !configureRepair.Visible || !testRepair.Visible || !durabilityThreshold.Enabled)
             throw new Exception("Durability repair did not persist independently of automatic revival.");
         durabilityRepair.Checked=false;durabilityThreshold.Value=20;

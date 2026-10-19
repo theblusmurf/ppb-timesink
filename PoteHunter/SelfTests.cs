@@ -119,6 +119,8 @@ static class SelfTests
             StationaryReturnDefenseChecks.Run().GetAwaiter().GetResult();
             Input.CheckFaultWatchSafety();
             AutoRepairChecks.Run().GetAwaiter().GetResult();
+            MerchantRepairChecks.Run().GetAwaiter().GetResult();
+            Input.CheckRepairKillCommand().GetAwaiter().GetResult();
             DurabilityRepairPolicy.SelfTest();
             DurabilityRepairPolicy.CombatSelfTest();
             File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "combat-durability-repair-checks.json"), JsonSerializer.Serialize(new

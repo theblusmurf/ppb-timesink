@@ -29,6 +29,8 @@ public sealed partial class HunterForm
             autoRevive.Checked=o.AutoReviveAfterDeath;
             ApplyRecoveryReturnDelaySettings(o);
             autoRepair.Checked=o.AutoRepairAfterDeath;
+            repairMethod.SelectedIndex=(int)o.EquipmentRepairMethod;
+            killForMerchantRepair.Checked=o.UseKillForMerchantRepair;
             durabilityRepair.Checked=o.AutoRepairLowDurability;
             durabilityThreshold.Value=Math.Clamp((decimal)o.RepairDurabilityPercent,durabilityThreshold.Minimum,durabilityThreshold.Maximum);
             visualRevival.Checked=o.VisualRevivalDetection;

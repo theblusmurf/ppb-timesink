@@ -196,7 +196,7 @@ public sealed partial class Navigation
     static double FiniteOrZero(double value)=>double.IsFinite(value) ? value : 0;
     static double PositiveOrZero(double value)=>double.IsFinite(value) && value>0 ? value : 0;
 
-    static List<Vec> NormalizeRoute(IEnumerable<Vec> raw,Vec anchor)
+    internal static List<Vec> NormalizeRoute(IEnumerable<Vec> raw,Vec anchor)
     {
         var points=new List<Vec>();
         foreach(var point in raw)

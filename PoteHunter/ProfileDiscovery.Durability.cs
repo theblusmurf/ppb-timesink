@@ -45,6 +45,8 @@ public static partial class ProfileDiscovery
         ("Equipped location getter", 22, -0xc0),
         ("Equipped location assignment", 10, -0x100)
     ];
+    static readonly Rule october18RepairScene=new("Repair scene",
+        "8B 3D ?? ?? ?? ?? 33 DB 39 9F 2C 38 00 00 7E ?? C6 45 FF 01 39 9F 28 38 00 00 7F ?? 88 5D FF",2);
 
     internal static DurabilityCodeLayout? DurabilityEvidence(string path, uint sceneRva)
         => DurabilityEvidence(File.ReadAllBytes(path), sceneRva);
@@ -53,8 +55,15 @@ public static partial class ProfileDiscovery
     {
         var image = new PeImage(bytes);
         var result = new List<SignatureEvidence>();
-        foreach (var rule in durabilityRules)
+        foreach (var original in durabilityRules)
         {
+            var rule=original;
+            if(rule.Name=="Repair scene")
+            {
+                var old=image.Find(new Pattern(rule.Pattern));var updated=image.Find(new Pattern(october18RepairScene.Pattern));
+                if(old.Count+updated.Count!=1)return null;
+                if(updated.Count==1)rule=october18RepairScene;
+            }
             var found = image.Find(new Pattern(rule.Pattern));
             if (found.Count != 1) return null;
             uint? captured = null;
@@ -172,6 +181,12 @@ public static partial class ProfileDiscovery
         var valid = DurabilityEvidence(fixture, 0xa100) ?? throw new Exception("Complete durability code proof was rejected");
         if (valid.SlotsOffset != 0x14cc || valid.Evidence.Count != durabilityRules.Length)
             throw new Exception("Durability catalog omitted a required consumer");
+        var revised=(byte[])fixture.Clone();
+        BitConverter.TryWriteBytes(revised.AsSpan(at["Repair scene"]+10,4),0x382cu);
+        BitConverter.TryWriteBytes(revised.AsSpan(at["Repair scene"]+22,4),0x3828u);
+        if(DurabilityEvidence(revised,0xa100)==null)throw new Exception("Complete October 18 repair proof was rejected.");
+        revised[at["Repair scene"]+10]^=1;
+        if(DurabilityEvidence(revised,0xa100)!=null)throw new Exception("A mixed October 18 repair consumer was accepted.");
         void Reject(Action<byte[]> mutate, string label)
         {
             byte[] broken = (byte[])fixture.Clone(); mutate(broken);

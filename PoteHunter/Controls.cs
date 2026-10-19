@@ -464,6 +464,49 @@ public static class Input
             CapturePulseSafety=savedCapture;selfTestSink=savedSink;selfTestDown=savedDown;
         }
     }
+    internal static async Task RepairKillCommand(CancellationToken token)
+    {
+        // A fixed opt-in repair command, serialized by the hunt controller.
+        // Own Enter so ordinary manual-chat interruption checks remain intact.
+        Check(token);Release();
+        try
+        {
+            await Key(Keys.Enter,35,token);await Delay(80,token);
+            foreach(char character in "/kill")
+            {
+                Check(token);Send(UnicodePacket(character,false));Send(UnicodePacket(character,true));
+            }
+            await Delay(40,token);await Key(Keys.Enter,35,token);
+        }
+        finally{Release();}
+    }
+
+    internal static async Task CheckRepairKillCommand()
+    {
+        var savedAllowed=Allowed;var savedPreflight=Preflight;var savedPickup=PickupHoldProvider;
+        var savedSink=selfTestSink;var savedDown=selfTestDown;var packets=new List<Packet>();
+        try
+        {
+            selfTestSink=packets.Add;selfTestDown=_=>false;Allowed=()=>true;Preflight=null;PickupHoldProvider=null;Release();packets.Clear();
+            await RepairKillCommand(default);
+            var text=new string(packets.Where(p=>p.Type==1&&p.Value.Keyboard.Flags==4).Select(p=>(char)p.Value.Keyboard.Scan).ToArray());
+            int EnterDowns()=>packets.Count(p=>p.Type==1&&p.Value.Keyboard.Scan==KeyPacket(Keys.Enter,false).Value.Keyboard.Scan&&p.Value.Keyboard.Flags==8);
+            if(text!="/kill"||EnterDowns()!=2||keys.IsHeld(Keys.Enter))throw new Exception("Repair command input changed or retained Enter.");
+            packets.Clear();using var cancelled=new CancellationTokenSource();cancelled.Cancel();bool stopped=false;
+            try{await RepairKillCommand(cancelled.Token);}catch(OperationCanceledException){stopped=true;}
+            if(!stopped||packets.Count!=0)throw new Exception("A cancelled repair command emitted input.");
+            bool focused=true;Allowed=()=>focused;
+            selfTestSink=packet=>{packets.Add(packet);if(packet.Type==1&&packet.Value.Keyboard.Flags==4)focused=false;};
+            stopped=false;try{await RepairKillCommand(default);}catch(OperationCanceledException){stopped=true;}
+            if(!stopped||EnterDowns()!=1||keys.IsHeld(Keys.Enter))throw new Exception("Focus loss submitted a partial repair command.");
+        }
+        finally
+        {
+            selfTestSink=packets.Add;Release();Allowed=savedAllowed;Preflight=savedPreflight;PickupHoldProvider=savedPickup;
+            selfTestSink=savedSink;selfTestDown=savedDown;
+        }
+    }
+
     public static void Chat(string text)
     {
         if (string.IsNullOrWhiteSpace(text) || !Allowed()) throw new InvalidOperationException("Chat input requires the game in the foreground.");
