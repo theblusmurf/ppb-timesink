@@ -265,6 +265,7 @@ public sealed partial class HunterForm
         }
         CompactAdd(targets.Content, targetButtons);
         var targetFilter = new TextBox { Name = "overviewTargetFilter", Width = 170, AccessibleName = "Target name filter" };
+        priorityHint.SetToolTip(targetFilter,"A target name works with all colors unchecked. Checked colors further restrict that name. A blank name requires at least one color.");
         targetFilter.TextChanged += (_, _) => { if(!syncing) { if(CanEdit(filter, true)) { filter.Text = targetFilter.Text; QueueCompactSave(); } refreshOverview?.Invoke(); } };
         filter.TextChanged += (_, _) => refreshOverview?.Invoke();
         CompactAdd(targets.Content, CompactRow("Name filter", targetFilter));

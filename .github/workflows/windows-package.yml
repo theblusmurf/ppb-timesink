@@ -1,12 +1,8 @@
 name: Windows package
 
 on:
-  push:
-    branches:
-      - '**'
-    tags:
-      - 'v*'
-      - 'Release1.*'
+  # Build and verify releases locally; upload only final validated artifacts.
+  # Retain an explicit manual workflow for separately authorized CI runs.
   workflow_dispatch:
 
 permissions:

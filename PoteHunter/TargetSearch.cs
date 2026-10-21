@@ -30,12 +30,18 @@ public static class TargetSearch
         else if(blocked>0)message="Waiting: "+ordered.First(e=>e.Reason is not ("Outside hunting area" or "HP unavailable")).Reason+".";
         else if(unknown>0)message=$"Waiting for HP readings on {unknown} approved target(s).";
         else if(nearestOutside!=null)message=$"Waiting: approved targets are outside the hunting area. Nearest: {nearestOutside.AnchorDistance:F1} from center; limit {nearestOutside.Radius:F0}.";
-        else message=$"Waiting: no living targets match your selection within the loaded area ({string.Join(", ",colors)}{(filter.Length>0 ? "; "+filter : "")}).";
+        else if(colors.Count==0 && string.IsNullOrWhiteSpace(filter))message="Waiting: enter a target name or select at least one monster color.";
+        else
+        {
+            string selection=colors.Count==0 ? $"name: {filter.Trim()}" : string.Join(", ",colors)+(string.IsNullOrWhiteSpace(filter)?"":"; name: "+filter.Trim());
+            message=$"Waiting: no living targets match your selection within the loaded area ({selection}).";
+        }
         return new(message,ordered.Length-unknown,outside,unknown,blocked,ordered.Take(30).ToArray());
     }
 
     public static void SelfTest()
     {
+        NamedTargetSelectionChecks.Run();
         var green=new Entity(100,0x80000001,"Lv. 1 Approved",new(21,0),0);
         var yellow=new Entity(200,0x80000002,"Lv. 2 Other",new(5,0),0);
         var hp=new Dictionary<uint,Health>{{green.Id,new(100,100)},{yellow.Id,new(100,100)}};

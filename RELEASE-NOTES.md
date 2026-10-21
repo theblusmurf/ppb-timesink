@@ -1,3 +1,12 @@
+## Release1.152
+
+Fix named targets being silently excluded when all difficulty colors are unchecked.
+
+- A named selection such as Pulkhan now works without a color restriction. Checked colors still further restrict the selected name; a blank name with no colors approves no ordinary monsters.
+- Keep verified monster identity, living HP, hunt boundaries, player protection and existing priority rules. Selection and waiting diagnostics use the same approval rule.
+- Clarify target filter help and empty-selection status. Add a regression that fails before the fix, plus checks for explicit colors, unrelated mobs, players, unknown/dead HP, boundaries and protected targets.
+- Built and validated locally. No gameplay input or live settings changes were used for validation.
+
 ## Release1.151
 
 Keep invalid merchant calibration clicks in their screenshot editor instead of rejecting the complete capture set at the end.

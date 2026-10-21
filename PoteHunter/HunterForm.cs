@@ -236,6 +236,9 @@ public sealed partial class HunterForm : Form
         }
         settings.Controls.Add(new Label { Text = "Attack these colors", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 4);
         settings.Controls.Add(difficultyRow, 1, 4); settings.SetColumnSpan(difficultyRow, 3);
+        const string targetSelectionHelp="A target name works with all colors unchecked. Checked colors further restrict that name. With a blank name, select at least one color.";
+        priorityHint.SetToolTip(filter,targetSelectionHelp);
+        foreach(var box in difficultyBoxes.Values)priorityHint.SetToolTip(box,targetSelectionHelp);
         healBelow.Width = 52;
         var healingRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
         healingRow.Controls.AddRange([autoHeal, new Label { Text = "below", AutoSize = true, Padding = new Padding(0, 4, 0, 0) }, healBelow, new Label { Text = "%", AutoSize = true, Padding = new Padding(0, 4, 0, 0) }]);

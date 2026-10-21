@@ -194,7 +194,11 @@ public static class Targeting
     public static bool Eligible(Entity entity, Health health, Threat difficulty, string nameFilter, IReadOnlyCollection<string> colors, bool prioritizeGamekeeper = false) =>
         health.Known && !health.Dead && (entity.PriorityLootObject ||
         prioritizeGamekeeper && IsGamekeeper(entity) ||
-        entity.Monster && MatchesName(entity.Name, nameFilter) && colors.Contains(difficulty.ToString()));
+        entity.Monster && MatchesName(entity.Name, nameFilter) &&
+        // An explicit name is a complete selection when no color restriction
+        // is checked. Blank name plus no colors still approves no monsters.
+        // Once colors are checked they remain an additional restriction.
+        (colors.Contains(difficulty.ToString()) || colors.Count==0 && !string.IsNullOrWhiteSpace(nameFilter)));
 
     public static Entity? Choose(IEnumerable<Entity> entities, IReadOnlyDictionary<uint, Health> health, Vec position, Vec anchor,
         double radius, Func<Entity, Threat> difficulty, string nameFilter, IReadOnlyCollection<string> colors, bool priorityOnly = false, bool prioritizeGamekeeper = false, bool prioritizeBreakables = true)
