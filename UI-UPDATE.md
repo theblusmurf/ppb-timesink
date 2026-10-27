@@ -35,4 +35,3 @@ calibration files if you use them.
 
 Source changes are in HunterForm.ModernUi.cs, HunterForm.MinimalSettings.cs,
 and the offline preview checks in HunterForm.RangedPull.cs.
-

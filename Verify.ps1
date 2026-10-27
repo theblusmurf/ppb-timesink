@@ -6,7 +6,9 @@ $ErrorActionPreference = 'Stop'
 
 foreach ($project in 'PoteHunter', 'PoteMemoryProbe') {
     $projectPath = Join-Path $PSScriptRoot "$project/$project.csproj"
-    & $Dotnet build $projectPath -c Release --nologo
+    & $Dotnet restore $projectPath --configfile (Join-Path $PSScriptRoot 'NuGet.Config') -p:NuGetAudit=false --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Local dependency cache is incomplete for $project. No dependency downloads were attempted." }
+    & $Dotnet build $projectPath -c Release --no-restore --nologo
     if ($LASTEXITCODE -ne 0) {
         throw "Build failed for $project with exit code $LASTEXITCODE."
     }

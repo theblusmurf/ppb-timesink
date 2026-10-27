@@ -2,6 +2,7 @@
 **/obj/
 dist/
 artifacts/
+local-build.config.json
 
 # Local runtime state and diagnostics
 /settings.json
@@ -17,6 +18,7 @@ repair-profile.json
 merchant-repair-profile.json*
 revival-profile.json*
 teleporter-profiles.json*
+scroll-route-profiles.json*
 self-test.txt
 launcher-error.txt
 startup-trace.txt

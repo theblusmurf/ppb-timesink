@@ -73,7 +73,8 @@ internal static class RouteDistanceSteeringChecks
             Vec sparseAim=Aim(straight,default,speed),denseAim=Aim(dense,default,speed);
             Near(denseAim,sparseAim,"Recorded point density changed the straight route aim");
             Near(Aim(irregular,default,speed),sparseAim,"Irregular sample density changed the straight route aim");
-            Near(sparseAim,new(Math.Clamp(speed>0?speed*250:3.5,1.75,3.5),0),
+            Near(sparseAim,new(Math.Clamp(speed>0?speed*RecoveryPath.SpeedLookaheadMilliseconds:RecoveryPath.SteeringLookaheadUnits,
+                RecoveryPath.MinimumSteeringLookaheadUnits,RecoveryPath.SteeringLookaheadUnits),0),
                 "Straight steering horizon did not use physical route distance");
         }
         foreach(double offset in new[]{-.3,.3})
@@ -102,7 +103,8 @@ internal static class RouteDistanceSteeringChecks
         Vec sBend=Aim(alternating.ToArray(),default);
         Near(Aim(Densify(alternating.ToArray(),4),default),sBend,
             "Dense opposing bends lost the same physical curvature horizon");
-        Require(sBend.Length<3.3,"Opposing mild bends cancelled their curvature and retained full straight lookahead");
+        Require(sBend.Length<RecoveryPath.SteeringLookaheadUnits,
+            "Opposing mild bends cancelled their curvature and retained full straight lookahead");
     }
 
     static void SpeedHorizon()
@@ -112,7 +114,8 @@ internal static class RouteDistanceSteeringChecks
         foreach(double invalid in new[]{double.NaN,double.PositiveInfinity,double.NegativeInfinity,-1.0,0.0})
             Near(Aim(route,default,invalid),normal,"Unknown or invalid speed changed the conservative fallback aim");
         Near(Aim(route,default,.000001),new(1.75,0),"Very slow movement bypassed the minimum lookahead");
-        Near(Aim(route,default,1000),new(3.5,0),"A large speed sample enlarged the maximum lookahead");
+        Near(Aim(route,default,1000),new(5.5,0),"A large speed sample exceeded the maximum lookahead");
+        Near(Aim(route,default,.022),new(5.5,0),"The 250 ms speed horizon did not reach the new maximum");
         Require(Aim(route,default,.010).X>Aim(route,default,.004).X &&
             Aim(route,default,.014).X>Aim(route,default,.010).X,
             "Measured speed did not adjust straight-route lookahead monotonically");
@@ -120,7 +123,7 @@ internal static class RouteDistanceSteeringChecks
 
     static void PhysicalAndPointBounds()
     {
-        // Keep the next-segment sharp-corner guard beyond the 3.5-unit aim as
+        // Keep the next-segment sharp-corner guard beyond the 5.5-unit aim as
         // well. Otherwise that independent safety gate, rather than curvature
         // horizon length, correctly shortens steering before the farther bend.
         Vec[] noFarBend=[new(0,0),new(1,0),new(2,0),new(3,0),new(4,0),new(5,0),new(6,0),new(7,0),new(10,0)];

@@ -47,6 +47,9 @@
   <!-- Captured teleporter links and sibling temporary/backup files are local user data. -->
   <ItemGroup>
     <None Remove="**/teleporter-profiles.json*" />
+    <None Remove="**/scroll-route-profiles.json*" />
+    <Content Remove="**/scroll-route-profiles.json*" />
+    <EmbeddedResource Remove="**/scroll-route-profiles.json*" />
     <Content Remove="**/teleporter-profiles.json*" />
     <EmbeddedResource Remove="**/teleporter-profiles.json*" />
     <None Remove="**/merchant-repair-profile.json*" />

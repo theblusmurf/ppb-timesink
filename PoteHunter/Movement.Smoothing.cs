@@ -227,12 +227,12 @@ public sealed partial class Movement
         if(StopApproach()) { await Input.Delay(120,token); return; }
         Vec position=world.PlayerPosition(),delta=goal-position;
         if(delta.Length<=tolerance)return;
-        if(!await Face(world,delta,token,.035,"approach"))return;
+        if(!await Face(world,delta,token,ArrivalPulseGeometry.FacingTolerance,"approach"))return;
         // Re-read after aiming; never pulse against stale geometry.
         position=world.PlayerPosition();delta=goal-position;
         if(delta.Length<=tolerance)return;
-        Vec forward=FromClientHeading(world.PlayerHeading());
-        if(Math.Abs(Angle(forward,delta))>.08)return;
+        double heading=world.PlayerHeading();Vec forward=FromClientHeading(heading);
+        if(!ArrivalPulseGeometry.FacingReady(heading,delta))return;
         int plannedDuration=arrivalMotion.PulseMilliseconds(delta.Length,tolerance);
         if(!arrivalPulseAdaptation.TrySelectClearance(goal,position,forward,tolerance,plannedDuration,
             Environment.TickCount64,arrivalMotion.PulseClearance,CanAdvance,out int duration,out double step))return;

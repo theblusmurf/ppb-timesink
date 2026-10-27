@@ -221,7 +221,7 @@ internal static class DeathRecoveryChecks
                         arc+=edge.Length;crossed.Add(original[at+1]);
                     }
                     Vec chord=aim-before;double chordSquare=chord.X*chord.X+chord.Y*chord.Y;
-                    if(!aim.Finite || !found || arc<=0 || arc>3.5+1e-8 || chordSquare<=1e-12 || path.Index!=expected)
+                    if(!aim.Finite || !found || arc<=0 || arc>RecoveryPath.SteeringLookaheadUnits+1e-8 || chordSquare<=1e-12 || path.Index!=expected)
                         throw new Exception("Recorded entry steering left its bounded original polyline or advanced physical capture.");
                     double priorProjection=0;
                     foreach(Vec vertex in crossed)

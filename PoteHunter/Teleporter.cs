@@ -14,7 +14,7 @@ internal sealed record TeleporterPosition(int Zone,Vec Position,double Height)
 // Location dialog is usable only after the separately recognised destination.
 internal sealed record TeleporterProfile(int Version,string ClientHash,int Width,int Height,string Destination,
     string Character,uint CharacterId,string TargetSelection,int DestinationSlot,
-    TeleporterPosition Departure,TeleporterPosition Landing,RevivalStep Select,RevivalStep Confirm)
+    TeleporterPosition Departure,TeleporterPosition Landing,RevivalStep Select,RevivalStep Confirm,TeleportScrollSlot? Scroll=null)
 {
     public const double SourceRadius=3,LandingRadius=5,HeightTolerance=3;
     internal const int MaximumLinks=16,MaximumRegistryBytes=24_000_000;
@@ -24,6 +24,7 @@ internal sealed record TeleporterProfile(int Version,string ClientHash,int Width
 
     public void Validate(string hash,Size size)
     {
+        Scroll?.Validate();
         if(Version!=1 || string.IsNullOrWhiteSpace(ClientHash) || !string.Equals(ClientHash,hash,StringComparison.OrdinalIgnoreCase) ||
             Width is <16 or >16384 || Height is <16 or >16384 || Width!=size.Width || Height!=size.Height)
             throw new InvalidOperationException("Teleporter setup belongs to a different client build or window size. Configure the teleporter again.");
@@ -39,6 +40,16 @@ internal sealed record TeleporterProfile(int Version,string ClientHash,int Width
             throw new InvalidOperationException("Teleporter departure and landing must be more than ten map units apart.");
         if(Select==null || Confirm==null || !Select.Valid(size,true) || !Confirm.Valid(size,true) || Select.Point==Confirm.Point)
             throw new InvalidOperationException("Teleporter setup needs separate destination and OK controls with valid independent recognition areas.");
+    }
+
+    // A saved scroll capture can be reused after a client update. Its stored
+    // hash remains provenance; the live scroll and controls are checked again
+    // before use. Older portal captures remain pinned to their client build.
+    public void ValidateForUse(string currentHash,Size size)
+    {
+        if(string.IsNullOrWhiteSpace(currentHash))
+            throw new InvalidOperationException("Connect to a verified game client before using a teleporter profile.");
+        Validate(Scroll==null?currentHash:ClientHash,size);
     }
 
     bool ValidImage(Bitmap image)
@@ -94,12 +105,19 @@ internal sealed record TeleporterProfile(int Version,string ClientHash,int Width
     public static TeleporterProfile? Load(string hash,Size size,string? target,int slot,string? path=null)
     {
         if(slot is <0 or >=Navigation.SavedRouteSlotCount)throw new InvalidOperationException("Select a valid saved route slot for the teleporter.");
+        // Shared profile assignments take precedence. Explicit test/legacy
+        // paths retain the old scoped registry behavior without recursion.
+        if(path==null && ScrollRouteProfiles.Resolve(hash,size,target,slot) is {} shared)return shared;
         lock(RegistryGate)
         {
             var key=(Navigation.TargetSelectionKey(target),slot);
             var profile=ReadRegistry(path??PathName).Links.FirstOrDefault(link=>Scope(link)==key);
-            profile?.Validate(hash,size);return profile;
+            profile?.ValidateForUse(hash,size);return profile;
         }
+    }
+    internal static TeleporterProfile[] LegacyProfiles(string? path=null)
+    {
+        lock(RegistryGate)return ReadRegistry(path??PathName).Links.ToArray();
     }
     public void Save(string? path=null)
     {
@@ -128,13 +146,14 @@ internal sealed record TeleporterProfile(int Version,string ClientHash,int Width
 
 internal sealed record TeleporterObservation(string ClientHash,int ProcessId,nint Window,Size WindowSize,
     Entity? Character,Health Health,int Zone,bool Focused,bool Cancelled=false);
-internal enum TeleporterStage { Ready,SelectionIssued,AwaitingConfirmation,ConfirmationIssued,AwaitingLanding,Complete,Stopped }
+internal enum TeleporterStage { Ready,ScrollIssued,AwaitingScrollWindow,SelectionIssued,AwaitingConfirmation,ConfirmationIssued,AwaitingLanding,Complete,Stopped }
 
 // Pure policy: it never presses or holds a key. The caller must acknowledge
 // successfully sent mouse clicks and retain its normal input/window guards.
 internal sealed class TeleporterTransaction
 {
     public const int PhaseTimeoutMilliseconds=15000;
+    internal const int ScrollCountdownMilliseconds=16000,ScrollWindowAllowanceMilliseconds=10000;
     readonly TeleporterProfile profile;
     readonly TeleporterObservation initial;
     long phaseStarted,lastObserved;
@@ -142,12 +161,20 @@ internal sealed class TeleporterTransaction
     public bool SelectionAttempted {get;private set;}
     public bool ConfirmationAttempted {get;private set;}
     public bool ConfirmationWasSent {get;private set;}
+    internal bool ScrollAttempted {get;private set;}
+    internal bool ScrollWasSent {get;private set;}
+    internal bool ScrollActivationPending=>Stage==TeleporterStage.ScrollIssued;
+    internal void CheckScrollAssignment(HotbarSnapshot bar)
+    {
+        if(!ScrollActivationPending)return;
+        try{profile.Scroll!.RequireReady(bar);}catch(InvalidOperationException ex){Stop(ex.Message);}
+    }
     public Entity? AcceptedCharacter {get;private set;}
     public string? StopReason {get;private set;}
     public TeleporterTransaction(TeleporterProfile profile,TeleporterObservation initial,long now)
     {
         this.profile=profile;this.initial=initial;phaseStarted=lastObserved=now;
-        profile.Validate(initial.ClientHash,initial.WindowSize);
+        profile.ValidateForUse(initial.ClientHash,initial.WindowSize);
         CheckDeparture(initial,now);
     }
     void Stop(string reason)
@@ -158,7 +185,8 @@ internal sealed class TeleporterTransaction
     void CheckTime(long now)
     {
         if(Stage==TeleporterStage.Stopped)throw new InvalidOperationException(StopReason??"Teleporter transaction stopped.");
-        if(now<lastObserved || now<phaseStarted || (ulong)(now-phaseStarted)>=PhaseTimeoutMilliseconds)
+        int timeout=Stage==TeleporterStage.AwaitingScrollWindow ? ScrollCountdownMilliseconds+ScrollWindowAllowanceMilliseconds : PhaseTimeoutMilliseconds;
+        if(now<lastObserved || now<phaseStarted || (ulong)(now-phaseStarted)>=(ulong)timeout)
             Stop("Teleporter step timed out or its clock changed. No further clicks were sent.");
         lastObserved=now;
     }
@@ -190,12 +218,35 @@ internal sealed class TeleporterTransaction
         var character=CheckCommon(observation,now);
         if(!LocalCharacter.Same(initial.Character!,character) || !profile.Departure.Near(character,observation.Zone,TeleporterProfile.SourceRadius))
             Stop("Teleporter departure body or captured position changed before confirmation.");
+        if(profile.Scroll!=null && ((character.Position-initial.Character!.Position).Length>.5 || Math.Abs(character.Height-initial.Character.Height)>.5))
+            Stop("Character moved during Teleport Scroll travel. No further scroll or destination input was sent.");
     }
     public void BeforeSelection(TeleporterObservation observation,long now)
     {
         CheckDeparture(observation,now);
-        if(Stage!=TeleporterStage.Ready || SelectionAttempted)Stop("Teleporter destination selection was already attempted.");
+        bool ready=profile.Scroll==null ? Stage==TeleporterStage.Ready :
+            Stage==TeleporterStage.AwaitingScrollWindow && ScrollWasSent && now-phaseStarted>=ScrollCountdownMilliseconds;
+        if(!ready || SelectionAttempted)Stop("Destination selection was already attempted or the scroll countdown is incomplete.");
         SelectionAttempted=true;Stage=TeleporterStage.SelectionIssued;
+        if(profile.Scroll!=null)phaseStarted=now;
+    }
+    internal void BeforeScroll(TeleporterObservation observation,HotbarSnapshot bar,long now)
+    {
+        CheckDeparture(observation,now);
+        if(profile.Scroll==null || Stage!=TeleporterStage.Ready || ScrollAttempted)Stop("Teleport Scroll activation was already attempted or not configured.");
+        try{profile.Scroll!.RequireReady(bar);}catch(InvalidOperationException ex){Stop(ex.Message);}
+        ScrollAttempted=true;Stage=TeleporterStage.ScrollIssued;
+    }
+    internal void ScrollSent(long now)
+    {
+        CheckTime(now);
+        if(Stage!=TeleporterStage.ScrollIssued || ScrollWasSent)Stop("Teleport Scroll activation was acknowledged out of order or more than once.");
+        ScrollWasSent=true;Stage=TeleporterStage.AwaitingScrollWindow;phaseStarted=now;
+    }
+    internal bool ScrollWindowReady(TeleporterObservation observation,long now)
+    {
+        CheckDeparture(observation,now);
+        return Stage==TeleporterStage.AwaitingScrollWindow && ScrollWasSent && now-phaseStarted>=ScrollCountdownMilliseconds;
     }
     public void SelectionSent(TeleporterObservation observation,long now)
     {

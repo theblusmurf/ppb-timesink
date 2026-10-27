@@ -25,4 +25,3 @@ public sealed class PlayerGreeting
         if (policy.Next(new(0, 0), [self, near with { Generation = 2 }], 10, 25) == null) throw new Exception("New identity was suppressed.");
     }
 }
-

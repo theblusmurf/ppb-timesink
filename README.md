@@ -1,5 +1,7 @@
 # PlayPoteBot
 
+Development builds are now fully local. Run `./Local-Build.ps1 -Version Release1.152` for local checks, a portable ZIP, an installer and checksums. See [local build instructions](LOCAL-BUILD.md). The command does not download dependencies, use GitHub Actions, publish files or replace the running installation.
+
 **Advanced > Navigation** has a separate **Show route overlay** toggle for
 an automatically fitted map of Primary and both Alternative paths, saved
 anchors/facing, your position, and the 10-unit startup corridor. It is passive
@@ -52,7 +54,7 @@ The game client is installed separately. The current reader expects `C:\Program 
 
 Routine game patches are accepted automatically when their required signatures and live layout still validate. A new executable fingerprint alone does not block input. The bot verifies the connected process/window and input backend before reporting a successful connection; genuinely incompatible layouts still stop with a specific error. After updating the game, restart it and reconnect the hunter.
 
-Development source and Actions remain in the private repository. Installers, portable ZIPs and updater downloads are published separately to [PoteHunter-Releases](https://github.com/theblusmurf/PoteHunter-Releases/releases), without requiring a GitHub account or token.
+Historical installer and updater downloads remain on [PoteHunter-Releases](https://github.com/theblusmurf/PoteHunter-Releases/releases). Current development and packaging run locally; publishing is separate and requires an explicit request.
 
 ## Ranged packs
 

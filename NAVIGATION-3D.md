@@ -1,5 +1,39 @@
 # Native 3D navigation
 
+Fixed melee farming loot returns still settle within the saved point's existing
+arrival tolerance, then keep the current heading so the next target owns aiming.
+They no longer restore an optional idle heading before resuming selection.
+Required recovery/priority facing and other hunt modes retain their normal
+restoration. Short arrival aiming uses the existing pre-pulse movement limit;
+offensive skill-facing, endpoint, clearance and same-floor guards are unchanged.
+
+For same-map travel with **Teleport Scroll**, open **Navigation > Teleport Scroll
+route**. Existing scroll calibrations appear in **Saved scroll profile**. Select
+the farm route slot, choose the destination profile, then **Use for this route**.
+Several target/route slots can share one calibration. Each assignment checks that
+its recorded walking route joins that profile's landing before reaching the farm.
+**Rename profile** changes its display name without recalibration or scroll use.
+After a game client update, a saved scroll profile remains selectable for the
+same character, map zone, and window size. Its saved client hash identifies the
+original capture; the app verifies the current client and checks the scroll,
+destination marker, and OK control again before using them. If the updated UI
+does not match those captures, make a new profile before using that destination.
+
+For a new destination, put exactly one Teleport Scroll assignment on the active
+hotbar page and choose **New scroll profile**. Manually use a scroll, wait its
+16-second countdown, then capture the destination marker, confirmation/OK and
+living landing as guided. Setup sends no game input; manual scroll use consumes
+your item normally. The profile is saved even if its onward route is not recorded
+yet. Record the continuous landing-to-farm walking path, then assign the profile.
+
+Enable **Use Teleport Scroll routes** only after the complete capture is saved.
+Runtime releases movement and attacks, uses that captured scroll once, waits the
+full countdown, selects the recognized destination and OK, verifies arrival, then
+walks to the farm anchor. Keep the captured hotbar page and game window active.
+Missing/replaced/locked scrolls or an interrupted/failed journey stop without
+automatic scroll retries. Existing portal captures remain stored but need new
+scroll setup. Scroll travel currently supports two points in the same map zone.
+
 Open **Routes → Navigation**. The native view reads recovered terrain and available static objects from the verified local game installation. It requires no browser, WebView or separate rendering download. Choose **2D** to return to the original main map view.
 
 ## In-game overlays
