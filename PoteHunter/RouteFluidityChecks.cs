@@ -166,11 +166,11 @@ internal static class RouteFluidityChecks
     {
         var sparse=new RecoveryPath([new(0,0),new(8,0),new(16,0)],new(24,0));
         sparse.Next(default,Clear);
-        Near(sparse.SteeringGoal(default,Clear),new(3.5,0),
+        Near(sparse.SteeringGoal(default,Clear),new(5.5,0),
             "A sparse straight sample prevented a safe partial physical lookahead");
         var futureCorner=new RecoveryPath([new(0,0),new(2,0),new(8,0),new(8,6)],new(8,12));
         futureCorner.Next(default,Clear);
-        Near(futureCorner.SteeringGoal(default,Clear),new(3.5,0),
+        Near(futureCorner.SteeringGoal(default,Clear),new(5.5,0),
             "A far hard corner rejected a safe incoming-segment aim");
         var nearbyCorner=new RecoveryPath([new(0,0),new(2,0),new(3,0),new(3,4)],new(3,10));
         nearbyCorner.Next(default,Clear);nearbyCorner.Next(new(1.3,0),Clear);
@@ -181,13 +181,17 @@ internal static class RouteFluidityChecks
         Vec[] route=SoftRoute(25);var original=MakePath(route);original.Next(default,Clear);
         Vec originalAim=original.SteeringGoal(default,Clear);
         var dense=MakePath(Dense(route,4));dense.Next(default,Clear);
-        Near(dense.SteeringGoal(default,Clear),originalAim,"Soft-corner sample density changed the accepted carrot");
+        // The longer horizon may reach the chord-corridor boundary on a
+        // subdivided outgoing segment; its verified aim can differ by a few
+        // hundredths while staying on the same safe route leg.
+        Near(dense.SteeringGoal(default,Clear),originalAim,
+            "Soft-corner sample density changed the accepted carrot",.02);
         foreach(double radians in new[]{.73,-1.2,Math.PI})
         {
             Vec Transform(Vec value)=>Movement.Rotate(value,radians)+new Vec(20,-7);
             var changed=MakePath(Dense(route,4).Select(Transform).ToArray());changed.Next(Transform(default),Clear);
             Near(changed.SteeringGoal(Transform(default),Clear),Transform(originalAim),
-                "A rigid transform changed fluid route geometry");
+                "A rigid transform changed fluid route geometry",.02);
         }
         Vec[] tiny=Enumerable.Range(0,1001).Select(at=>new Vec(at*.005,0)).ToArray();
         var bounded=MakePath(tiny);Vec checkpoint=bounded.Next(default,Blocked)!.Value;int calls=0,index=bounded.Index;
@@ -211,12 +215,12 @@ internal static class RouteFluidityChecks
         var path=StaleLongRoute();path.Next(new(7.5,0),Clear);int index=path.Index;
         Near(path.SteeringGoal(new(7.501,0),Clear),new(16,0),
             "A different position reused a prior physical-arrival proof");
-        Near(path.SteeringGoal(new(7.5,0),Clear),new(11,0),
+        Near(path.SteeringGoal(new(7.5,0),Clear),new(13,0),
             "An ordinary observed arrival did not recover a sparse local projection");
         Check(path.Index==index,"Projection recovery advanced physical route progress");
-        path.Next(new(8,0),Clear);Near(path.SteeringGoal(new(8,0),Clear),new(11.5,0),
+        path.Next(new(8,0),Clear);Near(path.SteeringGoal(new(8,0),Clear),new(13.5,0),
             "Recovered projection did not retain continuous actual arc progress");
-        path.Next(new(12,0),Clear);Near(path.SteeringGoal(new(12,0),Clear),new(15.5,0),
+        path.Next(new(12,0),Clear);Near(path.SteeringGoal(new(12,0),Clear),new(17.5,0),
             "Long-segment rebase budget began at its remote vertex rather than the observed projection");
 
         var blocked=StaleLongRoute();blocked.Next(new(7.5,0),Clear);
@@ -230,7 +234,7 @@ internal static class RouteFluidityChecks
     static void ReentryUsesActualArc()
     {
         var path=new RecoveryPath([new(0,0),new(2,0),new(4,0),new(6,0),new(8,0)],new(12,0));
-        path.Next(default,Clear);Near(path.SteeringGoal(default,Clear),new(3.5,0),"Initial adaptive aim failed");
+        path.Next(default,Clear);Near(path.SteeringGoal(default,Clear),new(5.5,0),"Initial adaptive aim failed");
         path.Next(new(0,.4),Clear);Near(path.SteeringGoal(new(0,.4),Clear),new(2,0),"Off-corridor steering did not fall back");
         path.Next(new(.1,0),Clear);Near(path.SteeringGoal(new(.1,0),Clear),new(2,0),
             "Reentry immediately jumped back to full lookahead");

@@ -52,6 +52,8 @@ internal static class TeleporterChecks
     {
         using var before=Fixture(false);using var popup=Fixture(true,mapVisible:false);using var wrong=Fixture(false,true);
         var profile=Profile(before,popup);profile.Validate(profile.ClientHash,before.Size);
+        ScrollRouteProfileChecks.Run(profile);
+        ScrollPolicy(profile,before,popup);
         var selection=profile.FindSelection(before,default);var confirmation=profile.FindConfirmation(popup,default);
         Require(selection!=null && confirmation!=null && profile.FindConfirmation(before,default)==null && profile.FindSelection(popup,default)==null,
             "stage recognition confused the map marker and generic Move to Location dialog");
@@ -125,6 +127,87 @@ internal static class TeleporterChecks
                 "continuous separately recorded walking legs","no route jump or implied reverse connector","landing tail skips teleport","reversed/off-route/incompatible walking plans rejected"}
         },new JsonSerializerOptions{WriteIndented=true}));
         return Task.CompletedTask;
+    }
+
+    static void ScrollPolicy(TeleporterProfile legacy,Bitmap before,Bitmap popup)
+    {
+        var item=new HotbarSlot("7",SlotKind.Item,901,"Teleport Scroll",0,0,false,0);
+        var bar=new HotbarSnapshot(0,[item]);var scroll=TeleportScrollSlot.Capture(bar);
+        var profile=legacy with{Scroll=scroll};var departure=Departure(profile);
+        var updatedClient=departure with{ClientHash="updated-client"};
+        profile.ValidateForUse(updatedClient.ClientHash,updatedClient.WindowSize);
+        Invalid(()=>profile.ValidateForUse(updatedClient.ClientHash,new(800,600)),"updated client accepted stale window coordinates");
+        Invalid(()=>legacy.ValidateForUse(updatedClient.ClientHash,updatedClient.WindowSize),"old portal capture lost strict client binding");
+        Invalid(()=>profile.ValidateForUse("",updatedClient.WindowSize),"unverified client accepted saved scroll profile");
+        var updatedTransaction=new TeleporterTransaction(profile,updatedClient,0);
+        updatedTransaction.BeforeScroll(updatedClient,bar,1);
+        Invalid(()=>updatedTransaction.ScrollWindowReady(departure,100),"client changed during scroll transaction");
+        foreach(var invalid in new[]{new HotbarSnapshot(10,[item]),new(0,[]),new(0,[item with{Id=902}]),
+            new(0,[item with{Kind=SlotKind.Skill}]),new(0,[item with{Name="Other scroll"}]),
+            new(0,[item with{RemainingCooldown=1}]),new(0,[item with{Locked=true}]),new(0,[item,item])})
+            Invalid(()=>scroll.RequireReady(invalid),"missing/replaced/locked/cooling/ambiguous scroll or wrong page accepted");
+        Invalid(()=>TeleportScrollSlot.Capture(new(0,[item,item with{Key="8"}])),"multiple scroll slots were guessed");
+        Invalid(()=>(scroll with{Key="F8"}).Validate(),"non-slot key accepted");
+        TeleporterTransaction Begin()
+        {
+            var t=new TeleporterTransaction(profile,departure,0);t.BeforeScroll(departure,bar,1);
+            Require(t.ScrollActivationPending&&!t.ScrollWasSent,"scroll attempt counted as successful use");
+            t.CheckScrollAssignment(bar);t.ScrollSent(2);return t;
+        }
+        var waiting=Begin();
+        foreach(long time in new long[]{100,15001,16001})
+            Require(!waiting.ScrollWindowReady(departure,time),"destination admitted before full16-second countdown");
+        Require(waiting.ScrollWindowReady(departure,16002),"old15-second timeout rejected completed scroll countdown");
+        waiting.BeforeSelection(departure,16003);waiting.SelectionSent(departure,16004);
+        waiting.BeforeConfirmation(departure,16005);waiting.ConfirmationSent(16006);
+        Require(waiting.ObserveLanding(Landing(profile,departure),16007)&&waiting.ScrollWasSent,
+            "single acknowledged scroll/destination/OK did not accept its confirmed landing");
+        waiting=Begin();waiting.CheckScrollAssignment(new(0,[])); // The consumed last scroll may disappear after key-down.
+        Require(waiting.ScrollWindowReady(departure,16002),"consumed scroll disappearance interrupted a valid channel");
+        foreach(var changed in new[]{departure with{Focused=false},departure with{Cancelled=true},departure with{Health=default},
+            departure with{Health=new(0,100)},departure with{Zone=9},departure with{Window=(nint)999},
+            departure with{Character=departure.Character! with{Position=departure.Character.Position+new Vec(.51,0)}},
+            departure with{Character=departure.Character! with{Generation=4}}})
+        {var t=Begin();Invalid(()=>t.ScrollWindowReady(changed,100),"interrupted/changed scroll channel kept running");}
+        var early=new TeleporterTransaction(profile,departure,0);
+        Invalid(()=>early.BeforeSelection(departure,1),"destination bypassed scroll activation");
+        early=Begin();Invalid(()=>early.BeforeSelection(departure,16001),"destination bypassed countdown");
+        var duplicate=Begin();Invalid(()=>duplicate.BeforeScroll(departure,bar,100),"a second scroll was authorized");
+        duplicate=Begin();Invalid(()=>duplicate.ScrollSent(100),"a second scroll acknowledgement was accepted");
+        var timed=Begin();Invalid(()=>timed.ScrollWindowReady(departure,26002),"missing destination window retried or waited forever");
+        var reversed=Begin();reversed.ScrollWindowReady(departure,100);Invalid(()=>reversed.ScrollWindowReady(departure,99),"countdown clock rollback accepted");
+        var changedSlot=new TeleporterTransaction(profile,departure,0);changedSlot.BeforeScroll(departure,bar,1);
+        Invalid(()=>changedSlot.CheckScrollAssignment(new(0,[item with{Id=902}])),"slot swap at the input boundary used another item");
+        Require(!changedSlot.ScrollWasSent&&changedSlot.Stage==TeleporterStage.Stopped,"slot-swap failure remained usable");
+        var route=new SavedNavigationRoute(8,new(140,200),0,Enumerable.Range(0,21).Select(i=>new Vec(140-i*2,200)).ToArray(),
+            DateTime.UnixEpoch,"Fixture",7);
+        var journey=TeleporterJourney.Create(route,profile,3);
+        Require(journey.ScrollTravel&&journey.DepartureLeg.Points.Length==1&&
+            journey.NeedsTeleport(departure.Character!.Position,3)&&!journey.NeedsTeleport(new(110,200),3),
+            "scroll still required a portal approach or reused a scroll while already on the landing route");
+        var noWalk=journey.PlanDeparture(new(10.7,10),3);
+        Require(noWalk.Destination==new Vec(10.7,10)&&noWalk.Points.All(p=>p==noWalk.Destination),
+            "first scroll step walked toward a stale activation point before channeling");
+        var walk=TeleporterJourney.PlanLeg(journey.LandingLeg,profile.Landing.Position,3);
+        Require(walk.Points.All(p=>p.X>=100&&p.Y==200)&&walk.Destination==route.Anchor,
+            "scroll gap entered the walking path");
+        Invalid(()=>new TeleporterTransaction(profile with{Scroll=scroll with{ItemId=0}},departure,0),"invalid scroll profile accepted");
+        string file=Path.Combine(Path.GetTempPath(),"scroll-profile-"+Guid.NewGuid().ToString("N")+".json");
+        try
+        {
+            legacy.Save(file);profile.Save(file);
+            var loaded=TeleporterProfile.Load(profile.ClientHash,before.Size,profile.TargetSelection,profile.DestinationSlot,file);
+            Require(loaded?.Scroll==scroll&&loaded.FindSelection(before,default)!=null&&loaded.FindConfirmation(popup,default)!=null,
+                "scroll identity or calibrated destination was lost on save/load");
+        }
+        finally {if(File.Exists(file))File.Delete(file);}
+        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"teleport-scroll-checks.json"),JsonSerializer.Serialize(new
+        {Passed=true,HardwareInputEmitted=false,ScrollConsumed=false,Checks=new[]{"exact hotbar item/page/key and readiness",
+            "input-boundary slot swap stopped","one activation only","consumed slot may disappear after successful down",
+            "full16-second countdown exceeds legacy15-second timeout","bounded extra10-second window wait",
+            "cancellation/focus/health/body/map/movement guards","saved scroll reused across verified client versions with strict in-transaction identity and window guards","no early selection or unconfirmed landing",
+            "no portal approach or walked teleport gap","already on landing route skips scroll","scroll profile recognition/storage round trip"}},
+            new JsonSerializerOptions{WriteIndented=true}));
     }
 
     static void Storage(TeleporterProfile profile,Bitmap before,Bitmap popup)

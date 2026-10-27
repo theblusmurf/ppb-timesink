@@ -2,7 +2,7 @@ namespace PoteHunter;
 
 // Walking legs retain the ordinary path schema. The portal jump is never a
 // waypoint, a collision-tested segment, or an implied reverse connection.
-internal sealed record TeleporterJourney(SavedNavigationRoute DepartureLeg,SavedNavigationRoute LandingLeg)
+internal sealed record TeleporterJourney(SavedNavigationRoute DepartureLeg,SavedNavigationRoute LandingLeg,bool ScrollTravel=false)
 {
     static IEnumerable<Vec> Connector(Vec from,Vec to)
     {
@@ -29,6 +29,15 @@ internal sealed record TeleporterJourney(SavedNavigationRoute DepartureLeg,Saved
             throw new RouteUnavailableException("The teleporter needs a compatible recorded walking route.");
         var source=RecoveryTravel.Nearest(route,profile.Departure.Position);
         var landing=RecoveryTravel.Nearest(route,profile.Landing.Position);
+        if(profile.Scroll!=null)
+        {
+            if(landing.Distance>Math.Min(corridor,TeleporterProfile.LandingRadius))
+                throw new RouteUnavailableException("Record the onward walking route from the captured scroll landing to the farming anchor.");
+            var tail=Clean(route.Points.Take(landing.Index).Concat(new[]{landing.Point}).Concat(Connector(landing.Point,profile.Landing.Position)));
+            var arrived=route with{Points=tail};
+            if(!ValidLeg(arrived))throw new RouteUnavailableException("The scroll landing route is incomplete. Record a continuous onward walking route.");
+            return new(route with{Anchor=profile.Departure.Position,Height=profile.Departure.Height,Points=[profile.Departure.Position]},arrived,true);
+        }
         if(source.Distance>Math.Min(corridor,TeleporterProfile.SourceRadius)||landing.Distance>Math.Min(corridor,TeleporterProfile.LandingRadius)||
             Along(route,source)<=Along(route,landing)+10)
             throw new RouteUnavailableException("Record a route containing the departure before the landing, then the anchor. Both portal ends must be close to that route.");
@@ -41,6 +50,14 @@ internal sealed record TeleporterJourney(SavedNavigationRoute DepartureLeg,Saved
     }
     static bool ValidLeg(SavedNavigationRoute route)=>RecoveryTravel.Recorded(route)||
         route.Points is {Length:1} && route.Points[0].Finite && (route.Points[0]-route.Anchor).Length<=.01;
+    public SavedTravel PlanDeparture(Vec current,double corridor)
+    {
+        if(!current.Finite || !double.IsFinite(corridor) || corridor<=0)
+            throw new RouteUnavailableException("Scroll departure position or route corridor is unavailable.");
+        // A scroll is the first action, never a request to walk back toward a
+        // stale origin. The caller releases input and verifies settling next.
+        return ScrollTravel ? new([current],current) : PlanLeg(DepartureLeg,current,corridor);
+    }
     public static SavedTravel PlanLeg(SavedNavigationRoute route,Vec current,double corridor)
     {
         if(route.Points.Length!=1)return RecoveryTravel.Plan([route],route,current,false,corridor);
@@ -49,6 +66,7 @@ internal sealed record TeleporterJourney(SavedNavigationRoute DepartureLeg,Saved
         return new(Clean(Connector(current,route.Anchor)),route.Anchor);
     }
     public bool NeedsTeleport(Vec current,double corridor)=>
+        ScrollTravel ? RecoveryTravel.Nearest(LandingLeg,current).Distance>corridor :
         RecoveryTravel.Nearest(DepartureLeg,current).Distance<=corridor &&
         RecoveryTravel.Nearest(DepartureLeg,current).Distance<=RecoveryTravel.Nearest(LandingLeg,current).Distance;
 

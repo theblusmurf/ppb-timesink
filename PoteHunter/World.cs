@@ -213,7 +213,7 @@ public sealed partial class World : IDisposable
                 "8B 45 A4 8B 44 85 B8 C1 E0 04 05 45 02 00 00 03 F8 57 E8 ?? ?? ?? ?? 83 C4 04 83 F8 5A 0F 8E ?? ?? ?? ?? 33 C9 33 F6 8A 04 37",
                 "8B 81 40 02 00 00 3B 82 64 01 00 00 0F 94 C0 C3"];
             PartySupported=partyPatterns.All(pattern=> {
-                if(profile.Layout==SceneLayout.September30 || profile.Layout==SceneLayout.October12 || profile.Layout==SceneLayout.October18)
+                if(profile.Layout.SlotKind==0x20)
                     pattern=pattern.Replace("8B 45 A4 8B 44 85 B8 C1 E0 04","8B C6 C1 E0 04",StringComparison.Ordinal)
                         .Replace("33 C9 33 F6 8A 04 37","33 C9 33 F6 90 8A 04 37",StringComparison.Ordinal);
                 var evidence=ProfileDiscovery.OptionalEvidence(PoteMemoryProbe.Program.ClientPath,"Party roster",pattern);

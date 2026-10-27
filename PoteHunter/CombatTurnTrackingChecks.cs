@@ -9,6 +9,7 @@ internal static class CombatTurnTrackingChecks
     internal static async Task Run()
     {
         CheckSkillFacing();
+        CheckReadyAngleSettling();
         CheckDeferredRecoveryFacing();
         Require(CombatTurnTracking.Allowed(true,true,true,false,false,false,false,false),"ordinary melee tracking blocked");
         for(int blocked=0;blocked<8;blocked++)
@@ -85,11 +86,38 @@ internal static class CombatTurnTrackingChecks
             Checks=new[]{"16ms cooperative combat waits","original wait deadlines","slow reads without catch-up","cancellation before/during waits",
                 "target and exclusive-activity guards","fine one-degree settling with partial delayed feedback and both sensitivity signs",
                 "sub-pixel accumulation","speed cap and fast-poll bound","long pause burst bound",
+                "ready-angle jitter emits no correction","just-outside angles converge through unchanged skill gate with delayed feedback",
                 "fresh offensive body-facing confirmation","observed 26.76-degree retarget error rejected","finite usable direction required",
                 "refreshed moving target and player direction","two-degree inclusive tolerance without jitter starvation",
                 "priority self-heal and ranged-facing exemptions","standing deferred recovery retains fine aim",
                 "active rest and unknown/transitioning posture exclude fine aim","coarse-safe angle reaches unchanged offensive gate"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static void CheckReadyAngleSettling()
+    {
+        foreach(double degrees in new[]{-2.0,-1.5,-1.0,0,1.0,1.5,2.0})
+            Require(!CombatTurnTracking.CorrectionRequired(degrees*Math.PI/180),
+                "skill-ready jitter still requested a fine correction");
+        foreach(double sensitivity in new[]{-.004,.004,-.0007,.0007})
+        foreach(double goal in new[]{-.035001,.035001,-.052,.052,-2.09,2.09})
+        foreach(int latency in new[]{0,32,80,160})
+        {
+            var steering=new SmoothSteering();var rate=new TurnRateBudget();var pending=new PriorityQueue<double,long>();
+            double observed=0;bool settled=false;int emittedAfterReady=0;
+            for(int now=0;now<9000;now+=16)
+            {
+                while(pending.TryPeek(out double part,out long at)&&at<=now){pending.Dequeue();observed+=part;}
+                double error=goal-observed;
+                int pixels=CombatTurnTracking.CorrectionRequired(error) ?
+                    steering.Next(error,-observed,sensitivity,false,now,rate,180,CombatTurnTracking.TrackingDeadZone) : 0;
+                if(Math.Abs(error)<=CombatTurnTracking.SkillFacingTolerance && pixels!=0)emittedAfterReady++;
+                if(pixels!=0)for(int part=0;part<4;part++)pending.Enqueue(pixels*sensitivity/4,now+latency+part*16);
+                if(!CombatTurnTracking.CorrectionRequired(error)&&pending.Count==0){settled=true;break;}
+            }
+            Require(settled&&emittedAfterReady==0,"tracking stalled outside the offensive gate or kept turning after ready");
+            Require(Math.Abs(goal-observed)<=CombatTurnTracking.SkillFacingTolerance,"tracking relaxed offensive facing tolerance");
+        }
     }
 
     static void CheckDeferredRecoveryFacing()

@@ -1,3 +1,62 @@
+## Release1.159
+
+Keep saved Teleport Scroll profiles available after a game client update when the same character, map zone, and window size are present. Existing profile and route-assignment files remain unchanged; select the old profile from the dropdown or continue using its assigned route without recapturing it.
+
+- Retain the saved client hash as capture provenance. Verify the current game client, scroll slot/item, destination marker, confirmation dialog, landing, and stable process/window identity at runtime. If the updated UI no longer matches the captured controls, stop instead of clicking an unrecognized control.
+- Keep older portal captures tied to their original client build. A changed window size or character/map context still requires a new suitable capture.
+
+## Release1.158
+
+Extend the planned saved-route steering lookahead from 1.75-3.5 to 1.75-5.5 game units on verified clear travel. The existing 250 ms speed horizon and 4-unit curvature preview still shorten the aim when appropriate.
+
+- Keep the observed waypoint-crossing history bound at 3.5 units and the prior 3.5-unit base cap at required rolling corners. These limits preserve physical checkpoint capture and a safe partial corner aim while straight segments can use the longer horizon.
+- Preserve recorded-route corridor, original-prefix and direct-chord clearance, sharp-corner and final-anchor capture, local scan limits, and reentry behavior. Synthetic route checks cover the new range and those guards. No saved routes or settings are changed.
+
+## Release1.157
+
+Restore connection to the October 26 client and recognize bounded, consistently shifted scene fields without adding a catalog for each such patch.
+
+- If the complete historical catalogs do not match, derive the modern scene members from independent instruction consumers. Scene dialog, mode, hotbar-page and ground-list members must have one aligned shift within 0x800 bytes; hotbar-array and selected-slot members must independently agree. Retain all required class, root, stride, position, health and slot-layout checks. Identical handlers for unrelated fields are disambiguated only by an already established independent member, never by first match or live plausibility.
+- Pin derived member operands in the code evidence and recheck them against the loaded process before enabling control. Preserve file/process/window identity, coherent live character/HP/table/hotbar/ground-list validation and all input protections. Consistent repair-state shifts also retain the complete equipment/repair consumer proofs and loaded-code checks. Unknown effect arrays stay unavailable.
+- Synthetic checks exercise independent scene/slot shifts, each conflicting field, missing or ambiguous proofs, bounds/alignment failures and altered loaded operands. Similar compatible updates can now connect automatically; different instruction or object layouts still stop safely and require a verified compatibility fix. No universal support for arbitrary future clients is claimed.
+- Built, checked and packaged locally with cached dependencies. Runtime observations and local profiles are private; no GitHub Actions, source push or upload is part of this update.
+
+## Release1.156
+
+Reduce movement cleanup delays after loot during fixed melee farming.
+
+- Once a Mimic/Tribal/Pulkhan/Tower farming return is physically settled at the saved point, keep the current heading and let ordinary protected target selection aim the next fight. Do not spend several seconds restoring an idle heading or retrying that optional turn. Existing mandatory facing obligations, recovery/priority returns, ranged/group/healer/roaming modes retain their restoration behavior.
+- Short arrival corrections aim to the same 0.08-radian limit already required immediately before a forward pulse, avoiding offensive-skill precision for small return steps. Fresh post-aim position/heading, complete movement clearance, pulse timing/settling, exact endpoint and all focus/health/identity guards remain enforced. The 0.035-radian offensive-facing gate and turn-speed cap are unchanged.
+- Local synthetic checks cover the recorded loot-return delay, endpoint drift, mandatory-mode retention, cancellation/context loss, rotated arrival geometry, unchanged offensive admission and blocked movement. No live hunt settings, game input or terrain/reach limits were changed during validation.
+
+## Release1.155
+
+Reuse named Teleport Scroll profiles across farming routes without repeating destination calibration.
+
+- Navigation includes a saved-profile selector, Use for this route, Rename profile and New scroll profile. Each target/route slot remembers its assignment. The scroll-first toggle remains available.
+- A shared profile stores its scroll identity/key/page, destination marker, OK and verified landing once. Assignments reference that profile; changing one route leaves other assignments intact. Renaming does not change the destination or captures. Existing scroll calibrations appear automatically and can be reused without another scroll use.
+- New destination captures can be saved before an onward walking route exists. Assignment still requires a compatible recorded landing-to-farm path, same character/map, client build and window size. Existing countdown, one-use, focus, identity, health and landing checks remain enforced.
+- Keep existing calibration files untouched. Save the private shared library atomically, reject corrupt/stale assignments without silently choosing another profile, and exclude the library and its backups from build packages and installer replacement.
+- Built and validated locally with synthetic sharing, persistence, scope-isolation, corruption and native UI checks. No gameplay input, scroll consumption or uploads during testing.
+
+## Release1.154
+
+Use Teleport Scroll for same-map farm routing instead of walking to a portal.
+
+- Navigation > Teleport Scroll route captures the exact item and hotbar slot, destination marker, OK confirmation and living landing. Record only the onward walking route from that landing to the farm anchor. Existing portal captures are retained and require scroll setup before reuse; the saved route toggle remains off by default.
+- Activate the captured ready scroll once from a stopped position. Release movement, attacks and pickup throughout the full 16-second countdown, then allow a bounded ten-second wait for the recognized destination window. Select the captured destination and OK once each, verify the settled landing, then follow the recorded path. Already on that path skips the scroll.
+- Bind the active hotbar page, item identity, client/window/character/map, living HP and departure position. Missing/replaced/cooling scrolls, interrupted channels, changed context, wrong destinations and timeouts stop travel without consuming another scroll. Startup and existing recovery can select the explicitly configured scroll destination without requiring the departure to be on its walking path.
+- Built and checked locally with synthetic countdown, activation, recognition, route, storage and interruption tests. No scroll was consumed or gameplay input emitted during validation. Live scroll timing and travel still need verification after setup.
+
+## Release1.153
+
+Reduce stationary hunt delays between loot, saved facing and the next selected enemy.
+
+- Give an approved selected enemy already within stationary swing range priority over optional anchor loot and chest housekeeping. Keep the saved anchor, hunt boundary, living HP, name/color filters and player protections.
+- After a settled loot return, allow one exact approved nearby target to enter ordinary combat before the saved-facing turn. Revalidate after waits; reject replacement identities, unknown/dead HP, protection changes and targets outside reach. Preserve the absolute facing deadline and restore facing before another fresh reservation. Startup, revival, repair and Gamekeeper returns retain their existing rules.
+- Stop cooperative combat corrections once the fresh heading meets the existing two-degree skill-facing tolerance, instead of continuing toward one degree. Keep calibrated smoothing, delayed-feedback accounting, the configured turn-speed cap and fresh facing confirmation before offensive skills.
+- Built, checked and packaged locally. No GitHub actions or uploads. Gameplay effectiveness still needs observation in a subsequent hunt.
+
 ## Release1.152
 
 Fix named targets being silently excluded when all difficulty colors are unchecked.

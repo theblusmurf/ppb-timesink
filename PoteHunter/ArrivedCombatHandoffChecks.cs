@@ -12,6 +12,7 @@ internal static class ArrivedCombatHandoffChecks
 
     internal static async Task Run()
     {
+        await CheckFreshLootHandoff();
         var low=Mob(0x80001755,100,new(2,0));var high=Mob(0x80011755,200,new(2.5,0));
         var fresh=Mob(0x80021755,300,new(1,0));
         var health=new Dictionary<uint,Health>{{low.Id,new(40,100)},{high.Id,new(80,100)},{fresh.Id,new(100,100)}};
@@ -125,7 +126,9 @@ internal static class ArrivedCombatHandoffChecks
         File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"arrived-combat-handoff-checks.json"),JsonSerializer.Serialize(new
         {
             Passed=true,HardwareInputEmitted=false,
-            Checks=new[]{"settled final correction hands owned pack back before saved turn","movement releases attack before handoff",
+            Checks=new[]{"selected in-range combat precedes optional anchor loot","post-loot settled exact fresh reservation precedes saved turn",
+                "reservation revalidates identity/HP/range/protection and cannot chain spawns or renew lease",
+                "settled final correction hands owned pack back before saved turn","movement releases attack before handoff",
                 "fresh highest-HP living owned target only","approval cannot hide all-scene identity ambiguity",
                 "incomplete duplicate leaves ordinary queue but arrival selects another owned identity",
                 "last owned death during heal/mana excludes fresh spawn and rest","unknown/dead/protected/out-of-range/unsettled/posture/context rejected",
@@ -134,5 +137,69 @@ internal static class ArrivedCombatHandoffChecks
                 "completed repair epoch transfers without renewing allowance","Gamekeeper does not enter expired ordinary-target loop",
                 "clock rollback and changed anchor/heading/death episode excluded"}
         },new JsonSerializerOptions{WriteIndented=true}));
+    }
+
+    static async Task CheckFreshLootHandoff()
+    {
+        var selected=Mob(0x80001755,100,new(2,0));
+        var other=Mob(0x80011755,200,new(1,0)) with{Name="Lv. 1 Tribal"};
+        var hp=new Dictionary<uint,Health>{{selected.Id,new(100,100)},{other.Id,new(100,100)}};
+        bool Approved(Entity e)=>Targeting.Eligible(e,hp.GetValueOrDefault(e.Id),Threat.Unknown,"Pulkhan",[],false);
+        Entity? Pick(IEnumerable<Entity> scene,Vec position=default,double radius=8)=>
+            ArrivedCombatHandoff.ChooseFresh(scene,hp,position,default,2.5,radius,Approved);
+        // The nearer unrelated mob must not win this early housekeeping gate.
+        Require(Pick([other,selected])==selected,"selected nearby combat lost to housekeeping or an unrelated mob");
+        var farther=Mob(0x80021755,300,new(2.4,0));hp[farther.Id]=new(200,200);
+        Require(Pick([farther,selected])==selected,"fresh selection borrowed highest-HP owned-pack ordering");
+        Require(Pick([selected],new(.50001,0))==null&&Pick([selected],radius:1.99)==null,
+            "early combat expanded arrival tolerance or hunt boundary");
+        foreach(var unavailable in new[]{default(Health),new Health(0,100)})
+        {hp[selected.Id]=unavailable;Require(Pick([selected])==null,"unknown/dead HP entered early combat");}
+        hp[selected.Id]=new(100,100);
+        Require(Pick([selected with{Position=new(2.50001,0)}])==null,"early combat began an out-of-range chase");
+        var replacement=selected with{Generation=2,Address=101};
+        Require(Pick([selected,replacement with{Position=new(double.NaN,0)}])==null,
+            "approval filtering hid an ambiguous fresh identity");
+        Require(ArrivedCombatHandoff.ChooseFresh([selected],hp,default,default,2.5,8,_=>false)==null,
+            "protected target entered early combat");
+
+        var handoff=new ArrivedCombatHandoff();long now=0;int savedTurns=0;bool attackHeld=false,walking=true;
+        Task Delay(int ms,CancellationToken ct){ct.ThrowIfCancellationRequested();now+=ms;return Task.CompletedTask;}
+        var sample=new StationaryReturnDefense.Observation(default,default,new(75,100),selected,hp[selected.Id],2.5,true,true);
+        Require(!handoff.TryDeferFresh(sample with{ContextVerified=false},true,RestPosture.Standing,1,7,now)&&!handoff.Pending,
+            "fresh reservation bypassed return context");
+        bool arrived=await AnchorArrival.ReturnAsync(()=>default,default,.5,_=>throw new Exception("unexpected movement"),
+            ()=>walking=false,async ct=>
+            {
+                await Delay(120,ct);
+                Require(!walking&&!attackHeld,"fresh combat retained travel input");
+                Require(handoff.TryDeferFresh(sample,true,RestPosture.Standing,1,7,now),"settled fresh target did not defer optional facing");
+            },Delay,()=>now,default);
+        Entity? Pending(IEnumerable<Entity> scene,IEnumerable<Entity>? owned=null,Func<Entity,bool>? guard=null)=>
+            handoff.ChoosePending(scene,owned??[],hp,default,2.5,guard??(_=>true),Approved);
+        Require(arrived&&savedTurns==0&&Pending([selected,other])==selected,
+            "post-loot arrival waited for a saved turn before eligible combat");
+        var keeper=Mob(0x80001752,400,new(2,0)) with{Model="MON_SnowGun2.GCMDS"};
+        Require(Targeting.IsGamekeeper(keeper)&&handoff.IsFreshReservation(selected)&&!handoff.IsFreshReservation(keeper)&&
+            !handoff.IsFreshReservation(farther)&&!handoff.IsFreshReservation(replacement),
+            "first-attack reservation guard captured a priority target, other owned target, or replacement");
+        Require(Pending([selected,farther],[farther])==farther,"fresh reservation displaced existing owned combat");
+        Require(Pending([replacement])==null&&Pending([selected,replacement])==null,
+            "same-ID replacement inherited the reservation");
+        Require(Pending([selected],guard:_=>false)==null,"reserved target bypassed fresh protection");
+        Require(Pending([selected with{Position=new(3,0)}])==null,"reserved target left swing range");
+        hp[selected.Id]=default;Require(Pending([selected])==null,"awaited observation reused old readable HP");
+        hp[selected.Id]=new(0,100);
+        Require(Pending([selected,other])==null,"last reserved death chained a different spawn");
+        Require(!handoff.TryDeferFresh(sample with{Target=other,TargetHealth=hp[other.Id]},true,RestPosture.Standing,1,7,now+100),
+            "fresh target renewed an existing lease");
+        hp[selected.Id]=new(100,100);
+        Require(handoff.Expired(now+ArrivedCombatHandoff.MaximumDeferralMilliseconds),"fresh handoff renewed the absolute facing budget");
+        // The caller now gives actual saved facing a turn before another fresh
+        // reservation, just as for an exhausted owned pack.
+        await FacingRestore.RunAsync(_=>{savedTurns++;return Task.FromResult(true);},()=>{},()=>{},Delay,()=>now,
+            ()=>new TurnUnresponsiveException(default,new(0,-1)),default);
+        handoff.Reset();
+        Require(savedTurns==1&&!handoff.Pending&&Pending([selected])==null,"completed facing retained a stale reservation");
     }
 }

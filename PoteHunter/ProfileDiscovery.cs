@@ -59,6 +59,11 @@ public static partial class ProfileDiscovery
             catch(InvalidOperationException ex) { failures.Add(catalog.Item3+": "+ex.Message); }
         }
         Require(matches.Count<=1,"multiple incompatible layout catalogs matched");
+        if(matches.Count==0)
+        {
+            try { matches.Add(DiscoverShiftedScene(bytes)); }
+            catch(InvalidOperationException ex) { failures.Add("verified scene shift: "+ex.Message); }
+        }
         if(matches.Count==0) throw Failure("no verified layout catalog matched ("+string.Join("; ",failures)+")");
         return matches[0];
     }
@@ -120,7 +125,7 @@ public static partial class ProfileDiscovery
     {
         // The October 18 client changed its effect display implementation.
         // Keep this optional observer unavailable until its arrays are proved.
-        if(layout==SceneLayout.October18)return [];
+        if(layout?.Effects==0)return [];
         var image=new PeImage(File.ReadAllBytes(path));
         var rules=new[]{
             new Rule("Effect scene root","A1 ?? ?? ?? ?? 33 C9 8B 3D ?? ?? ?? ?? 89 85 C0 FC FF FF 89 8D BC FC FF FF 8B 80 "+
@@ -382,6 +387,7 @@ public static partial class ProfileDiscovery
             if(resolved.Profile.Layout!=catalog.Item2 || resolved.Profile.Scene!=roots["Scene"] ||
                 resolved.Profile.LocalActor!=roots["LocalActor"] || !resolved.Automatic)
                 throw new Exception("Complete catalog did not select its verified layout and captured roots.");
+            if(catalog.Item2==SceneLayout.October18) CheckShiftedSceneFixture(fixture,locations,roots);
             void Reject(byte[] corrupt)
             {
                 bool rejected=false;try { ResolveForConnection(corrupt); }catch(InvalidOperationException){rejected=true;}

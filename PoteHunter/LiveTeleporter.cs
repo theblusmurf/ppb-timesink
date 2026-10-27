@@ -80,6 +80,37 @@ internal sealed class LiveTeleporter(World world,TeleporterProfile profile,Telep
     }
     public async Task<Entity> Run()
     {
+        var previousPickup=Input.PickupHoldProvider;Input.PickupHoldProvider=null;Input.Release();
+        try
+        {
+            if(profile.Scroll is {} scroll)
+            {
+                // A stale destination/OK window must not authorize a new
+                // consumable. Setup and every runtime click remain separate.
+                using(var image=RepairScreen.Capture(world))
+                    if(profile.Select.Matches(image,false,token)||profile.Confirm.Matches(image,false,token))
+                        throw new InvalidOperationException("Close the existing destination/confirmation window before starting scroll travel.");
+                scroll.RequireReady(world.Hotbar());
+                transaction.BeforeScroll(Observe(world,token),world.Hotbar(),Environment.TickCount64);
+                // Mark the attempt before input; any partial send aborts this
+                // invocation. A failed/interrupted channel is never retried.
+                try
+                {
+                    Input.Hold((Keys)scroll.Key[0],true,token);
+                    transaction.ScrollSent(Environment.TickCount64); // Acknowledge successful down before yielding.
+                    await Input.Delay(80,token);
+                }
+                finally {Input.Hold((Keys)scroll.Key[0],false,default);Input.Release();}
+                TraceLog.Record("Teleport Scroll activated",new{scroll.Key,scroll.PageBase,profile.Destination,CountdownSeconds=16});
+                while(!transaction.ScrollWindowReady(Observe(world,token),Environment.TickCount64))
+                {Input.Release();await Input.Delay(100,token);}
+            }
+            return await RunJourney();
+        }
+        finally {Input.Release();Input.PickupHoldProvider=previousPickup;}
+    }
+    async Task<Entity> RunJourney()
+    {
         await Click(await WaitControl(false),false);
         await Click(await WaitControl(true),true);
         Entity? accepted=null;

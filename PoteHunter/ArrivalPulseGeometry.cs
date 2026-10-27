@@ -2,6 +2,13 @@ namespace PoteHunter;
 
 internal static class ArrivalPulseGeometry
 {
+    // This was already the final pre-pulse admission gate. Use it for aiming
+    // too; a short movement step need not satisfy an offensive skill's angle.
+    internal const double FacingTolerance=.08;
+    internal static bool FacingReady(double heading,Vec delta)=>double.IsFinite(heading) && delta.Finite &&
+        double.IsFinite(delta.Length) && delta.Length>=.01 &&
+        Math.Abs(Movement.Angle(Movement.FromClientHeading(heading),delta))<=FacingTolerance;
+
     internal static int FrameDuration(int milliseconds)
     {
         if(milliseconds is <16 or >60)throw new ArgumentOutOfRangeException(nameof(milliseconds));

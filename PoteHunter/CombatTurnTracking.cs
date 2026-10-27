@@ -5,6 +5,10 @@ namespace PoteHunter;
 internal static class CombatTurnTracking
 {
     internal const double SkillFacingTolerance=.035;
+    // Aim just inside the permission threshold, then stop as soon as the
+    // fresh observation is ready. Do not keep chasing a one-degree heading.
+    internal const double TrackingDeadZone=.030;
+    internal static bool CorrectionRequired(double error)=>double.IsFinite(error)&&Math.Abs(error)>SkillFacingTolerance;
 
     internal static bool SkillFacingRequired(bool bodyMode,bool prioritySelfHeal)=>bodyMode&&!prioritySelfHeal;
 
@@ -70,16 +74,15 @@ public sealed partial class Movement
         double heading=world.PlayerHeading();
         Forward=FromClientHeading(heading);
         double angle=delta.Length<.01?0:Angle(Forward,delta);
-        // Start outside two degrees, settle inside one. This avoids chatter
-        // while following a target through the old ten-degree attack dead band.
-        if(Math.Abs(angle)>.035)fineFacing=true;
-        else if(Math.Abs(angle)<=.018){fineFacing=false;smoothSteering.Reset();turnResponse.Reset();}
-        if(!fineFacing)return;
+        if(!double.IsFinite(angle))throw new InvalidOperationException("Combat facing is unavailable.");
+        bool needsCorrection=CombatTurnTracking.CorrectionRequired(angle);
+        fineFacing=needsCorrection;
+        if(!fineFacing){smoothSteering.Reset();turnResponse.Reset();return;}
         long now=Environment.TickCount64;
-        int pixels=smoothSteering.Next(angle,heading,RadiansPerPixel,false,now,turnRateBudget,TurnSpeedDegreesPerSecond,.018);
+        int pixels=smoothSteering.Next(angle,heading,RadiansPerPixel,false,now,turnRateBudget,TurnSpeedDegreesPerSecond,CombatTurnTracking.TrackingDeadZone);
         Vec position=world.PlayerPosition();
         if(pixels!=0)Input.Turn(pixels,token); // Existing focus/identity/health/preflight guards run here.
-        ObserveTurning(position,heading,pixels,now,owner,angle,.018,token);
+        ObserveTurning(position,heading,pixels,now,owner,angle,CombatTurnTracking.TrackingDeadZone,token);
         if(pixels!=0&&now-lastCombatTurnTrace>=100)
         {
             lastCombatTurnTrace=now;

@@ -9,6 +9,7 @@ internal static class MovementSmoothingChecks
 
     public static async Task Run()
     {
+        await LootReturnFacingChecks.Run();
         foreach(double sensitivity in new[]{-.004,.004,-.0007,.0007})
         foreach(double initial in new[]{-.1,.1,-.5,.5,-Math.PI,Math.PI})
         foreach(bool walking in new[]{false,true})

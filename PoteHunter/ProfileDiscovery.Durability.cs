@@ -45,9 +45,6 @@ public static partial class ProfileDiscovery
         ("Equipped location getter", 22, -0xc0),
         ("Equipped location assignment", 10, -0x100)
     ];
-    static readonly Rule october18RepairScene=new("Repair scene",
-        "8B 3D ?? ?? ?? ?? 33 DB 39 9F 2C 38 00 00 7E ?? C6 45 FF 01 39 9F 28 38 00 00 7F ?? 88 5D FF",2);
-
     internal static DurabilityCodeLayout? DurabilityEvidence(string path, uint sceneRva)
         => DurabilityEvidence(File.ReadAllBytes(path), sceneRva);
 
@@ -60,9 +57,15 @@ public static partial class ProfileDiscovery
             var rule=original;
             if(rule.Name=="Repair scene")
             {
-                var old=image.Find(new Pattern(rule.Pattern));var updated=image.Find(new Pattern(october18RepairScene.Pattern));
-                if(old.Count+updated.Count!=1)return null;
-                if(updated.Count==1)rule=october18RepairScene;
+                // Both price-state fields must remain adjacent and shift
+                // together; all independent equipment consumers below remain
+                // mandatory. Freeze the derived operands for live validation.
+                var masked=MaskSceneMembers(rule,[10,22]);
+                var candidates=image.Find(new Pattern(masked.Pattern));
+                if(candidates.Count!=1)return null;
+                uint first=image.U32Rva(candidates[0]+10),second=image.U32Rva(candidates[0]+22);
+                if(first<0x3000 || first>0x4000 || (first&3)!=0 || second+4!=first)return null;
+                rule=FreezeMembers(rule,image,candidates[0],[10,22]);
             }
             var found = image.Find(new Pattern(rule.Pattern));
             if (found.Count != 1) return null;
@@ -185,6 +188,19 @@ public static partial class ProfileDiscovery
         BitConverter.TryWriteBytes(revised.AsSpan(at["Repair scene"]+10,4),0x382cu);
         BitConverter.TryWriteBytes(revised.AsSpan(at["Repair scene"]+22,4),0x3828u);
         if(DurabilityEvidence(revised,0xa100)==null)throw new Exception("Complete October 18 repair proof was rejected.");
+        foreach(uint member in new[]{0x38acu,0x392cu})
+        {
+            var shifted=(byte[])fixture.Clone();
+            BitConverter.TryWriteBytes(shifted.AsSpan(at["Repair scene"]+10,4),member);
+            BitConverter.TryWriteBytes(shifted.AsSpan(at["Repair scene"]+22,4),member-4);
+            var proof=DurabilityEvidence(shifted,0xa100)??throw new Exception("Coherent repair-state relocation rejected");
+            ValidateLoadedDurability(proof,0x400000,(rva,count)=>shifted.AsSpan((int)rva,count).ToArray());
+            shifted[at["Repair scene"]+10]^=4;
+            bool rejected=false;
+            try {ValidateLoadedDurability(proof,0x400000,(rva,count)=>shifted.AsSpan((int)rva,count).ToArray());}
+            catch(InvalidOperationException){rejected=true;}
+            if(!rejected)throw new Exception("Loaded repair-state relocation was not pinned");
+        }
         revised[at["Repair scene"]+10]^=1;
         if(DurabilityEvidence(revised,0xa100)!=null)throw new Exception("A mixed October 18 repair consumer was accepted.");
         void Reject(Action<byte[]> mutate, string label)

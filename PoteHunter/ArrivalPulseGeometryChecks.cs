@@ -9,6 +9,25 @@ internal static class ArrivalPulseGeometryChecks
 
     internal static async Task Run()
     {
+        foreach(double heading in new[]{0,1.2,-3.1,6.2})
+        {
+            Vec facing=Movement.FromClientHeading(heading);
+            Vec Rotate(double angle)=>new(facing.X*Math.Cos(angle)-facing.Y*Math.Sin(angle),
+                facing.X*Math.Sin(angle)+facing.Y*Math.Cos(angle));
+            foreach(double error in new[]{-.079,-.06,.06,.079})
+            {
+                Vec arrivalDelta=Rotate(error)*.805;
+                Require(ArrivalPulseGeometry.FacingReady(heading,arrivalDelta) &&
+                    !CombatTurnTracking.FacingReady(heading,arrivalDelta,out _),
+                    "short return aiming still pursues combat precision or widens offensive skill admission");
+                Require(!ArrivalPulseGeometry.PathClear(default,facing,.4,(_,_)=>false),
+                    "arrival heading bypassed the complete forward clearance guard");
+            }
+            Require(!ArrivalPulseGeometry.FacingReady(heading,Rotate(.081)) &&
+                !ArrivalPulseGeometry.FacingReady(double.NaN,facing) &&
+                !ArrivalPulseGeometry.FacingReady(heading,new(double.NaN,0)),
+                "arrival pulse admitted an unverified or excessive angle");
+        }
         // The recorded .100 goal settled .273 units away after a correctly
         // timed 16.710ms hold. A near wall/leash must reserve physical motion,
         // rather than accepting only the smaller requested goal segment.
@@ -293,6 +312,8 @@ internal static class ArrivalPulseGeometryChecks
             FixedObservationWindowMilliseconds=ArrivalPulseSettling.MaximumMilliseconds,
             StableReported328To375MillisecondsAccepted=true,PostReadSafetyAndCancellationRechecked=true,
             InitialReadAndGuardConsumeOriginalBudget=true,GuardTimeDoesNotFabricateQuiet=true,
-            SharedUrgentRunnerRetainsOriginalDurationAndCorrection=true,NoSpeculativeCollisionObstacle=true}));
+            SharedUrgentRunnerRetainsOriginalDurationAndCorrection=true,NoSpeculativeCollisionObstacle=true,
+            ArrivalAimMatchesExistingPulseGate=true,OffensiveSkillFacingUnchanged=true,
+            ArrivalFacingToleranceRadians=ArrivalPulseGeometry.FacingTolerance}));
     }
 }

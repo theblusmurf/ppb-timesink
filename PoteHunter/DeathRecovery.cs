@@ -97,8 +97,14 @@ internal static class RecoveryRouting
 
 internal sealed class RecoveryPath
 {
-    internal const double SteeringLookaheadUnits=3.5;
+    internal const double SteeringLookaheadUnits=5.5;
     internal const double MinimumSteeringLookaheadUnits=1.75;
+    // Observed checkpoint passage keeps its original local-history bound;
+    // a longer steering aim must not authorize a longer waypoint skip.
+    internal const double MaximumObservedPassageBeforeUnits=3.5;
+    // The older cap preserves a proved partial carrot at mandatory rolling
+    // corners when the next stored vertex is farther than the safe chord.
+    internal const double MaximumRollingCornerBaseLookaheadUnits=3.5;
     internal const double SteeringCorridorUnits=.35;
     internal const double CurveHorizonUnits=4;
     internal const int SpeedLookaheadMilliseconds=250;
@@ -262,7 +268,7 @@ internal sealed class RecoveryPath
         // Bounded local observations cannot identify a remote connector, a
         // return leg on a loop, a sideways crossing, or a backwards step as
         // forward route progress. The next checkpoint must still lie ahead.
-        if(beforeAlong>0 || beforeAlong<-SteeringLookaheadUnits || afterAlong<=0 || afterAlong>2.5 ||
+        if(beforeAlong>0 || beforeAlong<-MaximumObservedPassageBeforeUnits || afterAlong<=0 || afterAlong>2.5 ||
             (points[index+1]-current).Length>4 || Dot(points[index+1]-current,direction)<=0 ||
             (before-checkpoint-direction*beforeAlong).Length>SteeringCorridorUnits ||
             (current-checkpoint-direction*afterAlong).Length>SteeringCorridorUnits)return false;
@@ -352,6 +358,8 @@ internal sealed class RecoveryPath
         double baseLookahead=double.IsFinite(speedUnitsPerMs) && speedUnitsPerMs>0
             ?Math.Clamp(speedUnitsPerMs*SpeedLookaheadMilliseconds,MinimumSteeringLookaheadUnits,SteeringLookaheadUnits)
             :SteeringLookaheadUnits;
+        if(CaptureTolerance>0)
+            baseLookahead=Math.Min(baseLookahead,MaximumRollingCornerBaseLookaheadUnits);
         double plannedLookahead=Math.Clamp(baseLookahead/(1+curvature/90),MinimumSteeringLookaheadUnits,SteeringLookaheadUnits);
         double lookahead=plannedLookahead;
         bool beginReacquisition=reacquisitionPending;
